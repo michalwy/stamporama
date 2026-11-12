@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { notifyLotPref, subscribeLotPref } from "./lot-view-prefs";
 import { areaYearMemoryKey, type AreaYearMemory } from "@/lib/list-area-year-filter";
 
 /**
@@ -64,8 +65,12 @@ export function useCollectionFilterStore(
     (onChange: () => void) => {
       const set = listenersFor(key);
       set.add(onChange);
+      // Also any stored preference changed from elsewhere — a filter preset laying a whole view
+      // down at once (#2487), or another tab.
+      const offShared = subscribeLotPref(onChange);
       return () => {
         set.delete(onChange);
+        offShared();
       };
     },
     [key]
@@ -89,6 +94,7 @@ export function useCollectionFilterStore(
         // ignore
       }
       for (const listener of listenersFor(key)) listener();
+      notifyLotPref();
     },
     [key]
   );

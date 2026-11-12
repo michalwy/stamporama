@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { SALES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -219,6 +221,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
             />
           }
         />
+        <ListPresetsControl collectionId={collectionId} spec={SALES_VIEW} />
         <select
           aria-label="Filter by platform"
           value={platformId ?? ""}

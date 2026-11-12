@@ -173,6 +173,7 @@ model Collection {
   stampSizePresets StampSizePreset[]
   tags            Tag[]
   faults          Fault[]
+  listPresets     ListPreset[]
   albumTemplates  AlbumTemplate[]
   albumOrnaments  AlbumOrnament[]
   albumPictures   AlbumPicture[]
@@ -8430,4 +8431,27 @@ model DuplicateKeepAll {
 
   @@index([collectionId])
   @@map("duplicate_keep_all")
+}
+
+// A named view of one list (#2487): the filters, area, years, search with its fields, sort and
+// grouping the collector saved under a name, applied again in one click. Kept on the server so the
+// same presets are there on every device. `list` is the list's stable key (`list-views.ts`); `view`
+// is the list's view as `readListView` captured it; `refs` says which of its parameters name a
+// collection record and of what kind, and `labels` the names those records had when the preset was
+// saved — so a record deleted since can be dropped on apply and named in the note that says so.
+model ListPreset {
+  id           String   @id @default(cuid())
+  collectionId String
+  list         String
+  name         String
+  view         Json
+  refs         Json
+  labels       Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, list, name])
+  @@map("list_preset")
 }

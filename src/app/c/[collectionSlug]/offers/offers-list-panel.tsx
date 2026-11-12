@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { OFFERS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -798,6 +800,7 @@ export function OffersListPanel({
               />
             }
           />
+          <ListPresetsControl collectionId={collectionId} spec={OFFERS_VIEW} />
           <select
             aria-label="Filter by platform"
             value={platformId ?? ""}

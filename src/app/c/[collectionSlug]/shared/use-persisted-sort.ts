@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { notifyLotPref, subscribeLotPref } from "./lot-view-prefs";
 
 interface SortPreference {
   sortBy: string;
@@ -58,8 +59,11 @@ export function usePersistedSort<T extends string>(
 ): { sortBy: T; sortDir: "asc" | "desc"; persistSort: (sortBy: T, sortDir: "asc" | "desc") => void } {
   const subscribe = useCallback((onChange: () => void) => {
     listeners.add(onChange);
+    // Also any stored preference changed from elsewhere — a filter preset (#2487), another tab.
+    const offShared = subscribeLotPref(onChange);
     return () => {
       listeners.delete(onChange);
+      offShared();
     };
   }, []);
   const getSnapshot = useCallback(() => readRaw(listKey), [listKey]);
@@ -87,6 +91,7 @@ export function usePersistedSort<T extends string>(
         /* ignore */
       }
       for (const listener of listeners) listener();
+      notifyLotPref();
     },
     [listKey]
   );

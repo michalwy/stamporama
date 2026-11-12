@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { COPIES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { conditioned } from "@/lib/piece-condition";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -1382,6 +1384,7 @@ export function InventoryListPanel({
         >
           {/* Toolbar: shared search + sort, inventory-specific filters as children */}
           <ListToolbar
+            presets={<ListPresetsControl collectionId={collectionId} spec={COPIES_VIEW} />}
             search={search}
             onSearchChange={(v) => updateParams({ search: v })}
             sortBy={sortBy}

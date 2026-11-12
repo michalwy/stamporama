@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { POSTS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState } from "react";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -112,6 +114,7 @@ export function FacebookPostsListPanel({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <ListPresetsControl collectionId={collectionId} spec={POSTS_VIEW} />
           <MultiSelectFilter
             options={groups.map((g) => ({ id: g.id, label: g.archived ? `${g.name} (archived)` : g.name }))}
             selected={groupIds}

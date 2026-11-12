@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { AUCTION_LOTS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -691,6 +693,7 @@ export function AuctionLotsPanel({
               />
             }
           />
+          <ListPresetsControl collectionId={collectionId} spec={AUCTION_LOTS_VIEW} />
           <span
             style={{
               width: "1px",

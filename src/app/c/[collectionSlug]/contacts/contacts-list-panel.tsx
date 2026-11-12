@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { CONTACTS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -94,6 +96,7 @@ export function ContactsListPanel({ collectionId, collectionSlug }: ContactsList
           placeholder="Search by name…"
           style={{ ...FILTER_CONTROL_STYLE, width: "14rem" }}
         />
+        <ListPresetsControl collectionId={collectionId} spec={CONTACTS_VIEW} />
 
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
           {CONTACT_ROLES.map(({ key, label }) => {

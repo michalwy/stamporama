@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { SUPPLIES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -111,10 +113,15 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
       ) : (
         <>
           <div
-            role="tablist"
-            aria-label="Packing supplies"
-            style={{ display: "flex", borderBottom: "1px solid var(--color-border)", marginBottom: "1rem" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              borderBottom: "1px solid var(--color-border)",
+              marginBottom: "1rem",
+            }}
           >
+          <div role="tablist" aria-label="Packing supplies" style={{ display: "flex", flex: "1 1 auto" }}>
             {TABS.map((t) => {
               const active = t.key === tab;
               return (
@@ -140,6 +147,9 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
                 </button>
               );
             })}
+          </div>
+          {/* The presets hold both tabs' filters (#2487), so the control is the screen's, not a tab's. */}
+          <ListPresetsControl collectionId={collectionId} spec={SUPPLIES_VIEW} />
           </div>
           {tab === "summary" ? (
             <SupplySummary

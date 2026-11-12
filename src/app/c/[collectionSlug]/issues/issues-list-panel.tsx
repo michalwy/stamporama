@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { ISSUES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -656,6 +658,7 @@ export function IssuesListPanel({
       >
         {/* Toolbar */}
         <ListToolbar
+          presets={<ListPresetsControl collectionId={collectionId} spec={ISSUES_VIEW} />}
           search={search}
           onSearchChange={(v) => updateParams({ search: v })}
           /* The fields that box matches (#2239); `#12` stays the issue number whatever is ticked. */

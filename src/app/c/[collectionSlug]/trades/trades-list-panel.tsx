@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { TRADES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -179,6 +181,7 @@ export function TradesListPanel({
           label="Search trades"
           width="16rem"
         />
+        <ListPresetsControl collectionId={collectionId} spec={TRADES_VIEW} />
 
         {partnerId && (
           <FilterChip

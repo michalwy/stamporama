@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { AUCTION_SALES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -146,6 +148,7 @@ export function AuctionSalesPanel({ collectionId, collectionSlug }: AuctionSales
             label="Search sales"
             width="16rem"
           />
+          <ListPresetsControl collectionId={collectionId} spec={AUCTION_SALES_VIEW} />
           {/* The fields that box matches (#2245) — beside it, in this half's `nowrap` row, so the
               two never part. */}
           <SearchFieldsControl

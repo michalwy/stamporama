@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { PURCHASES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
@@ -169,6 +171,7 @@ export function PurchasesListPanel({
             flexWrap: "wrap",
           }}
         >
+          <ListPresetsControl collectionId={collectionId} spec={PURCHASES_VIEW} />
           {/* The document type (#1323): purchases, the orders trades create, and opening balances are
               one list, told apart here rather than by a navigation entry each. */}
           <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
