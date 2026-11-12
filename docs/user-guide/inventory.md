@@ -73,6 +73,10 @@ so a shared or bookmarked list keeps meaning what it meant. The **search box** i
 is never remembered, so you are never greeted by a list narrowed to a phrase you have forgotten
 typing.
 
+To keep a combination of filters, sort and grouping you come back to — *PRL, for sale on Colnect,
+\*\* only, grouped by issue* — save it as a **preset** and bring it back in one click: see
+[Filter presets](filter-presets.md).
+
 The **area** and the **year** are shared with the Issues, Stamps and Wants lists, so arriving from
 one of those opens this one on the same country and year. When that happens the address bar is
 brought up to date with it, exactly as if you had picked them here — so refreshing the page keeps

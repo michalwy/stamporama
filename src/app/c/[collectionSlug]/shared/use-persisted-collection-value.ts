@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
+import { notifyLotPref, subscribeLotPref } from "./lot-view-prefs";
 
 /**
  * A single string UI preference persisted per collection in localStorage and reactive across every
@@ -45,8 +46,12 @@ export function usePersistedCollectionValue(
     (onChange: () => void) => {
       const set = listenersFor(key);
       set.add(onChange);
+      // Also any stored preference changed from elsewhere — a filter preset laying a whole view
+      // down at once (#2487), or another tab.
+      const offShared = subscribeLotPref(onChange);
       return () => {
         set.delete(onChange);
+        offShared();
       };
     },
     [key]
@@ -66,6 +71,7 @@ export function usePersistedCollectionValue(
         // ignore (private mode / disabled storage)
       }
       for (const listener of listenersFor(key)) listener();
+      notifyLotPref();
     },
     [key]
   );

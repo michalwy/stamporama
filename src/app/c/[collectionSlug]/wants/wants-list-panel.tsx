@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { WANTS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/app/dialog-shell";
@@ -82,6 +84,29 @@ export function WantsListPanel({
   const [conditionIds, setConditionIds] = useState<string[]>([]);
   // The wanted stamp's issue format (#2440), screen state like the condition beside it.
   const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
+  // This screen's own filters, as a filter preset holds them (#2487) — screen state here by design,
+  // so the preset control is handed them and a way to set them all at once. The open wants are the
+  // default and read as no status at all, so a fresh screen and a preset saved from one agree.
+  const presetLocal = useMemo(
+    () => ({
+      values: {
+        search: query,
+        status: status === "open" ? "" : status,
+        priorities: priorities.join(","),
+        conditionIds: conditionIds.join(","),
+        issueFormatIds: issueFormatIds.join(","),
+      },
+      apply: (values: Record<string, string>) => {
+        const list = (v: string | undefined) => (v ?? "").split(",").filter(Boolean);
+        setQuery(values.search ?? "");
+        setStatus(values.status === "closed" || values.status === "all" ? values.status : "open");
+        setPriorities(list(values.priorities).filter(isWantPriority));
+        setConditionIds(list(values.conditionIds));
+        setIssueFormatIds(list(values.issueFormatIds));
+      },
+    }),
+    [query, status, priorities, conditionIds, issueFormatIds]
+  );
   /**
    * One stamp's wants, when the list was opened from a want chip (#1244) — the chip's click lands
    * here in a new tab with `?stampId=`. In the address bar, unlike every other filter on this screen,
@@ -418,6 +443,8 @@ export function WantsListPanel({
             onChange={searchFields.setTicked}
           />
         </div>
+
+        <ListPresetsControl collectionId={collectionId} spec={WANTS_VIEW} local={presetLocal} />
 
         <div style={{ display: "flex", gap: "0.375rem" }}>
           {STATUS_OPTIONS.map(({ key, label }) => {

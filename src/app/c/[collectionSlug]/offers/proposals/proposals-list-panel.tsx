@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { PROPOSALS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { baseBtn } from "@/app/button-style";
@@ -85,6 +87,7 @@ export function ProposalsListPanel({ collectionId, collectionSlug }: { collectio
           background: "var(--color-bg-page)",
         }}
       >
+        <ListPresetsControl collectionId={collectionId} spec={PROPOSALS_VIEW} />
         {PROPOSAL_STATUSES.map((status) => (
           <FilterChip
             key={status}

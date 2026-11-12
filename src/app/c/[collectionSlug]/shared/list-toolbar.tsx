@@ -195,6 +195,9 @@ export interface ListToolbarProps {
   filters?: React.ReactNode;
   /** The view group of a grouped bar — how the rows are shown rather than which. See `filters`. */
   view?: React.ReactNode;
+  /** The list's filter presets (#2487), `ListPresetsControl` — drawn after the search box and
+   *  before the filters, which is what a preset brings back. */
+  presets?: React.ReactNode;
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -220,6 +223,7 @@ export function ListToolbar({
   actions,
   filters,
   view,
+  presets,
 }: ListToolbarProps) {
   // Plain debounced search box (no suggestions dropdown): debounce the local input
   // and push the settled value up, skipping the initial mount so it doesn't refetch.
@@ -409,6 +413,7 @@ export function ListToolbar({
           }}
         >
           {searchBox}
+          {presets}
           {(catalogSearch || filters) && (
             <div style={TOOLBAR_GROUP_STYLE}>
               {catalogSearch}
@@ -426,6 +431,8 @@ export function ListToolbar({
       ) : (
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
           {searchBox}
+
+          {presets}
 
           {!sortLast && sortControl}
 

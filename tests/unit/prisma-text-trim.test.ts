@@ -141,15 +141,22 @@ describe("the schema this rule was reasoned about", () => {
     // come back byte for byte as they were posted — so it is left alone like the others.
     // `colnectMarketRead`: the last Colnect market read (#2454), figures and grades plus the sellers'
     // notes — which `parseColnectMarketReadInput` has already collapsed and trimmed before it is kept.
+    // `view`, `refs` and `labels`: a list's filter preset (#2487). `view` is the list's address and
+    // stored preferences, which must come back exactly as captured — a search phrase included — and
+    // its keys (`params`, `stored`, `local`) are no operator's; `refs` maps view parameters to record
+    // kinds and `labels` `kind:id` to the record's name, which the database had already trimmed.
     assert.deepEqual(found, [
       "allegroCategoryParameters",
       "colnectMarketRead",
       "drawing",
       "drawing",
       "facebookPostSnapshot",
+      "labels",
       "rates",
+      "refs",
       "snapshot",
       "value",
+      "view",
     ]);
   });
 

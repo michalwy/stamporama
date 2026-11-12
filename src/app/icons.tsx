@@ -38,6 +38,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Archive,
+  Bookmark,
   ArrowUpRight,
   ArrowUpToLine,
   Ban,
@@ -380,6 +381,8 @@ const GLYPHS = {
    *  about a value that may not be changed at all: a pin is a choice, and `unpin` takes it back. */
   pin: Pin,
   unpin: PinOff,
+  /** A list's saved views (#2487) — the filters, sort and grouping kept under a name. */
+  presets: Bookmark,
   /** Per-language texts (#293–#296). */
   translations: Globe,
   /** Catalogue values recorded for a stamp. */

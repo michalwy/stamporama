@@ -1,5 +1,7 @@
 "use client";
 
+import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { STAMPS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CollectionAreaData } from "@/lib/areas";
@@ -321,6 +323,7 @@ export function StampsListPanel({
       >
         {/* Toolbar */}
         <ListToolbar
+          presets={<ListPresetsControl collectionId={collectionId} spec={STAMPS_VIEW} />}
           search={search}
           onSearchChange={(v) => updateParams({ search: v })}
           /* The fields that box matches (#2240). */
