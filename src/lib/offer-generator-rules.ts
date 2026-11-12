@@ -700,6 +700,11 @@ export interface GeneratorRequest {
   /** On Facebook, the title of the one new post the offers the pass creates become the lots of
    *  (#2030); absent, no post is made. Like `skip`, only the commit carries it. */
   postTitle?: string;
+  /** With `postTitle`, the most lots one new post may hold (#2480) — the group's *Max lots per post*,
+   *  or what the collector changed it to for this run; absent, no limit: one post. */
+  maxLotsPerPost?: number;
+  /** With a limit, how the new offers are spread over the posts (#2480); absent, `fill`. */
+  postSplit?: GeneratorPostSplit;
   /** On Direct, the open proposal the offers the pass creates become the lots of (#2287); absent,
    *  they are in none. Like `postTitle`, only the commit carries it. */
   proposalId?: string;
@@ -730,6 +735,8 @@ export function generatorRequestParams(request: GeneratorRequest): URLSearchPara
   if (request.facebook.facebookGroupId) params.set("facebookGroupId", request.facebook.facebookGroupId);
   if (request.facebook.endsAt) params.set("endsAt", request.facebook.endsAt);
   if (request.postTitle !== undefined) params.set("postTitle", request.postTitle);
+  if (request.maxLotsPerPost !== undefined) params.set("maxLotsPerPost", String(request.maxLotsPerPost));
+  if (request.postSplit === "even") params.set("postSplit", "even");
   if (request.proposalId) params.set("proposalId", request.proposalId);
   const swaps = Object.entries(request.swaps ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
@@ -775,6 +782,9 @@ export function parseGeneratorRequest(sp: URLSearchParams): GeneratorRequest | n
     skip: (sp.get("skip") ?? "").split(",").filter(Boolean),
     facebook: { facebookGroupId: sp.get("facebookGroupId"), endsAt: sp.get("endsAt") },
     ...(sp.has("postTitle") ? { postTitle: sp.get("postTitle") ?? "" } : {}),
+    // Read as typed: one that is not a whole number from 1 is the refusal's to name, not a silent none.
+    ...(sp.get("maxLotsPerPost") ? { maxLotsPerPost: Number(sp.get("maxLotsPerPost")) } : {}),
+    ...(sp.get("postSplit") === "even" ? { postSplit: "even" as const } : {}),
     ...(sp.get("proposalId") ? { proposalId: sp.get("proposalId")! } : {}),
     ...(Object.keys(swaps).length > 0 ? { swaps } : {}),
   };
@@ -808,10 +818,57 @@ export function generatorPostRefusal(request: {
   facebookGroupId: string | null;
   newOffers: number;
   title: string;
+  /** The most lots in one post (#2480); null or absent, no limit. */
+  maxLotsPerPost?: number | null;
 }): string | null {
   if (!request.facebookGroupId) return "Only Facebook offers can go into a post — choose the group first.";
   if (request.newOffers < 2) return "A post with several lots needs at least two new offers.";
+  const limit = request.maxLotsPerPost;
+  if (limit != null && !(Number.isInteger(limit) && limit >= 1)) {
+    return "The most lots in one post must be a whole number from 1, or empty for no limit.";
+  }
   return facebookPostTitleRefusal(request.title);
+}
+
+// ── Splitting the new offers into posts (#2480) ────────────────────────────────────────────────────
+
+/** How the new offers are spread over the posts a limit needs (#2480): `fill` gives each post as many
+ *  lots as the limit allows and the last one the rest (40, 40, 5); `even` makes the fewest posts the
+ *  limit allows with the lots spread as evenly as it goes (29, 28, 28). */
+export const GENERATOR_POST_SPLITS = ["fill", "even"] as const;
+export type GeneratorPostSplit = (typeof GENERATOR_POST_SPLITS)[number];
+
+/**
+ * How many lots each new post takes, in order (#2480). No limit, or a pass that fits under it, is one
+ * post, as before the limit. An `even` split gives the larger posts first, so the posts read in
+ * order and only the last ones are a lot shorter.
+ */
+export function generatorPostSizes(lots: number, maxLotsPerPost: number | null | undefined, split: GeneratorPostSplit = "fill"): number[] {
+  if (lots <= 0) return [];
+  if (maxLotsPerPost == null || !Number.isInteger(maxLotsPerPost) || maxLotsPerPost < 1 || lots <= maxLotsPerPost) {
+    return [lots];
+  }
+  const posts = Math.ceil(lots / maxLotsPerPost);
+  if (split === "even") {
+    const base = Math.floor(lots / posts);
+    const larger = lots % posts;
+    return Array.from({ length: posts }, (_, i) => base + (i < larger ? 1 : 0));
+  }
+  return Array.from({ length: posts }, (_, i) => (i < posts - 1 ? maxLotsPerPost : lots - maxLotsPerPost * (posts - 1)));
+}
+
+/** Each new offer's place, in the lots' order (#2480): its post (from 1) and its lot in that post,
+ *  numbered from 1 in each post. */
+export function generatorLotPlaces(sizes: readonly number[]): { post: number; lot: number }[] {
+  return sizes.flatMap((size, index) => Array.from({ length: size }, (_, lot) => ({ post: index + 1, lot: lot + 1 })));
+}
+
+/** The posts' titles (#2480): the one typed, with *(1/3)*, *(2/3)*… after it when there are several;
+ *  a single post keeps it as typed. */
+export function generatorPostTitles(title: string, posts: number): string[] {
+  const typed = title.trim();
+  if (posts <= 1) return [typed];
+  return Array.from({ length: posts }, (_, i) => `${typed} (${i + 1}/${posts})`);
 }
 
 // ── How the preview states a line (#1368) ──────────────────────────────────────────────────────────

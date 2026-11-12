@@ -83,6 +83,9 @@ export interface FacebookGroupChoice {
   /** How the group lays out a post of several lots (#1841) — what *New post…* names as the group's
    *  (#2291). */
   multiLotLayout: FacebookMultiLotLayout;
+  /** How many lots one post here may hold (#2480) — what Generate offers' *In a new post* starts
+   *  from; null is no limit. */
+  maxLotsPerPost: number | null;
 }
 
 /** What the offer form needs to know about a platform: whether it is Facebook, and its groups. */
@@ -135,6 +138,7 @@ export async function listFacebookGroupChoices(
         auctionDays: settings.auctionDays,
         closingTime: settings.closingTime,
         multiLotLayout: settings.multiLotLayout,
+        maxLotsPerPost: settings.maxLotsPerPost,
       };
     }),
   };

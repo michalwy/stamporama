@@ -59,7 +59,7 @@ tabs — one per case, each holding everything for that case and nothing else:
 | **General** | what a new offer starts as, the currency, whether a post may mix auctions and quick buys, and the note on shipping, payment and terms |
 | **Auctions** | the auction post template, the auction caption, and what a new auction starts from — starting price, bid increment, days, closing time |
 | **Quick buys** | the quick-buy post template, the quick-buy caption, and when a quick buy wants refreshing |
-| **Several-lot posts** | the layout of a post of several lots, and a captioned post's own text |
+| **Several-lot posts** | the layout of a post of several lots, a captioned post's own text, and the most lots one post may hold |
 | **Buyer messages** | the message to a buyer after a sale |
 
 **Every template says under its name when it is used** — *A post of one auction, and each auction in
@@ -224,6 +224,11 @@ names whatever is missing (below), so you fix it where it is set.
 The **Layout** of a post holding several lots — every lot in the post's text, or each lot in its
 photo's caption — and the **Captioned post text**, a captioned post's own text. Both are described
 with [captioned posts](#a-post-with-several-lots-in-captions).
+
+**Max lots per post** is how many lots the group accepts in one post. **Generate offers** splits its
+new offers into as many posts as this needs ([Generating offers in
+bulk](inventory.md#generating-offers-in-bulk)), and lets you change it for one run. Empty is no limit,
+which is what Facebook's own setting starts as.
 
 ### Buyer messages
 
@@ -498,7 +503,8 @@ on all of them. A quick buy has no closing time.
 
 **A batch can start in its post.** On the Copies list, **Generate offers…** in the quick offer bar
 has **In a new post** on Facebook: tick it and give the title, and the offers the pass creates become
-the lots of one new post in the bar's group, in the order the preview lists them.
+the lots of one new post in the bar's group, in the order the preview lists them — or of several,
+titled *(1/3)*, *(2/3)*…, where the group's [Max lots per post](#several-lot-posts) needs them.
 An existing offer that only receives sets is not put in the post.
 The message after the pass opens the post's screen ([Generating offers in
 bulk](inventory.md#generating-offers-in-bulk)).

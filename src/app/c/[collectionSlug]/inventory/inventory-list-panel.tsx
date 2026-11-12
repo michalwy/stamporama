@@ -175,6 +175,8 @@ type DialogState =
       platformName: string;
       /** The bar's Facebook group and closing time, read when the dialog opened (#1663). */
       facebook: FacebookCreateChoice;
+      /** That group's *Max lots per post* (#2480), what the dialog's limit starts from; null is none. */
+      maxLotsPerPost: number | null;
       /** The platform is Direct, so the new offers may go into a proposal (#2287). */
       direct: boolean;
       input: OfferGeneratorInput;
@@ -1512,6 +1514,7 @@ export function InventoryListPanel({
                         platformId: quickPlatform.id,
                         platformName: quickPlatform.name,
                         facebook: quickFacebook.choice(),
+                        maxLotsPerPost: quickFacebook.group?.maxLotsPerPost ?? null,
                         direct: quickPlatform.platformModule === DIRECT_PLATFORM_MODULE,
                         // What the collector can see (#1021): the ticked rows in view when there are
                         // any, else the list's filters — never a copy a filter hides.
@@ -2334,10 +2337,11 @@ export function InventoryListPanel({
           platformId={dialog.platformId}
           platformName={dialog.platformName}
           facebook={dialog.facebook}
+          groupMaxLotsPerPost={dialog.maxLotsPerPost}
           direct={dialog.direct}
           input={dialog.input}
           onClose={() => setDialog({ kind: "none" })}
-          onDone={({ createdOffers, changedOffers, post, proposal }) => {
+          onDone={({ createdOffers, changedOffers, posts, proposal }) => {
             setDialog({ kind: "none" });
             rememberPlatform(dialog.platformId);
             if (dialog.facebook.facebookGroupId) {
@@ -2351,11 +2355,20 @@ export function InventoryListPanel({
             toast({
               message:
                 `${createdOffers} offer${createdOffers === 1 ? "" : "s"} created` +
-                (post ? ` as the lots of post #${post.postNo}` : "") +
+                (posts.length === 1 ? ` as the lots of post #${posts[0].postNo}` : "") +
+                (posts.length > 1
+                  ? ` as the lots of ${posts.length} posts, ${posts.map((p) => `#${p.postNo}`).join(", ")}`
+                  : "") +
                 (proposal ? ` as lots of proposal #${proposal.proposalNo}` : "") +
                 (changedOffers > 0 ? `, ${changedOffers} existing offer${changedOffers === 1 ? "" : "s"} added to` : ""),
               // The post's screen is where the batch is priced and put up (#2030).
-              ...(post ? { href: `/c/${collectionSlug}/offers/posts/${post.postNo}`, linkLabel: "Open post" } : {}),
+              // Split by the group's limit (#2480), the link opens the first of the posts.
+              ...(posts.length > 0
+                ? {
+                    href: `/c/${collectionSlug}/offers/posts/${posts[0].postNo}`,
+                    linkLabel: posts.length === 1 ? "Open post" : "Open the first post",
+                  }
+                : {}),
               // And a proposal's, where its lots are priced for the buyer (#2287).
               ...(proposal
                 ? { href: `/c/${collectionSlug}/offers/proposals/${proposal.proposalNo}`, linkLabel: "Open proposal" }

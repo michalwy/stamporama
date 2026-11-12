@@ -190,7 +190,7 @@ describe("offer generator (#1287)", () => {
     assert.equal(preview.creationBlock, null);
 
     const result = await commitOfferGeneration(userId, collectionId, ticked(copies), preview.fingerprint);
-    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 2, copies: 4, post: null });
+    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 2, copies: 4, posts: [] });
     const [created] = await offersHolding([a1]);
     assert.equal(created.state, "preparing");
     assert.equal(created.price.toFixed(2), "0.00", "no asking price, as quick offer mode");
@@ -280,7 +280,7 @@ describe("offer generator (#1287)", () => {
     );
 
     const result = await commitOfferGeneration(userId, collectionId, ticked(copies, { mixing }), preview.fingerprint);
-    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 1, copies: 3, post: null });
+    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 1, copies: 3, posts: [] });
     const [created] = await offersHolding(copies);
     assert.deepEqual(created.sets.map((set) => set.items.map((i) => i.itemId).sort()), [[...copies].sort()]);
   });
@@ -414,7 +414,7 @@ describe("offer generator (#1287)", () => {
       ticked([kept, left], { mode: "singles", skip: [leftLine.id] }),
       preview.fingerprint
     );
-    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 1, copies: 1, post: null });
+    assert.deepEqual(result, { createdOffers: 1, changedOffers: 0, sets: 1, copies: 1, posts: [] });
     assert.equal((await offersHolding([kept])).length, 1);
     assert.equal((await offersHolding([left])).length, 0, "the unticked offer's copy is in no offer");
   });

@@ -39,6 +39,8 @@ import {
   SKIP_REASON_LABEL,
   SKIP_REASONS,
   generatorPostRefusal,
+  generatorPostSizes,
+  generatorPostTitles,
   swappedAskedIds,
   skipReason,
   type GeneratorCopy,
@@ -539,8 +541,9 @@ export interface OfferGeneratorResult {
   changedOffers: number;
   sets: number;
   copies: number;
-  /** The new post the created offers are the lots of (#2030), when the pass was asked for one. */
-  post: { postId: string; postNo: number } | null;
+  /** The new posts the created offers are the lots of (#2030), in order — several where the post's
+   *  limit on lots split them (#2480); empty when the pass was asked for none. */
+  posts: { postId: string; postNo: number }[];
 }
 
 /**
@@ -602,6 +605,7 @@ export async function commitOfferGeneration(
         : null,
       newOffers: newOffers.length,
       title: postTitle,
+      maxLotsPerPost: input.maxLotsPerPost ?? null,
     });
     if (refusal) throw new OfferActionBlockedError("facebook-group", refusal);
   }
@@ -619,7 +623,7 @@ export async function commitOfferGeneration(
       throw new OfferActionBlockedError("empty", "This pass creates no new offer to put into the proposal.");
     }
   }
-  const made: { post: OfferGeneratorResult["post"] } = { post: null };
+  const made: { posts: OfferGeneratorResult["posts"] } = { posts: [] };
 
   try {
     const written = await writeGeneratedOffers(
@@ -633,8 +637,19 @@ export async function commitOfferGeneration(
       },
       postTitle !== undefined
         ? {
+            // Split by the post's limit on lots (#2480), in the preview's order: one post when there is
+            // no limit or the pass fits under it, else as many as the limit needs, titled (1/3)….
             inTransaction: async (tx, createdOfferIds) => {
-              made.post = await writeFacebookPost(tx, collectionId, createdOfferIds, postTitle);
+              const sizes = generatorPostSizes(createdOfferIds.length, input.maxLotsPerPost, input.postSplit);
+              const titles = generatorPostTitles(postTitle, sizes.length);
+              let start = 0;
+              for (const [index, size] of sizes.entries()) {
+                const lots = createdOfferIds.slice(start, start + size);
+                start += size;
+                made.posts.push(
+                  await writeFacebookPost(tx, collectionId, lots, titles[index], { allowOneLot: sizes.length > 1 })
+                );
+              }
             },
           }
         : proposalId !== undefined
@@ -646,13 +661,13 @@ export async function commitOfferGeneration(
           : {}
     );
     // A post captioned from the start has its lots' photos queued now (#1861), as *Post together*'s.
-    if (made.post) await syncFacebookPostLotPhotos(made.post.postId);
+    for (const post of made.posts) await syncFacebookPostLotPhotos(post.postId);
     return {
       createdOffers: written.createdOfferIds.length,
       changedOffers: written.changedOfferIds.length,
       sets: lines.reduce((n, line) => n + line.sets.length, 0),
       copies: lines.reduce((n, line) => n + line.sets.reduce((m, set) => m + set.copies.length, 0), 0),
-      post: made.post,
+      posts: made.posts,
     };
   } catch (e) {
     if (e instanceof GenerationChangedError) {

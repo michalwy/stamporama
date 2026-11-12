@@ -48,7 +48,7 @@ describe("Facebook settings tabs (#1849)", () => {
     );
     assert.deepEqual(
       sorted(facebookCaseSettings("several-lots")),
-      sorted(["multiLotLayout", "captionPostTemplate"])
+      sorted(["multiLotLayout", "captionPostTemplate", "maxLotsPerPost"])
     );
     assert.deepEqual(facebookCaseSettings("buyer-messages"), ["buyerMessageTemplate"]);
   });
