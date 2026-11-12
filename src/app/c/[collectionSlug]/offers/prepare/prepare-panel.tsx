@@ -32,6 +32,7 @@ import {
 import { OffersCoverWalk } from "../[offerId]/offer-cover-walk";
 import { anyMarketTrend, PriceStripTrendColumn } from "../[offerId]/offer-price-table";
 import { PrepareOfferRow } from "./prepare-offer-row";
+import { priceListStep } from "@/lib/price-list-step";
 
 // The Prepare screen (#1894). Preparing offers used to be priced one at a time — filter the Offers
 // list to Preparing, open an offer, set its price, generate its photos, Mark ready, Next — which after
@@ -241,21 +242,25 @@ export function PreparePanel({
     });
   }
 
-  /* ── Enter moves down the price column ─────────────────────────────────────────────────────────── */
+  /* ── Enter and Tab move down the price column, Shift+Tab up it (#2489) ─────────────────────────── */
   const inputs = useRef(new Map<string, HTMLInputElement>());
-  const focusAfter = useCallback(
-    (offerId: string) => {
-      const index = rows.findIndex((r) => r.id === offerId);
-      const next = index >= 0 ? rows[index + 1] : undefined;
-      const el = next ? inputs.current.get(next.id) : undefined;
+  const focusStep = useCallback(
+    (offerId: string, step: 1 | -1): boolean => {
+      const targetId = priceListStep(
+        rows.map((r) => r.id),
+        offerId,
+        step,
+        (id) => inputs.current.has(id)
+      );
+      const el = targetId ? inputs.current.get(targetId) : undefined;
       if (el) {
         el.focus();
         el.select();
-      } else {
-        // The last loaded row: leaving the field is what saves it.
-        inputs.current.get(offerId)?.blur();
-        if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+        return true;
       }
+      // Past the last loaded row: the next page comes in for the price after it.
+      if (step === 1 && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      return false;
     },
     [rows, hasNextPage, isFetchingNextPage, fetchNextPage]
   );
@@ -468,7 +473,7 @@ export function PreparePanel({
                   </>
                 ) : (
                   <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-                    Type each price — Enter moves to the next — or tick offers to price them at their
+                    Type each price — Enter or Tab moves to the next — or tick offers to price them at their
                     estimate or mark them ready together
                   </span>
                 )}
@@ -510,7 +515,7 @@ export function PreparePanel({
                     offer={offer}
                     selected={selection.has(offer.id)}
                     onToggle={toggleSelected}
-                    onEnter={() => focusAfter(offer.id)}
+                    onStep={(step) => focusStep(offer.id, step)}
                     onSaved={(field, value) => void settlePreparePrice(collectionId, offer.id, field, value)}
                     onChanged={() => void invalidateAll(collectionId)}
                   />

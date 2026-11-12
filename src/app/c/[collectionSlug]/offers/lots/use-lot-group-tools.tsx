@@ -28,6 +28,7 @@ import { LotPhotoSettingsButton } from "./lot-photo-settings";
 import { LotTitleTemplateDialog, LotTitleWordsDialog } from "./lot-titles-dialogs";
 import { RegenerateLotTextsDialog, type RegenerateScope } from "./regenerate-lot-texts-dialog";
 import type { LotRowPricing } from "./lot-row";
+import { priceListStep } from "@/lib/price-list-step";
 
 // The tools a group of lots is worked on with from its screen (#2313) — a Facebook post's lots while the
 // post is not up, a proposal's while it is being prepared — one implementation for both, which the
@@ -156,7 +157,7 @@ export function useLotGroupTools<L extends ToolLot>({
   const [error, setError] = useState<string | undefined>();
   const [lotSkips, setLotSkips] = useState<LotSkip[]>([]);
   const [coverWalk, setCoverWalk] = useState<CoverWalk | null>(null);
-  // The lots' price fields, by offer id — Enter moves down them in lot order (#2031). A map kept for the
+  // The lots' price fields, by offer id — Enter and Tab move down them in lot order (#2031, #2489). A map kept for the
   // screen's life rather than a ref, since the rows are handed setters into it while they render.
   const [priceInputs] = useState(() => new Map<string, HTMLInputElement>());
   // The order just asked for (#1986), drawn until the screen is read again — so a dragged row stays
@@ -205,17 +206,20 @@ export function useLotGroupTools<L extends ToolLot>({
     return index < 0 ? "A lot" : `Lot ${lotNoAt(lots[index], index)}`;
   };
 
-  // Enter in a lot's price field: the next lot's, in the order drawn; the last one is left, which saves it.
-  function focusAfter(offerId: string) {
-    const index = lots.findIndex((l) => l.offerId === offerId);
-    const next = lots.slice(index + 1).find((l) => priceInputs.has(l.offerId));
-    const el = next ? priceInputs.get(next.offerId) : undefined;
-    if (el) {
-      el.focus();
-      el.select();
-    } else {
-      priceInputs.get(offerId)?.blur();
-    }
+  // Enter or Tab in a lot's price field: the next lot's, in the order drawn; Shift+Tab the previous
+  // one's (#2489). False at either end — Enter then leaves the field, Tab goes on to the page's next control.
+  function focusStep(offerId: string, step: 1 | -1): boolean {
+    const targetId = priceListStep(
+      lots.map((l) => l.offerId),
+      offerId,
+      step,
+      (id) => priceInputs.has(id)
+    );
+    const el = targetId ? priceInputs.get(targetId) : undefined;
+    if (!el) return false;
+    el.focus();
+    el.select();
+    return true;
   }
 
   function close() {
@@ -371,7 +375,7 @@ export function useLotGroupTools<L extends ToolLot>({
         if (el) priceInputs.set(lot.offerId, el);
         else priceInputs.delete(lot.offerId);
       },
-      onPriceEnter: () => focusAfter(lot.offerId),
+      onPriceStep: (step) => focusStep(lot.offerId, step),
       ...settle,
       // The `—` under Catalogue is a link only while the lot has values to type.
       onFillCatalogue:
@@ -506,7 +510,7 @@ export function useLotGroupTools<L extends ToolLot>({
               <Icon name="check" size="sm" /> Mark ready{toReady.length > 0 ? ` (${toReady.length})` : ""}
             </DialogSecondaryButton>
           </Tooltip>
-          <span style={MUTED}>Type each lot&apos;s price — Enter moves to the next.</span>
+          <span style={MUTED}>Type each lot&apos;s price — Enter or Tab moves to the next.</span>
         </div>
       )}
       {lotSkips.length > 0 && (

@@ -66,8 +66,8 @@ export const PrepareOfferRow = forwardRef<
     offer: PrepareOffer;
     selected: boolean;
     onToggle: (offer: PrepareOffer) => void;
-    /** Enter in the price field: move on to the next row's. */
-    onEnter: () => void;
+    /** Enter or Tab (1), Shift+Tab (-1) in the price field: move to that row's — false at the list's edge. */
+    onStep: (step: 1 | -1) => boolean;
     /** A price was saved — the row's new stated figure, or null once cleared. */
     onSaved: (field: "price" | "startingPrice", value: string | null) => void;
     /** Something other than the price changed — the title, a translation behind it, or the covers —
@@ -75,7 +75,7 @@ export const PrepareOfferRow = forwardRef<
     onChanged: () => void;
   }
 >(function PrepareOfferRow(
-  { collectionId, collectionSlug, areas, offer, selected, onToggle, onEnter, onSaved, onChanged },
+  { collectionId, collectionSlug, areas, offer, selected, onToggle, onStep, onSaved, onChanged },
   ref
 ) {
   const auction = isAuctionListing(offer.listingType);
@@ -266,7 +266,7 @@ export const PrepareOfferRow = forwardRef<
             <PrepareReadiness offer={offer} onCheckCovers={() => setCheckingCovers(true)} />
           </div>
 
-          <PreparePriceField ref={ref} offer={offer} onEnter={onEnter} onSaved={onSaved} />
+          <PreparePriceField ref={ref} offer={offer} onStep={onStep} onSaved={onSaved} />
         </div>
       </div>
 

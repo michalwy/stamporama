@@ -759,7 +759,7 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   post's lot row (`GroupLotRow` in `offers/lots/lot-row.tsx` since #2313, shared with a proposal's)
   draws them under its heading while the read has a row for the lot (the readiness only
   on a Preparing lot), dropping its static title link and *Price* fact; the offer's number becomes the
-  link. Enter moves down the lots' price fields in the order drawn. **Above the lots**, *Use estimated
+  link. Enter and Tab move down the lots' price fields in the order drawn, Shift+Tab up them (#2489, `priceListStep`). **Above the lots**, *Use estimated
   price* (`applyEstimatedPricesAction`, the unpriced lots with an estimate), *Check covers*
   (`OffersCoverWalk` over every lot with unchecked photos) and *Mark ready* (`markOffersReadyAction`,
   every Preparing lot) — Prepare's own actions over the lots' ids, so nothing new runs server-side; a

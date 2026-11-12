@@ -154,7 +154,8 @@ export interface LotRowPricing {
   /** The lot as a Prepare row — its price, title and readiness are edited here. */
   prepare: PrepareOffer;
   setPriceInput: (el: HTMLInputElement | null) => void;
-  onPriceEnter: () => void;
+  /** Enter or Tab (1), Shift+Tab (-1) in the price field — false at the list's edge (#2489). */
+  onPriceStep: (step: 1 | -1) => boolean;
   /** The lot's price as it is typed, for a group's totals (#2218). */
   onPriceDraft?: (text: string) => void;
   onPriceSaved: (field: "price" | "startingPrice", value: string | null) => void;
@@ -267,7 +268,7 @@ export function GroupLotRow({
                 <PreparePriceField
                   ref={(el) => pricing.setPriceInput(el)}
                   offer={prepare}
-                  onEnter={pricing.onPriceEnter}
+                  onStep={pricing.onPriceStep}
                   onSaved={pricing.onPriceSaved}
                   onDraft={pricing.onPriceDraft}
                   onFillCatalogue={pricing.onFillCatalogue}

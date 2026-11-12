@@ -185,16 +185,19 @@ export function PrepareReadiness({
  * The offer's price: the compact price table, the offer's own figure typed in its last column.
  *
  * A standing field rather than `InlineText`'s click-to-edit, because pricing a batch is typing one
- * figure after another down the list: **Enter** leaves the field, which saves it, and puts the caret in
- * the next row's (`onEnter`). A figure is saved when the field is left, by Enter, Tab or a click
- * elsewhere, and only when it changed; a figure clicked in the table becomes the price.
+ * figure after another down the list: **Enter** or **Tab** leaves the field, which saves it, and puts
+ * the caret in the next row's, **Shift+Tab** in the previous row's (`onStep`, #2489). Tab from the
+ * list's last price, or Shift+Tab from its first, goes on to the page's next control as anywhere else.
+ * A figure is saved when the field is left, by any of these or a click elsewhere, and only when it
+ * changed; a figure clicked in the table becomes the price.
  */
 export const PreparePriceField = forwardRef<
   HTMLInputElement,
   {
     offer: PrepareOffer;
-    /** Enter in the price field: move on to the next row's. */
-    onEnter: () => void;
+    /** Enter or Tab (1), Shift+Tab (-1) in the price field: put the caret in that row's price field.
+     *  False when the list has none that way, so the key does what it does anywhere else. */
+    onStep: (step: 1 | -1) => boolean;
     /** A price was saved — the row's new stated figure, or null once cleared. */
     onSaved: (field: "price" | "startingPrice", value: string | null) => void;
     /** The field's text as it is typed, or put back by **Esc** — for a post's totals (#2218), which
@@ -203,7 +206,7 @@ export const PreparePriceField = forwardRef<
     /** Makes a Catalogue drawn `—` the link to the window its missing values are typed in (#2220). */
     onFillCatalogue?: () => void;
   }
->(function PreparePriceField({ offer, onEnter, onSaved, onDraft, onFillCatalogue }, ref) {
+>(function PreparePriceField({ offer, onStep, onSaved, onDraft, onFillCatalogue }, ref) {
   const auction = isAuctionListing(offer.listingType);
   const field = auction ? "startingPrice" : "price";
   const saved = statedPrice(offer);
@@ -264,7 +267,11 @@ export const PreparePriceField = forwardRef<
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                onEnter();
+                // The last price: leaving the field is what saves it.
+                if (!onStep(1)) e.currentTarget.blur();
+              } else if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                // Moving to the next price blurs this one, which saves it — as Enter does (#2489).
+                if (onStep(e.shiftKey ? -1 : 1)) e.preventDefault();
               } else if (e.key === "Escape") {
                 setDraft(saved);
                 setError(null);
