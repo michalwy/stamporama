@@ -709,8 +709,10 @@ without opening an offer. Each lot's row carries:
 - **Its price table**, compact: *Minimum*, *Catalogue*, *Estimated*, *Market* and *Cost* — and
   *Market trend* after Market when any lot's stamps have a price trend (see
   [the price table](offers.md#the-price-table)) — with the profit each would make, and the lot's own price — an auction's **Starting price**, a quick buy's
-  **Your price** — typed in the last column. **Enter** saves the price and moves to the next lot's,
-  so a post is priced from top to bottom with the keyboard; **Tab** or a click elsewhere saves it too,
+  **Your price** — typed in the last column. **Enter** or **Tab** saves the price and moves to the next lot's,
+  so a post is priced from top to bottom with the keyboard, and **Shift+Tab** goes back to the previous
+  lot's. Tab from the last lot's price, or Shift+Tab from the first, goes on to the next control on the
+  page as usual. A click elsewhere saves the price too,
   **Esc** puts back what was saved, and a figure in the table clicked becomes the price. The post's
   text follows the new price at once. A lot whose copies have no catalogue value shows `—` under
   *Catalogue*; when there are values to type, the `—` is a link that opens **Fill catalogue values**

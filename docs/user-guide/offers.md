@@ -2140,9 +2140,10 @@ forbidden symbols are not part of this walk; open the offer itself to cover one 
 
 ### Setting the prices
 
-Type a price into a row's field and press **Enter**: the price is saved and the cursor moves to the
-next row's field, so you can work down the list without touching the mouse. Leaving the field with
-**Tab** or a click saves it too; **Escape** puts back what was there. The profit under the field
+Type a price into a row's field and press **Enter** or **Tab**: the price is saved and the cursor moves
+to the next row's field, so you can work down the list without touching the mouse; **Shift+Tab** goes
+back to the previous row's. Tab from the last price, or Shift+Tab from the first, goes on to the next
+control on the page as usual. A click elsewhere saves the price too; **Escape** puts back what was there. The profit under the field
 follows what you type, so you see what a price would make before you save it. A sum such as `12*0.8`
 is worked out when you leave the field.
 
@@ -3400,7 +3401,7 @@ takes the lot out of the proposal.
 **While the proposal is Preparing**, as on a post that is not up yet:
 
 - **Pricing and readying from the rows.** Each lot's title is still the link to its offer; the pencil
-  beside it edits the title in place. Its price is typed into its price table: **Enter** saves it and moves to the next lot's. The row says what still stops the
+  beside it edits the title in place. Its price is typed into its price table: **Enter** or **Tab** saves it and moves to the next lot's, **Shift+Tab** back to the previous one's. The row says what still stops the
   lot from being marked ready. Above the lots, **Use estimated price**, **Check covers** and **Mark
   ready** act on every lot — see
   [Pricing the lots and marking them ready](facebook.md#pricing-the-lots-and-marking-them-ready).
