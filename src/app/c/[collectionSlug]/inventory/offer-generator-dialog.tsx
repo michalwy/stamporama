@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import type { GeneratorCombinationPart, GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
 import {
+  GENERATOR_PACKAGINGS,
   generatorLotPlaces,
   generatorPostRefusal,
   generatorPostSizes,
@@ -47,6 +48,7 @@ import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { SpecialisedChecklistsToggle } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
+import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { InventoryItemRow } from "./inventory-item-row";
 import { useCollectionFormats } from "./use-inventory-query";
 import { SELECT_STRIP } from "./inventory-copy-list";
@@ -123,6 +125,11 @@ const PACKAGINGS: { value: GeneratorPackaging; label: string; hint: string }[] =
     label: "Separate offers",
     hint: "Every set gets a new offer of its own, even where a similar offer already exists.",
   },
+  {
+    value: "one",
+    label: "One of each",
+    hint: "Of identical sets only one is listed; the rest stay where they are.",
+  },
 ];
 
 const PRIORITIES: { value: MixPriority; label: string; hint: string }[] = [
@@ -140,6 +147,9 @@ const PRIORITIES: { value: MixPriority; label: string; hint: string }[] = [
 
 /** Where the one-stamp switch is remembered (#2202): a standing preference, not a pass's. */
 const ONE_STAMP_SETS_KEY = "stamporama:offer-generator:one-stamp-sets";
+
+/** Where the packing of identical sets is remembered (#2485), per collection; absent, Multi-quantity. */
+const PACKAGING_NAMESPACE = "offer-generator-packaging";
 
 const FIELDSET: React.CSSProperties = {
   border: "none",
@@ -283,7 +293,10 @@ export function OfferGeneratorDialog({
   onDone: (outcome: OfferGeneratorOutcome) => void;
 }) {
   const [mode, setMode] = useState<GeneratorMode>("checklists");
-  const [packaging, setPackaging] = useState<GeneratorPackaging>("multi");
+  const [storedPackaging, setPackaging] = usePersistedCollectionValue(PACKAGING_NAMESPACE, collectionId);
+  const packaging: GeneratorPackaging = GENERATOR_PACKAGINGS.includes(storedPackaging as GeneratorPackaging)
+    ? (storedPackaging as GeneratorPackaging)
+    : "multi";
   const [mixing, setMixing] = useState<SeriesMixing>(NO_MIXING);
   const [priority, setPriority] = useState<MixPriority>("same-first");
   const [oneStampSets, setOneStampSets] = usePersistedFlag(ONE_STAMP_SETS_KEY, true);
@@ -820,6 +833,18 @@ function Summary({
         <div style={HINT}>
           {plural(skippedCount, "copy", "copies")} of the {preview.askedCopies} left out:{" "}
           {skipped.map((entry) => `${entry.count} ${entry.label}`).join("; ")}.
+        </div>
+      )}
+      {(preview.identicalLeftOut > 0 || preview.alreadyListed > 0) && (
+        <div style={HINT}>
+          {[
+            preview.identicalLeftOut > 0 &&
+              `${plural(preview.identicalLeftOut, "identical set", "identical sets")} left out — one of each is listed.`,
+            preview.alreadyListed > 0 &&
+              `${plural(preview.alreadyListed, "set is", "sets are")} already listed on ${preview.platformName}.`,
+          ]
+            .filter(Boolean)
+            .join(" ")}
         </div>
       )}
       {otherModeCopies > 0 && (

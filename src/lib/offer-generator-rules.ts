@@ -37,11 +37,12 @@ import { facebookPostTitleRefusal, type FacebookCreateChoice } from "./facebook-
 /** What the pass lists: every complete series, or the copies left once those are taken out. */
 export type GeneratorMode = "checklists" | "singles";
 
-/** How identical sets are packed: one offer holding them all, or an offer each. */
-export type GeneratorPackaging = "multi" | "separate";
+/** How identical sets are packed: one offer holding them all, an offer each, or only one of them
+ *  listed and the rest left where they are (#2485). */
+export type GeneratorPackaging = "multi" | "separate" | "one";
 
 export const GENERATOR_MODES: readonly GeneratorMode[] = ["checklists", "singles"];
-export const GENERATOR_PACKAGINGS: readonly GeneratorPackaging[] = ["multi", "separate"];
+export const GENERATOR_PACKAGINGS: readonly GeneratorPackaging[] = ["multi", "separate", "one"];
 
 /**
  * With a mixing switch on, which sets come first (#2102): **same value first** forms every set complete
@@ -310,7 +311,8 @@ export interface PlanLine {
   /** Every set the line lists, each in its own order. */
   sets: GeneratedSet[];
   /** Offers on the platform a set of exactly these stamps × conditions already sits in (#732) and
-   *  which may receive the sets, lowest number first. Always empty with separate packaging. */
+   *  which may receive the sets, lowest number first. Always empty with separate packaging and with
+   *  one of each, where a match leaves the line out instead (#2485). */
   matches: string[];
   /** Offers that match but are in active bidding, and so never receive a set (#334). */
   biddingMatches: string[];
@@ -336,6 +338,9 @@ export interface GeneratorPlanInput {
   offers: ReadonlyMap<string, GeneratorOffer>;
   /** The collector's pick among several matches, by line id. Anything not a current match is ignored. */
   targets?: Readonly<Record<string, string>>;
+  /** Pool copies already in an open offer on another platform (#2339) — what *one of each* steers the
+   *  set it lists away from (#2485). Absent, none. */
+  listedElsewhere?: ReadonlySet<string>;
 }
 
 export interface GeneratorPlan {
@@ -343,6 +348,11 @@ export interface GeneratorPlan {
   /** Pool copies the other mode lists: the leftover singles in checklist mode, the copies in complete
    *  sets in singles mode. Running both modes, in either order, lists every copy once. */
   otherModeCopies: number;
+  /** With *one of each* (#2485): the identical sets beyond the first, which are not listed in this pass,
+   *  and the distinct sets not listed because an identical one is already in an open offer on the
+   *  platform. Zero under the other two packagings. */
+  identicalLeftOut: number;
+  alreadyListed: number;
 }
 
 function inActiveBidding(offer: GeneratorOffer): boolean {
@@ -359,6 +369,11 @@ function inActiveBidding(offer: GeneratorOffer): boolean {
  * With **multi-quantity**, identical sets are one line; a line whose set matches an open offer on the
  * platform (#732) is added to it — the lowest-numbered one, or the one the collector picked — and one
  * whose only matches are in active bidding becomes a new offer instead (#334).
+ *
+ * With **one of each** (#2485), of identical sets only one is listed, as a new offer of its own: the one
+ * with the fewest copies already in an open offer elsewhere (#2339), then the lowest copy numbers. The
+ * rest stay where they are — not passed on to the other mode either. A set identical to one already in
+ * an open offer on the platform (#732, bidding or not) is not listed at all: it is already there.
  */
 export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
   const { sets, singles } = assembleSets(
@@ -372,8 +387,37 @@ export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
   const otherModeCopies =
     input.mode === "checklists" ? singles.length : sets.reduce((n, set) => n + set.copies.length, 0);
 
+  const matchesOf = (set: GeneratedSet) =>
+    collidingItemIdsByOffer(
+      set.copies.map((copy) => ({
+        itemId: copy.itemId,
+        stampId: copy.stampId,
+        conditionId: copy.conditionId,
+        listedStampId: copy.listedStampId,
+      })),
+      input.members
+    );
+
   const drafts: { identity: string; sets: GeneratedSet[] }[] = [];
-  if (input.packaging === "separate") {
+  let identicalLeftOut = 0;
+  let alreadyListed = 0;
+  if (input.packaging === "one") {
+    const byIdentity = new Map<string, GeneratedSet[]>();
+    for (const set of listed) {
+      const identity = setIdentity(set);
+      const group = byIdentity.get(identity);
+      if (group) group.push(set);
+      else byIdentity.set(identity, [set]);
+    }
+    for (const [identity, group] of byIdentity) {
+      identicalLeftOut += group.length - 1;
+      if (matchesOf(group[0]).size > 0) {
+        alreadyListed += 1;
+        continue;
+      }
+      drafts.push({ identity: `one:${identity}`, sets: [pickOneOfEach(group, input.listedElsewhere)] });
+    }
+  } else if (input.packaging === "separate") {
     const seen = new Map<string, number>();
     for (const set of listed) {
       const identity = setIdentity(set);
@@ -403,15 +447,7 @@ export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
     let matches: string[] = [];
     let biddingMatches: string[] = [];
     if (input.packaging === "multi") {
-      const hits = collidingItemIdsByOffer(
-        first.copies.map((copy) => ({
-          itemId: copy.itemId,
-          stampId: copy.stampId,
-          conditionId: copy.conditionId,
-          listedStampId: copy.listedStampId,
-        })),
-        input.members
-      );
+      const hits = matchesOf(first);
       const found = [...hits.keys()].filter((offerId) => input.offers.has(offerId)).sort((a, b) => offerNo(a) - offerNo(b));
       biddingMatches = found.filter((offerId) => inActiveBidding(input.offers.get(offerId)!));
       matches = found.filter((offerId) => !biddingMatches.includes(offerId));
@@ -435,7 +471,20 @@ export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
       resultingSetCount,
     };
   });
-  return { lines, otherModeCopies };
+  return { lines, otherModeCopies, identicalLeftOut, alreadyListed };
+}
+
+/** Of identical sets, the one *one of each* lists (#2485): the fewest copies already in an open offer
+ *  elsewhere (#2339), then the lowest copy numbers, compared lowest first. */
+function pickOneOfEach(group: readonly GeneratedSet[], listedElsewhere: ReadonlySet<string> | undefined): GeneratedSet {
+  const elsewhere = (set: GeneratedSet) => set.copies.filter((copy) => listedElsewhere?.has(copy.itemId)).length;
+  const numbers = (set: GeneratedSet) => set.copies.map((copy) => copy.itemNo).sort((a, b) => a - b);
+  const byNumbers = (a: GeneratedSet, b: GeneratedSet) => {
+    const [x, y] = [numbers(a), numbers(b)];
+    for (let i = 0; i < Math.min(x.length, y.length); i += 1) if (x[i] !== y[i]) return x[i] - y[i];
+    return x.length - y.length;
+  };
+  return [...group].sort((a, b) => elsewhere(a) - elsewhere(b) || byNumbers(a, b))[0];
 }
 
 // Refusing a stale plan (#717) -------------------------------------------------------------------

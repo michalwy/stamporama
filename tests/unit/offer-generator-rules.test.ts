@@ -453,6 +453,88 @@ describe("planOffers (#1287)", () => {
   });
 });
 
+describe("planOffers, one of each (#2485)", () => {
+  const threeSets = () => [
+    copy("a1", "s1", { itemNo: 1 }),
+    copy("a2", "s2", { itemNo: 2 }),
+    copy("b1", "s1", { itemNo: 3 }),
+    copy("b2", "s2", { itemNo: 4 }),
+    copy("c1", "s1", { itemNo: 5 }),
+    copy("c2", "s2", { itemNo: 6 }),
+  ];
+
+  it("lists one of three identical sets as one new offer and counts the two left out", () => {
+    const result = plan({ copies: threeSets(), packaging: "one" });
+    assert.equal(result.lines.length, 1);
+    assert.deepEqual(ids(result.lines[0].sets), [["a1", "a2"]]);
+    assert.deepEqual(result.lines[0].target, { kind: "new" });
+    assert.equal(result.lines[0].resultingSetCount, 1);
+    assert.equal(result.identicalLeftOut, 2);
+    assert.equal(result.alreadyListed, 0);
+  });
+
+  it("makes an offer per distinct set: two in one condition and one in another make two", () => {
+    const copies = [
+      copy("a1", "s1"),
+      copy("a2", "s2"),
+      copy("b1", "s1"),
+      copy("b2", "s2"),
+      copy("c1", "s1", { conditionId: "mh" }),
+      copy("c2", "s2", { conditionId: "mh" }),
+    ];
+    const result = plan({ copies, packaging: "one" });
+    // In the pass's usual order: the combinations sorted by key.
+    assert.deepEqual(result.lines.map((line) => ids(line.sets)), [[["c1", "c2"]], [["a1", "a2"]]]);
+    assert.equal(result.identicalLeftOut, 1);
+  });
+
+  it("lists the set with no copy in an open offer elsewhere, else the lowest copy numbers", () => {
+    const listedElsewhere = new Set(["a2"]);
+    const result = plan({ copies: threeSets(), packaging: "one", listedElsewhere });
+    assert.deepEqual(ids(result.lines[0].sets), [["b1", "b2"]]);
+    const all = new Set(["a1", "b2", "c1"]);
+    assert.deepEqual(ids(plan({ copies: threeSets(), packaging: "one", listedElsewhere: all }).lines[0].sets), [["a1", "a2"]]);
+  });
+
+  it("makes no offer for a set already in an open offer on the platform, in bidding or not", () => {
+    for (const extra of [{}, { inActiveBidding: true }]) {
+      const result = plan({
+        copies: threeSets(),
+        packaging: "one",
+        members: members("o1", "set1", ["s1", "s2"]),
+        offers: new Map([["o1", offer("o1", 7, extra)]]),
+      });
+      assert.equal(result.lines.length, 0);
+      assert.equal(result.alreadyListed, 1);
+      assert.equal(result.identicalLeftOut, 2);
+    }
+  });
+
+  it("works the same on singles, and hands nothing left out to the other mode", () => {
+    const copies = [...threeSets(), copy("x", "s9"), copy("y", "s9"), copy("z", "s9", { certificateStatusId: "cert" })];
+    const singles = plan({ copies, packaging: "one", mode: "singles" });
+    assert.deepEqual(singles.lines.map((line) => ids(line.sets)), [[["x"]], [["z"]]]);
+    assert.equal(singles.identicalLeftOut, 1);
+    assert.equal(singles.otherModeCopies, 6);
+    assert.equal(plan({ copies, packaging: "one" }).otherModeCopies, 3);
+  });
+
+  it("gives its lines ids of their own, and leaves the other packagings' counts at zero", () => {
+    const one = plan({ copies: threeSets(), packaging: "one" });
+    const multi = plan({ copies: threeSets() });
+    assert.notEqual(one.lines[0].id, multi.lines[0].id);
+    assert.equal(multi.identicalLeftOut, 0);
+    assert.equal(multi.alreadyListed, 0);
+    assert.deepEqual(ids(multi.lines[0].sets), [["a1", "a2"], ["b1", "b2"], ["c1", "c2"]]);
+    assert.equal(plan({ copies: threeSets(), packaging: "separate" }).lines.length, 3);
+  });
+
+  it("travels in the request", () => {
+    const params = new URLSearchParams("platformId=p1&mode=checklists&packaging=one");
+    assert.equal(parseGeneratorRequest(params)?.packaging, "one");
+  });
+});
+
 describe("findPlanDrift (#717's rule, #1287)", () => {
   const offers = new Map([["o7", offer("o7", 7)]]);
   const base = () => [copy("a1", "s1"), copy("a2", "s2"), copy("b1", "s1"), copy("b2", "s2")];

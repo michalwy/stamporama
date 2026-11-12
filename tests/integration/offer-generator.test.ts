@@ -473,6 +473,37 @@ describe("offer generator (#1287)", () => {
     assert.equal((await offersHolding([single])).length, 0);
   });
 
+  it("lists one of each: the set listed nowhere else, and none for a set already on the platform (#2485)", async () => {
+    const [s1, s2] = await stamps(2);
+    await checklist([s1, s2]);
+    const a = [await copy(s1), await copy(s2)];
+    const b = [await copy(s1), await copy(s2)];
+    const c = [await copy(s1), await copy(s2)];
+    const u = [await copy(s1, { conditionId: usedId }), await copy(s2, { conditionId: usedId })];
+    // The first set's copy is in an open offer on another platform, so the second set is listed.
+    await offer([[a[0]]], { platformId: otherPlatformId });
+    const asked = [...a, ...b, ...c, ...u];
+    const input = ticked(asked, { packaging: "one" });
+
+    const preview = await previewOfferGeneration(userId, collectionId, input);
+    assert.equal(preview.lines.length, 2, "MNH and used are two distinct sets");
+    const mnhLine = preview.lines.find((line) => line.sets[0].some((row) => row.id === b[0] || row.id === b[1]));
+    assert.ok(mnhLine, "the MNH set with no copy listed elsewhere is the one listed");
+    assert.equal(mnhLine.sets.length, 1);
+    assert.equal(preview.identicalLeftOut, 2);
+    assert.equal(preview.alreadyListed, 0);
+
+    const result = await commitOfferGeneration(userId, collectionId, input, preview.fingerprint);
+    assert.equal(result.createdOffers, 2);
+    assert.equal((await offersHolding(c)).length, 0, "the identical sets left out stay where they are");
+
+    // Run again with the rest: an identical set is now on this platform, so no offer is made for either.
+    const again = await previewOfferGeneration(userId, collectionId, ticked([...a, ...c], { packaging: "one" }));
+    assert.equal(again.lines.length, 0);
+    assert.equal(again.alreadyListed, 1);
+    assert.equal(again.identicalLeftOut, 1);
+  });
+
   it("names a single by its issue and stamp, and an unnamed one not at all (#2046)", async () => {
     const [named, bare, nameless] = await stamps(3);
     await prisma.stamp.update({ where: { id: bare }, data: { name: null } });

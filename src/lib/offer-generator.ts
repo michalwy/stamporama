@@ -6,7 +6,7 @@ import { listableOnPlatformFilters, orderedPoolChecklists } from "./lot-builder"
 import { loadVariantChains } from "./checklist-variant-rollup";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
-import { CLOSED_OFFER_STATES, isOfferState, type OfferState } from "./offer-rules";
+import { CLOSED_OFFER_STATES, isOfferState, OPEN_OFFER_STATES, type OfferState } from "./offer-rules";
 import { TRADED_AWAY } from "./trade-exit";
 import { formatItemNo } from "./item-number";
 import { formatEntityNo } from "./quick-jump";
@@ -193,11 +193,10 @@ async function readGeneratorState(
     platform.platformModule === FACEBOOK_PLATFORM_MODULE
       ? (readFacebookCreateChoice(input.facebook).facebookGroupId ?? "")
       : undefined;
-  const offers = await readOffers(
-    collectionId,
-    [...new Set(members.map((member) => member.offerId))],
-    facebookGroupId
-  );
+  const [offers, listedElsewhere] = await Promise.all([
+    readOffers(collectionId, [...new Set(members.map((member) => member.offerId))], facebookGroupId),
+    input.packaging === "one" ? readListedElsewhereIds(collectionId, copies) : undefined,
+  ]);
 
   const plan = planOffers({
     copies,
@@ -210,8 +209,24 @@ async function readGeneratorState(
     members,
     offers,
     targets: input.targets,
+    listedElsewhere,
   });
   return { platformName: platform.name, askedCopies: askedIds.length, skipped, copies, checklists, offers, plan };
+}
+
+/** The pool copies already in an open offer — on another platform, since none in the pool is in one on
+ *  this (#758) — which *one of each* lists last among identical sets (#2485, #2339). */
+async function readListedElsewhereIds(collectionId: string, copies: readonly GeneratorCopy[]): Promise<Set<string>> {
+  if (copies.length === 0) return new Set();
+  const rows = await prisma.offerSetItem.findMany({
+    where: {
+      itemId: { in: copies.map((copy) => copy.itemId) },
+      offerSet: { offer: { collectionId, state: { in: [...OPEN_OFFER_STATES] } } },
+    },
+    select: { itemId: true },
+    distinct: ["itemId"],
+  });
+  return new Set(rows.map((row) => row.itemId));
 }
 
 /** The offers a pass may add sets to — on Facebook, only those in `facebookGroupId` (none without one). */
@@ -353,6 +368,10 @@ export interface OfferGeneratorPreview {
   skipped: { reason: SkipReason; label: string; count: number }[];
   /** Available copies the other mode lists (`GeneratorPlan.otherModeCopies`). */
   otherModeCopies: number;
+  /** With *one of each* (#2485): identical sets beyond the first, left where they are, and distinct sets
+   *  left out because an identical one is already in an open offer on the platform. */
+  identicalLeftOut: number;
+  alreadyListed: number;
   /** Why offers cannot be created in this status the way quick offer mode creates them, if so. */
   creationBlock: string | null;
   lines: GeneratorLineView[];
@@ -390,6 +409,8 @@ export async function previewOfferGeneration(
     askedCopies: state.askedCopies,
     skipped: state.skipped.map((entry) => ({ ...entry, label: SKIP_REASON_LABEL[entry.reason] })),
     otherModeCopies: plan.otherModeCopies,
+    identicalLeftOut: plan.identicalLeftOut,
+    alreadyListed: plan.alreadyListed,
     creationBlock,
     lines,
     totals: (({ newOffers, changedOffers, sets, copies }) => ({ newOffers, changedOffers, sets, copies }))(
