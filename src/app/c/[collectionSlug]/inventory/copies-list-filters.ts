@@ -35,6 +35,7 @@ export const REMEMBERED_FILTER_KEYS = [
   "deliveryStates",
   "locationId",
   "noPhotos",
+  "withPhotos",
   "missingCatalogValue",
   "variantToSettle",
   "notOnOpenOffer",
@@ -45,6 +46,33 @@ export const REMEMBERED_FILTER_KEYS = [
   "held",
   ...DISPOSITION_FILTERS.map((f) => f.key),
 ] as const;
+
+/**
+ * The *More filters* switches that cannot both hold (#2491): *No photos* and *With photos* ask
+ * opposite questions, and the two ticked together would be a list matching nothing.
+ */
+export const EXCLUSIVE_SPARE_FILTERS: readonly (readonly [string, string])[] = [
+  ["noPhotos", "withPhotos"],
+];
+
+/**
+ * The *More filters* selection after a change from `previous` to `next`, with each exclusive pair
+ * resolved in favour of **the one just ticked** — ticking *No photos* unticks *With photos*, and
+ * the other way round (#2491). A selection that arrives with both ticked and neither new keeps the
+ * first of the pair.
+ */
+export function exclusiveSpareSelection(
+  previous: readonly string[],
+  next: readonly string[]
+): string[] {
+  let result = [...next];
+  for (const [a, b] of EXCLUSIVE_SPARE_FILTERS) {
+    if (!result.includes(a) || !result.includes(b)) continue;
+    const drop = !previous.includes(b) && previous.includes(a) ? a : b;
+    result = result.filter((key) => key !== drop);
+  }
+  return result;
+}
 
 /** The platform worklist's own parameter (#259), remembered apart from the set above (#275). */
 const NOT_OFFERED_PLATFORM_PARAM = "notOfferedPlatform";

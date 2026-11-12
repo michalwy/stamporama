@@ -1304,6 +1304,9 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
   /** Restrict to copies with no attached photos (#177), so users can find pieces that
    * still need photographing (#112). */
   noPhotos?: boolean;
+  /** Restrict to copies with at least one attached photo (#2491) — {@link noPhotos} inverted, so
+   * offers can be generated only from copies that have a picture. Both set match nothing. */
+  withPhotos?: boolean;
   /** Restrict to copies whose catalog valuation is `unpriced` — no price recorded for the
    * copy's own condition × certificate (#229), so users can find and fix pricing gaps. Since
    * "unpriced" is derived (no column carries it), the reads valuate the matching set once and
@@ -1748,7 +1751,16 @@ function buildItemWhere(
       : {}),
     ...(filters.inCollection !== undefined ? { inCollection: filters.inCollection } : {}),
     ...(filters.forTrade !== undefined ? { forTrade: filters.forTrade } : {}),
-    ...(filters.noPhotos ? { photos: { none: {} } } : {}),
+    // *No photos* and *With photos* (#2491) — one relation filter, so both set match nothing
+    // rather than one silently overwriting the other.
+    ...(filters.noPhotos || filters.withPhotos
+      ? {
+          photos: {
+            ...(filters.noPhotos ? { none: {} } : {}),
+            ...(filters.withPhotos ? { some: {} } : {}),
+          },
+        }
+      : {}),
     // The not-offered-on-platform filter (#259) implies the for-sale disposition; its offer
     // exclusions live in `and` above. Merged with the explicit forSale toggle so both being
     // set is a no-op, not a clobbered constraint.

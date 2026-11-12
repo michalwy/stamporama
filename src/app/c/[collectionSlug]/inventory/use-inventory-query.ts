@@ -114,6 +114,8 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
   forTrade?: boolean;
   /** Restrict to copies with no attached photos (#177). */
   noPhotos?: boolean;
+  /** Restrict to copies with at least one attached photo (#2491). */
+  withPhotos?: boolean;
   /** Restrict to copies missing a catalog value — unpriced for their condition (#229). */
   missingCatalogValue?: boolean;
   /** Restrict to copies whose variant is still to settle (#1651). */
@@ -182,6 +184,7 @@ export interface InventoryYearFacetFilters extends TagFilterOpts, FaultFilterOpt
   forSale?: boolean;
   forTrade?: boolean;
   noPhotos?: boolean;
+  withPhotos?: boolean;
   missingCatalogValue?: boolean;
   /** Restrict to copies whose variant is still to settle (#1651). */
   variantToSettle?: boolean;
@@ -280,6 +283,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.forSale) params.set("forSale", "true");
   if (filters.forTrade) params.set("forTrade", "true");
   if (filters.noPhotos) params.set("noPhotos", "true");
+  if (filters.withPhotos) params.set("withPhotos", "true");
   if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.variantToSettle) params.set("variantToSettle", "true");
   if (filters.notOnOpenOffer) params.set("notOnOpenOffer", "true");
@@ -550,6 +554,7 @@ export function useHoldingsValuation(
       forSale: filters.forSale,
       forTrade: filters.forTrade,
       noPhotos: filters.noPhotos,
+      withPhotos: filters.withPhotos,
       missingCatalogValue: filters.missingCatalogValue,
       variantToSettle: filters.variantToSettle,
       notOnOpenOffer: filters.notOnOpenOffer,
@@ -591,6 +596,7 @@ export function useHoldingsValuation(
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
+      if (filters.withPhotos) params.set("withPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.variantToSettle) params.set("variantToSettle", "true");
   if (filters.notOnOpenOffer) params.set("notOnOpenOffer", "true");
@@ -650,6 +656,7 @@ export function useItemYears(
       if (filters.forSale) params.set("forSale", "true");
       if (filters.forTrade) params.set("forTrade", "true");
       if (filters.noPhotos) params.set("noPhotos", "true");
+      if (filters.withPhotos) params.set("withPhotos", "true");
       if (filters.missingCatalogValue) params.set("missingCatalogValue", "true");
   if (filters.variantToSettle) params.set("variantToSettle", "true");
   if (filters.notOnOpenOffer) params.set("notOnOpenOffer", "true");
