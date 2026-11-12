@@ -447,6 +447,8 @@ export function InventoryListPanel({
   // area axis — the location subtree is resolved in `resolveLocationScope`.
   const [includeSubLocations, setIncludeSubLocations] = useSubtreeScope("location");
   const noPhotos = readFilterParam("noPhotos") === "true";
+  // Its opposite (#2491): only the copies with a photo — what offers are generated from.
+  const withPhotos = readFilterParam("withPhotos") === "true";
   const missingCatalogValue = readFilterParam("missingCatalogValue") === "true";
   const variantToSettle = readFilterParam("variantToSettle") === "true";
   // On no open offer, on any platform (#2338) — the copies to prefer for a new offer or proposal.
@@ -639,6 +641,7 @@ export function InventoryListPanel({
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
+      withPhotos: withPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       variantToSettle: variantToSettle || undefined,
       notOnOpenOffer: notOnOpenOffer || undefined,
@@ -654,7 +657,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
+    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, withPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -679,6 +682,7 @@ export function InventoryListPanel({
       forSale: activeDispositions.has("forSale") || undefined,
       forTrade: activeDispositions.has("forTrade") || undefined,
       noPhotos: noPhotos || undefined,
+      withPhotos: withPhotos || undefined,
       missingCatalogValue: missingCatalogValue || undefined,
       variantToSettle: variantToSettle || undefined,
       notOnOpenOffer: notOnOpenOffer || undefined,
@@ -692,7 +696,7 @@ export function InventoryListPanel({
       held,
       heldAxes,
     }),
-    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
+    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, withPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1300,6 +1304,7 @@ export function InventoryListPanel({
     faultIds.length > 0 ||
     !!locationId ||
     noPhotos ||
+    withPhotos ||
     missingCatalogValue ||
     variantToSettle ||
     notOnOpenOffer ||

@@ -23,7 +23,7 @@ import { useCollectionFaults } from "@/app/c/[collectionSlug]/shared/use-faults"
 import { NO_FAULTS } from "@/lib/fault-filter";
 import { NO_CONDITION } from "@/lib/piece-condition";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { DISPOSITION_FILTERS } from "./copies-list-filters";
+import { DISPOSITION_FILTERS, exclusiveSpareSelection } from "./copies-list-filters";
 import { dispositionTint } from "@/app/c/[collectionSlug]/shared/disposition-colors";
 
 /**
@@ -56,6 +56,9 @@ import { dispositionTint } from "@/app/c/[collectionSlug]/shared/disposition-col
  */
 export const SPARE_FILTERS = [
   { key: "noPhotos", label: "No photos", group: "Show only" },
+  // Its opposite (#2491) — the copies ready to be offered with a picture. The two exclude each
+  // other: ticking one unticks the other (`exclusiveSpareSelection`).
+  { key: "withPhotos", label: "With photos", group: "Show only" },
   { key: "missingCatalogValue", label: "Missing catalog value", group: "Show only" },
   // The copies whose variant is still to settle (#1651): an umbrella copy, or one of several stamps.
   { key: "variantToSettle", label: "Variant to settle", group: "Show only" },
@@ -544,13 +547,14 @@ export function CopiesFilterControls({
             group: f.group,
           }))}
           selected={SPARE_FILTERS.map((f) => f.key).filter((key) => spareFilters.has(key))}
-          onChange={(ids) =>
+          onChange={(picked) => {
+            const ids = exclusiveSpareSelection([...spareFilters], picked);
             updateParams(
               Object.fromEntries(
                 SPARE_FILTERS.map((f) => [f.key, ids.includes(f.key) ? "true" : ""])
               )
-            )
-          }
+            );
+          }}
           allLabel="More filters"
           clearLabel="No extra filters"
           itemNoun="extra filters"

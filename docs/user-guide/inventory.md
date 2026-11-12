@@ -302,7 +302,10 @@ right, from *which copies* to *how they are shown*.
 - **More filters** — the occasional switches, in one dropdown under two headings, because **some of
   them narrow the list and two widen it**:
   - *Show only* — **No photos** shows only copies with no [photo](#photos) attached, so you can
-    find the pieces still waiting to be photographed; **Missing catalog value** shows only copies
+    find the pieces still waiting to be photographed; **With photos** is its opposite — only the
+    copies that have a photo, so [offers generated](offers.md) from the list are made only from
+    copies with a picture, leaving the rest for later. The two exclude each other: ticking one
+    unticks the other. **Missing catalog value** shows only copies
     with no catalog value recorded for their condition (those showing **—**), so you can fill
     pricing gaps in bulk — it pairs with the **+ catalog value** price link below. **Not on any open
     offer** shows only copies that are on no open offer on any platform — the ones to prefer when

@@ -91,6 +91,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     forSale: boolParam(sp.get("forSale")),
     forTrade: boolParam(sp.get("forTrade")),
     noPhotos: boolParam(sp.get("noPhotos")),
+    // Its opposite (#2491): the copies with a photo.
+    withPhotos: boolParam(sp.get("withPhotos")),
     missingCatalogValue: boolParam(sp.get("missingCatalogValue")),
     // An umbrella copy or one with a candidate set (#1651).
     variantToSettle: boolParam(sp.get("variantToSettle")),
