@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useSyncExternalStore, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   droppedNote,
+  isUnnarrowedListView,
   PRESET_NAME_MAX,
   readListView,
   sameListView,
@@ -45,6 +46,13 @@ import { usePersistedCollectionValue } from "./use-persisted-collection-value";
 // view is the navigation state and the preset only the name it arrived under (#773's reasoning for
 // the bulk-lot builder). Its name stays on the control, marked *modified* once anything differs, and
 // *Update* saves the difference into it.
+//
+// **A preset can be let go of** (#2499): the × on the chip, or *Stop using preset* in the menu,
+// forgets the name and leaves the view exactly as it is. Clearing every filter does the same by
+// itself — a list that nothing narrows is the plain list, whatever the sort and the grouping
+// (`isUnnarrowedListView`) — but only on the way *back* to it: a preset whose own view narrows
+// nothing stays attached when applied, and so does one whose exact view the list returns to. The
+// detached state is remembered like the applied one, so a reload does not bring the name back.
 //
 // **Nothing is applied by itself.** A list opens as it always did; a preset is applied only by a
 // click.
@@ -131,6 +139,25 @@ export function ListPresetsControl({
   );
   const applied = presets.find((p) => p.id === appliedId);
   const modified = !!applied && !sameListView(applied.view, current);
+  const narrowed = !isUnnarrowedListView(spec, current);
+  const address = searchParams.toString();
+
+  // Back to the plain list detaches the preset (#2499). Whether the list *was* narrowed is the last
+  // view seen; while an apply is still reaching the address (`settlingFrom` — the address it left),
+  // the view is part old and part new, and nothing is concluded from it.
+  const wasNarrowed = useRef<boolean | null>(null);
+  const settlingFrom = useRef<string | null>(null);
+  useEffect(() => {
+    if (settlingFrom.current !== null) {
+      if (address === settlingFrom.current) return;
+      settlingFrom.current = null;
+      wasNarrowed.current = narrowed;
+      return;
+    }
+    const was = wasNarrowed.current;
+    wasNarrowed.current = narrowed;
+    if (applied && was === true && !narrowed && modified) setAppliedId("");
+  }, [address, narrowed, applied, modified, setAppliedId]);
 
   const [dialog, setDialog] = useState<Dialog>({ kind: "none" });
   const [name, setName] = useState("");
@@ -153,9 +180,16 @@ export function ListPresetsControl({
     local?.apply(preset.view.local);
     setAppliedId(preset.id);
     const qs = write.url.toString();
+    settlingFrom.current = qs === address ? null : address;
     router.push(qs ? `${pathname}?${qs}` : pathname);
     const note = droppedNote(preset.dropped);
     if (note) toast({ message: `“${preset.name}”: ${note}`, tone: "info" });
+  }
+
+  /** Stops using the applied preset (#2499) — the view stays exactly as it is. */
+  function detach() {
+    setOpen(false);
+    setAppliedId("");
   }
 
   function openNameDialog(next: Dialog, initial: string) {
@@ -221,37 +255,66 @@ export function ListPresetsControl({
 
   return (
     <>
-      <Tooltip
-        content={
-          applied
-            ? modified
-              ? `The view has changed since “${applied.name}” was applied — Update saves it into the preset`
-              : `Showing the view saved as “${applied.name}”`
-            : "Save this view — filters, area, years, search, sort and grouping — under a name, and bring it back in one click"
-        }
-      >
-        <button
-          ref={triggerRef}
-          type="button"
-          aria-label="Filter presets"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          disabled={isPending}
-          onClick={() => setOpen((v) => !v)}
-          style={{ ...filterTriggerStyle({ active: !!applied }), maxWidth: "16rem" }}
+      {/* The chip and, while a preset is attached, its × — one control to the eye, two buttons. */}
+      <span style={{ display: "inline-flex", alignItems: "stretch", flexShrink: 0 }}>
+        <Tooltip
+          content={
+            applied
+              ? modified
+                ? `The view has changed since “${applied.name}” was applied — Update saves it into the preset`
+                : `Showing the view saved as “${applied.name}”`
+              : "Save this view — filters, area, years, search, sort and grouping — under a name, and bring it back in one click"
+          }
         >
-          <span style={{ display: "inline-flex", flexShrink: 0 }}>
-            <Icon name="presets" size="xs" />
-          </span>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
-          {modified && (
-            <span style={{ fontWeight: 400, fontStyle: "italic", flexShrink: 0 }}>· modified</span>
-          )}
-          <span style={{ display: "inline-flex", opacity: 0.7, flexShrink: 0 }}>
-            <Icon name="caret" size="xs" />
-          </span>
-        </button>
-      </Tooltip>
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-label="Filter presets"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            disabled={isPending}
+            onClick={() => setOpen((v) => !v)}
+            style={{
+              ...filterTriggerStyle({ active: !!applied }),
+              maxWidth: "16rem",
+              // Attached, the × below is the chip's right end.
+              ...(applied
+                ? { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRight: "none" }
+                : null),
+            }}
+          >
+            <span style={{ display: "inline-flex", flexShrink: 0 }}>
+              <Icon name="presets" size="xs" />
+            </span>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{label}</span>
+            {modified && (
+              <span style={{ fontWeight: 400, fontStyle: "italic", flexShrink: 0 }}>· modified</span>
+            )}
+            <span style={{ display: "inline-flex", opacity: 0.7, flexShrink: 0 }}>
+              <Icon name="caret" size="xs" />
+            </span>
+          </button>
+        </Tooltip>
+        {applied && (
+          <Tooltip content={`Stop using “${applied.name}” — the filters stay as they are`}>
+            <button
+              type="button"
+              aria-label="Stop using preset"
+              disabled={isPending}
+              onClick={detach}
+              style={{
+                ...filterTriggerStyle({ active: true }),
+                padding: "0 0.4rem",
+                borderTopLeftRadius: 0,
+                borderBottomLeftRadius: 0,
+                borderLeft: "1px solid var(--color-accent)",
+              }}
+            >
+              <Icon name="close" size="xs" />
+            </button>
+          </Tooltip>
+        )}
+      </span>
 
       {open &&
         pos &&
@@ -306,6 +369,17 @@ export function ListPresetsControl({
               </div>
             ))}
             <div style={{ borderTop: "1px solid var(--color-border)", margin: "0.25rem 0" }} />
+            {applied && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={detach}
+                style={{ ...FILTER_MENU_ITEM_STYLE, cursor: "pointer" }}
+              >
+                <Icon name="close" size="xs" />
+                Stop using preset
+              </button>
+            )}
             {applied && modified && (
               <button
                 type="button"

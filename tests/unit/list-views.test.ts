@@ -5,6 +5,7 @@ import {
   cleanListView,
   comparePresetNames,
   droppedNote,
+  isUnnarrowedListView,
   parseListView,
   parseRefs,
   readListView,
@@ -18,6 +19,8 @@ import {
   AUCTION_LOTS_VIEW,
   COPIES_VIEW,
   OFFERS_VIEW,
+  STAMPS_VIEW,
+  SUPPLIES_VIEW,
   WANTS_VIEW,
 } from "../../src/app/c/[collectionSlug]/shared/list-view-specs";
 
@@ -309,5 +312,52 @@ describe("stored values", () => {
     assert.ok("error" in checkPresetName("   "));
     assert.ok("error" in checkPresetName("x".repeat(81)));
     assert.deepEqual(["b", "A", "a2", "a10"].sort(comparePresetNames), ["A", "a2", "a10", "b"]);
+  });
+});
+
+// #2499: a list back to its plain view lets go of the preset applied — "nothing narrows the list",
+// whatever the sort and the grouping.
+describe("isUnnarrowedListView", () => {
+  const view = (v: Partial<ListView>): ListView => ({ params: {}, stored: {}, local: {}, ...v });
+
+  it("is the plain list with every filter cleared, the area and the years included", () => {
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({})), true);
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { areaId: "a1" } })), false);
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { year: "1960" } })), false);
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { search: "x" } })), false);
+    // A filter only the address carries counts the same, named in no spec.
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { decade: "1960" } })), false);
+  });
+
+  it("leaves the sort and the grouping out", () => {
+    const sortedAndGrouped = view({
+      params: { sortBy: "price", sortDir: "desc" },
+      stored: { groupMode: "issue", groupByCondition: "1", searchFields: "name", subAreas: "0" },
+    });
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, sortedAndGrouped), true);
+    assert.equal(isUnnarrowedListView(SUPPLIES_VIEW, view({ params: { month: "1" } })), true);
+  });
+
+  it("leaves out the half of a filter that says nothing alone", () => {
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { tagMode: "all" } })), true);
+    assert.equal(isUnnarrowedListView(STAMPS_VIEW, view({ params: { catalogVendorId: "v1" } })), true);
+    assert.equal(
+      isUnnarrowedListView(STAMPS_VIEW, view({ params: { catalogVendorId: "v1", catalogNumber: "5" } })),
+      false
+    );
+  });
+
+  it("counts a stored value that changes the rows, at its default or not", () => {
+    assert.equal(isUnnarrowedListView(OFFERS_VIEW, view({ stored: { includeClosed: "0" } })), true);
+    assert.equal(isUnnarrowedListView(OFFERS_VIEW, view({ stored: { includeClosed: "1" } })), false);
+    const areaYear = (v: object) => view({ stored: { areaYear: JSON.stringify(v) } });
+    assert.equal(isUnnarrowedListView(WANTS_VIEW, areaYear({ year: null, areaId: null })), true);
+    assert.equal(isUnnarrowedListView(WANTS_VIEW, areaYear({})), true);
+    assert.equal(isUnnarrowedListView(WANTS_VIEW, areaYear({ areaId: "a1", year: null })), false);
+  });
+
+  it("counts a list's own screen state", () => {
+    assert.equal(isUnnarrowedListView(WANTS_VIEW, view({ local: { status: "closed" } })), false);
+    assert.equal(isUnnarrowedListView(WANTS_VIEW, view({ stored: { groupByIssue: "1" } })), true);
   });
 });

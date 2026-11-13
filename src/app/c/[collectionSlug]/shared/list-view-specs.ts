@@ -1,4 +1,5 @@
 import type { ListViewSpec, RememberedParam, StoredValue } from "@/lib/list-views";
+import { TAG_MODE_PARAM } from "@/lib/tag-filter";
 import { REMEMBERED_FILTER_KEYS } from "../inventory/copies-list-filters";
 import { INTAKE_VIEW_PARAMS } from "../purchases/intake-view-params";
 import { POSTS_VIEW_PARAMS } from "../offers/posts/posts-view-params";
@@ -60,9 +61,15 @@ function searchFields(namespace: string): StoredValue {
 }
 
 /** A `usePersistedFlag` switch that is off until set. */
-function flag(name: string, key: string): StoredValue {
-  return { name, key, defaultValue: "0" };
+function flag(name: string, key: string, opts: { narrows?: boolean } = {}): StoredValue {
+  return { name, key, defaultValue: "0", ...opts };
 }
+
+/** The catalogue a number is looked up in (#146) — no filter at all without a number typed. */
+const CATALOG_VENDOR_ALONE = ["catalogVendorId"] as const;
+
+/** The tag filter's mode (#1182) — says nothing without tags picked. */
+const TAG_MODE = [TAG_MODE_PARAM] as const;
 
 const CATALOGUE_REFS = {
   areaId: "area",
@@ -77,6 +84,7 @@ const CATALOGUE_REFS = {
 
 export const COPIES_VIEW: ListViewSpec = {
   list: "copies",
+  notNarrowing: TAG_MODE,
   remembered: [
     ...AREA_YEAR,
     ...sort("inventory"),
@@ -110,6 +118,7 @@ export const COPIES_VIEW: ListViewSpec = {
 
 export const STAMPS_VIEW: ListViewSpec = {
   list: "stamps",
+  notNarrowing: CATALOG_VENDOR_ALONE,
   remembered: [
     ...AREA_YEAR,
     ...sort("stamps"),
@@ -121,6 +130,7 @@ export const STAMPS_VIEW: ListViewSpec = {
 
 export const ISSUES_VIEW: ListViewSpec = {
   list: "issues",
+  notNarrowing: CATALOG_VENDOR_ALONE,
   remembered: [
     ...AREA_YEAR,
     ...sort("issues"),
@@ -140,6 +150,7 @@ export const WANTS_VIEW: ListViewSpec = {
       name: "areaYear",
       key: "stamporama:list-filters:{c}",
       defaultValue: JSON.stringify({ areaId: null, year: null }),
+      narrows: true,
     },
     flag("groupByIssue", "stamporama:wants:groupByIssue:{c}"),
     SUB_AREAS,
@@ -176,7 +187,8 @@ export const OFFERS_VIEW: ListViewSpec = {
     rememberedRaw("search", "offers-search"),
   ],
   stored: [
-    flag("includeClosed", "stamporama:offers:includeClosed:{c}"),
+    // Widens rather than narrows, but switched on it is a filter in force all the same (#2499).
+    flag("includeClosed", "stamporama:offers:includeClosed:{c}", { narrows: true }),
     searchFields("offers-search-fields"),
   ],
   refs: { platform: "platform" },
@@ -212,6 +224,7 @@ export const CONTACTS_VIEW: ListViewSpec = { list: "contacts" };
 
 export const AUCTION_LOTS_VIEW: ListViewSpec = {
   list: "auction-lots",
+  notNarrowing: TAG_MODE,
   remembered: [
     rememberedRaw("outcome", "auction-outcome"),
     rememberedRaw("seller", "auction-seller"),
@@ -252,6 +265,8 @@ export const SUPPLIES_VIEW: ListViewSpec = {
   list: "supplies",
   // Which tab is open is where the collector is on the screen, not a narrowing of it.
   ignoreParams: ["tab"],
+  // The register grouped by month arranges its rows; it does not narrow them.
+  notNarrowing: ["month"],
   remembered: rememberedSet(SUPPLIES_VIEW_PARAMS, "packing-supplies-view"),
   refs: { supply: "supply" },
 };

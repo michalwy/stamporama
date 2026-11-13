@@ -38,6 +38,15 @@ Once a preset is applied, its name is shown on the control. Change anything — 
 grouping — and the control says **· modified**; **Update "…" with this view** then saves the change
 into that preset.
 
+To **stop using a preset**, press the **×** at the end of its chip, or pick **Stop using preset** in
+the menu. The filters, sort and grouping stay exactly as they are; only the preset's name goes, and
+the control reads **Presets** again. The preset itself is untouched and can be applied again.
+
+Clearing every filter does the same by itself: once nothing narrows the list — no filter, no area,
+no years, no search — the preset's name goes. The sort and the grouping do not count, so **Reset
+filters** (with the area and years cleared) always brings you back to the plain list. With no preset
+in use, **Save this view as…** is the way to keep the view.
+
 Presets are listed by name. No preset is applied by itself: a list opens the way it always did, with
 the filters it remembers from your last visit.
 

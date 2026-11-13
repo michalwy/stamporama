@@ -147,12 +147,24 @@ export interface StoredValue {
   key: string;
   /** What the preference reads with nothing stored, so a stored default and none compare equal. */
   defaultValue?: string;
+  /**
+   * Whether it changes which rows the list holds (#2499) — the Wants list's remembered area and
+   * year, the Offers list's *include closed*. Most stored values do not: a grouping arranges the
+   * rows, ticked search fields say what the search reads, the sub-area switch qualifies an area.
+   */
+  narrows?: boolean;
 }
 
 export interface ListViewSpec {
   list: ListKey;
   /** URL parameters that are not view state, left as they are on apply. */
   ignoreParams?: readonly string[];
+  /**
+   * View parameters that never narrow the list on their own (#2499), beyond the sort
+   * ({@link SORT_PARAMS}), which every list spells the same way: a grouping kept in the address, the
+   * half of a filter that says nothing without the other half (the tag filter's mode).
+   */
+  notNarrowing?: readonly string[];
   remembered?: readonly RememberedParam[];
   stored?: readonly StoredValue[];
   /** Which view parameters name collection records, and of what kind. Comma-separated values are
@@ -310,6 +322,41 @@ function sameRecord(a: Record<string, string>, b: Record<string, string>): boole
 export function sameListView(a: ListView, b: ListView): boolean {
   return (
     sameRecord(a.params, b.params) && sameRecord(a.stored, b.stored) && sameRecord(a.local, b.local)
+  );
+}
+
+/** How every list spells its sort in the view — the order of the rows, never which rows. */
+export const SORT_PARAMS: readonly string[] = ["sortBy", "sortDir"];
+
+/** A stored value at its default, or a remembered object every field of which is empty. */
+function isClearStored(value: string, defaultValue: string | undefined): boolean {
+  if (!value || value === defaultValue) return true;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return (
+      !!parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      Object.values(parsed as Record<string, unknown>).every((v) => v === null || v === "")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether **nothing narrows the list** (#2499): every filter cleared — the area, the years and the
+ * search included — whatever the sort and the grouping. Returning to such a view detaches the preset
+ * that was applied. The sort and the grouping are left out on purpose: *Reset filters* leaves them
+ * as they are, and a reset is the way back to the plain list (settled with the collector on
+ * 2026-11-13).
+ */
+export function isUnnarrowedListView(spec: ListViewSpec, view: ListView): boolean {
+  const inert = new Set([...SORT_PARAMS, ...(spec.notNarrowing ?? [])]);
+  if (Object.entries(view.params).some(([k, v]) => v && !inert.has(k))) return false;
+  if (Object.values(view.local).some((v) => v)) return false;
+  return (spec.stored ?? []).every(
+    (s) => !s.narrows || isClearStored(view.stored[s.name] ?? "", s.defaultValue)
   );
 }
 

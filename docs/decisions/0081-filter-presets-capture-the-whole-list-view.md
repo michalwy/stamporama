@@ -36,6 +36,14 @@ its own way.
 5. **Kept on the server per collection and list** (`list_preset`: `view`, `refs`, `labels`), so a
    preset is the same on every device. The applied preset's id is remembered on the device per list;
    the control shows its name and **modified** once the view on screen differs from it.
+   **Amended by #2499 (2026-11-13):** the applied preset can be detached — an × on its chip, or
+   *Stop using preset* — which forgets the id and leaves the view as it is; and the list detaches it
+   by itself when it **returns to a view that nothing narrows** (every filter cleared, the area, the
+   years and the search included; the sort and the grouping do not count, since *Reset filters*
+   leaves them). A list's spec names the parameters that never narrow on their own
+   (`notNarrowing`, beyond the sort) and the stored values that do (`narrows`). Only the return
+   detaches: a preset whose own view narrows nothing stays attached when applied, and so does one
+   whose exact view the list comes back to.
 6. **A record deleted since is dropped, and named.** The list declares which parameters reference
    which kind of record; the server stores the names those records had at each save, and when
    listing presets drops the ids that no longer exist (a switched-off platform for the filters that
