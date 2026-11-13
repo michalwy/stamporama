@@ -26,9 +26,10 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
   button that [folds the sidebar to icons](#folding-the-sidebar)
 - **Pinned**, above everything else, once you have pinned something — the screens you use nearly all
   the time and the records you are working on for weeks, always in view while the sections below
-  stay folded. See [Pinned](#pinned) below
+  stay folded. They sit in a framed panel of their own, so the entries under it are plainly not
+  pinned. See [Pinned](#pinned) below
 - **Dashboard**, first in the list — the [work waiting on you](dashboard.md) across the collection
-- **Overview**, pinned above the sections — the one screen about the collection as a whole — with
+- **Overview**, above the sections — the one screen about the collection as a whole — with
   [Collection structure](overview.md#collection-structure), its breakdown, indented beneath it
 - Five **sections**, each one a heading you can fold away: **Catalog** (Issues, Stamps and the
   variant-price worklist under it, Checklists, then Areas), **Collection** (Inventory, Completeness, then
@@ -60,7 +61,7 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
 Hover over any entry of the sidebar — a sub-entry such as *Prepare*, *Facebook* or *Lot Builder*
 included — and a **pin** appears at its end: click it and the entry is added to **Pinned** at the
-top of the sidebar. A record can be pinned too, from its own screen: an opening balance, a purchase,
+top of the sidebar, in a framed panel above *Dashboard*. A record can be pinned too, from its own screen: an opening balance, a purchase,
 an offer, a Facebook post, a sale, an issue or a contact has a **Pin to sidebar** button in its
 header. A pinned record shows its list's icon and the name it goes by, such as *Opening balance #3 ·
 Klaser 1*; rename the record and the pin follows the next time you open it.

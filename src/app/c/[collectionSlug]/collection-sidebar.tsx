@@ -283,6 +283,7 @@ function NavItem({
   active,
   nested = false,
   pin,
+  onPanel = false,
 }: {
   href: string;
   /** Omitted for an entry inside a {@link NavGroup}, where the group's icon names the subject. */
@@ -295,6 +296,9 @@ function NavItem({
   /** Pinning from the sidebar itself (#2504): a pin that appears at the row's end under the
    * pointer, and takes the pin back where the entry is pinned already. */
   pin?: RowPin;
+  /** Drawn inside the Pinned panel (#2509), whose background is the sidebar's hover shade in the
+   * light theme — so the row under the pointer takes the next step up to stay visible. */
+  onPanel?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [pinHover, setPinHover] = useState(false);
@@ -361,7 +365,9 @@ function NavItem({
         background: active
           ? activePlate
           : hovered
-            ? "var(--color-bg-subtle)"
+            ? onPanel
+              ? "var(--color-bg-row-hover)"
+              : "var(--color-bg-subtle)"
             : "transparent",
         // The bar is the second half of the active state: on a list this dense the plate alone is
         // easy to lose, and the bar puts the answer on one edge to run the eye down. Hover stays
@@ -468,6 +474,11 @@ interface PinnedEntry {
  * own section's hue and lights as that entry does in its section, so a pinned *Prepare* and the
  * *Prepare* under Offers are one row seen twice; the section keeps it too, so it always reads
  * complete. Rows are dragged into order, and the pin under the pointer takes one off.
+ *
+ * Drawn in a **framed panel** (#2509): Dashboard and Overview come right under it and belong to no
+ * section, so with nothing marking where the pinned entries end they read as pinned too. The frame —
+ * a hairline, rounded corners, a background a step apart from the sidebar's — is the whole marker;
+ * no divider is drawn beneath it, only the gap before Dashboard.
  */
 function PinnedSection({
   base,
@@ -486,12 +497,21 @@ function PinnedSection({
 
   if (pins.length === 0) return null;
   return (
-    <>
+    <div
+      style={{
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.5rem",
+        background: "var(--color-bg-sidebar-pinned)",
+        padding: "0 0.25rem 0.25rem",
+        // The gap that sets Dashboard apart from the panel, on top of the nav's own row gap.
+        marginBottom: "0.5rem",
+      }}
+    >
       <div
         style={{
           ...sectionLabelStyle,
           cursor: "default",
-          paddingTop: "0.5rem",
+          padding: "0.5rem 0.5rem 0.375rem",
           color: "var(--color-text-muted)",
         }}
       >
@@ -517,6 +537,7 @@ function PinnedSection({
                   label={entry.label}
                   active={entry.active}
                   pin={{ pinned: true, onToggle: () => onUnpin(entry.pin.kind, entry.pin.target) }}
+                  onPanel
                 />
               </SectionTintContext.Provider>
             </div>
@@ -524,7 +545,7 @@ function PinnedSection({
         ))}
         {showLineAt(drag, pins.length) && <InsertionLine />}
       </div>
-    </>
+    </div>
   );
 }
 

@@ -73,6 +73,9 @@
   --color-bg-muted: #f1f5f9;
   --color-bg-strong: #e2e8f0;
   --color-bg-row-hover: #f1f5f9;
+  /* The sidebar's Pinned panel (#2509): a step apart from the sidebar it sits in, so the pinned
+     entries stand apart from Dashboard and Overview under them. */
+  --color-bg-sidebar-pinned: #f8fafc;
   /* An expanded issue's block (#1729): a faint accent tint under the header and its rows, and the
      bar down its left edge. Teal rather than slate, so a hovered row still reads against it. */
   --color-bg-issue-open: #f0fdfa;
@@ -169,6 +172,8 @@
   --color-bg-muted: #334155;
   --color-bg-strong: #475569;
   --color-bg-row-hover: #334155;
+  /* The sidebar's Pinned panel (#2509), the dark half: a step lighter than the sidebar. */
+  --color-bg-sidebar-pinned: #263348;
   /* An expanded issue's block (#1729), the dark half. */
   --color-bg-issue-open: #1b3540;
   --color-issue-open-bar: #14b8a6;
