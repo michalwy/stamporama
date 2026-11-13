@@ -121,6 +121,14 @@ for it, and write or re-generate its title and description — all of it inside 
 listing that is still a **draft**. Nothing it does goes anywhere near a marketplace, and it cannot
 mark a listing ready or make it live: those are still your two clicks on the offer's own screen.
 
+It can also **withdraw** listings — one or several at once — when you tell it a stamp went
+elsewhere, a listing was taken down, or you changed your mind. It follows the same rules as
+**Withdraw…** in the app: only an open listing can be withdrawn, a sold one is left alone and it says
+why, and on Facebook a lot of a post still waiting for the group's approval takes the post's other
+waiting lots with it, which it names. A withdrawn listing cannot be reopened and its copies are free
+to list again. It changes Stamporama only: a listing still up on the marketplace is yours to take
+down there.
+
 On **exchanges**, it can start a trade with somebody you already have in Contacts, say what you
 would send and what you would like back, take a line off, and tell you whether the two sides
 balance. It works out which of your copies would answer *"the Kościuszko, mint"* using the same

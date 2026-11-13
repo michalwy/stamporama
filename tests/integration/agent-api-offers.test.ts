@@ -401,6 +401,11 @@ describe("the offer operations (#711)", () => {
       // and matches whole words after it. Its sibling —
       // `tests/unit/agent-api-operation-boundary.test.ts` — fails on the *imports* instead, and
       // catches exactly what this one cannot: a publishing operation called something innocent.
+      //
+      // **`withdraw` left this list with #2511**: the collector opened withdrawing on 2026-11-14, and
+      // `withdraw_offer` takes a listing off sale inside Stamporama only — nothing is sent to the
+      // marketplace and `withdrawn` is terminal. Its sibling still holds `setOfferState` closed, so
+      // the opening is one verb wide.
       const forbiddenVerbs = new Set([
         "publish",
         "activate",
@@ -408,7 +413,6 @@ describe("the offer operations (#711)", () => {
         "send",
         "submit",
         "upload",
-        "withdraw",
         "relist",
         "sync",
       ]);
@@ -439,7 +443,7 @@ describe("the offer operations (#711)", () => {
       // And the two real names a crude pattern would have taken with it.
       for (const name of ["list_offers", "find_unlisted_copies"]) {
         assert.ok(
-          !["publish", "activate", "post", "send", "submit", "upload", "withdraw", "relist", "sync"].includes(
+          !["publish", "activate", "post", "send", "submit", "upload", "relist", "sync"].includes(
             words(name)[0]
           ),
           `${name} is a real operation and must not be caught`
@@ -447,10 +451,11 @@ describe("the offer operations (#711)", () => {
       }
     });
 
-    it("has no way to move a listing's state, so a draft stays a draft", async () => {
+    it("has no way to move a listing's state forward, so a draft stays a draft", async () => {
       // The other half of *absence, not a flag*: there is no state parameter on `draft_offer` and
       // no operation that takes one. A draft created here is `preparing`, and nothing on this
-      // surface can make it anything else.
+      // surface can make it anything else but `withdrawn` — `withdraw_offer` (#2511), which ends a
+      // listing rather than moving it on.
       const draft = await post<AgentOfferDetail>(token, "/offers", {
         platform: "Colnect",
         copy_ids: [usedCopyId],

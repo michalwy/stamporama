@@ -239,6 +239,48 @@ describe("the agent API's operation modules (#711, #712)", () => {
 });
 
 /**
+ * **The one listing state the agent may reach is `withdrawn`** (#2511). The collector opened
+ * withdrawing on 2026-11-14, and it is opened as the app's own *Withdraw…* — `withdrawOfferOrPost` —
+ * never as `setOfferState`, which can reach `active` and stays in {@link FORBIDDEN}. So what is
+ * checked is the door: imported by `operations/offers.ts` alone, and its body passing nothing but
+ * `"withdrawn"` to `setOfferState` and calling no other mover. A later edit that let it reach another
+ * state turns this red whoever calls it.
+ */
+describe("the agent API's one listing state move (#2511)", () => {
+  const offersModule = path.join(AGENT_API, "operations/offers.ts");
+  const domain = readFileSync(path.join(ROOT, "src/lib/facebook-posts.ts"), "utf8");
+
+  it("is reached from operations/offers.ts and nowhere else", () => {
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      if (file === offersModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (name === "withdrawOfferOrPost") misplaced.push(`${path.relative(ROOT, file)} imports it from "${from}"`);
+      }
+    }
+    assert.deepEqual(misplaced, [], misplaced.join("\n  "));
+    assert.ok(
+      importedBindings(offersModule).some((binding) => binding.name === "withdrawOfferOrPost"),
+      "the walk did not see `withdrawOfferOrPost` in operations/offers.ts"
+    );
+  });
+
+  it("moves an offer to `withdrawn` and to nothing else", () => {
+    const body = exportedFunctionBody(domain, "withdrawOfferOrPost");
+    const moves = [...body.matchAll(/setOfferState\(([^)]*)\)/g)].map((match) => match[1]);
+    assert.ok(moves.length >= 1, "the walk found no `setOfferState` call in `withdrawOfferOrPost`");
+    for (const args of moves) {
+      assert.match(args, /,\s*"withdrawn"\s*$/, `\`withdrawOfferOrPost\` moves an offer elsewhere: setOfferState(${args})`);
+    }
+    assert.doesNotMatch(
+      body,
+      /transitionOffer|takeFacebook|publish|markOfferReady|rejectOffer|\.update(Many)?\(/,
+      "`withdrawOfferOrPost` reaches another way of moving an offer"
+    );
+  });
+});
+
+/**
  * The domain functions that write to the **auction watchlist** (#1036), and what each one does.
  *
  * **A third boundary, and deliberately a map of its own rather than more rows in {@link FORBIDDEN}.**
