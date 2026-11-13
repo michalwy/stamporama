@@ -291,9 +291,17 @@ export interface PackingListOptions {
    * Row order inside a division: `shelf` by in-location ref (the identifier read off the shelf),
    * `catalog` by catalogue number. A sheet that prints no refs must not be ordered by them — a
    * reader cannot follow an order they cannot see. A sheet divided by set always reads by location,
-   * then ref — its divisions are not shelves, so the location is part of the walk.
+   * then ref — its divisions are not shelves, so the location is part of the walk. `given` keeps the
+   * order the copies came in, under any division — the caller has already put them in the order the
+   * reader expects (a sold set's own order, #2512).
    */
-  rowOrder?: "shelf" | "catalog";
+  rowOrder?: "shelf" | "catalog" | "given";
+  /**
+   * Whether indistinguishable copies collapse into one row with a quantity (the default). `false`
+   * prints every copy as its own row — the buyer's order summary (#2512), which lists a set's copies
+   * one each and has no tick box a merge would save.
+   */
+  merge?: boolean;
   /**
    * How a location is printed, in headings and rows alike: `path` (`Szafa 1 › Klaser A`), or `code`
    * — the location's full code (#2192, #2235), for a sheet whose names are explained by a legend kept apart
@@ -331,6 +339,7 @@ export function buildPackingList(
     options.ungroupedLabel ?? (byGroup || bySet ? NO_GROUP_LABEL : NO_LOCATION_LABEL);
   const rowOrder = options.rowOrder ?? "shelf";
   const byCode = options.locationLabel === "code";
+  const merge = options.merge ?? true;
 
   const buckets = new Map<string, Bucket>();
   let currency: string | null = null;
@@ -374,6 +383,7 @@ export function buildPackingList(
       copy.locationRef ?? "",
       copy.packed ? "1" : "0",
       copy.freeExtra ? "free" : "",
+      merge ? "" : String(copy.itemNo),
     ].join("|");
     currency ??= copy.line?.value?.currency ?? null;
     const existing = bucket.rows.get(rowKey);
@@ -411,13 +421,17 @@ export function buildPackingList(
     });
   }
 
-  const compareRows = bySet
-    ? compareByLocation
-    : rowOrder === "catalog"
-      ? compareByCatalog
-      : compareByShelf;
+  const compareRows =
+    rowOrder === "given"
+      ? null
+      : bySet
+        ? compareByLocation
+        : rowOrder === "catalog"
+          ? compareByCatalog
+          : compareByShelf;
   const groups: PackingListGroup[] = Array.from(buckets.values()).map((bucket) => {
-    const rows = Array.from(bucket.rows.values()).sort(compareRows);
+    const rows = Array.from(bucket.rows.values());
+    if (compareRows) rows.sort(compareRows);
     // The numbers a row carries read as a list on paper, so they read ascending (#474) — the copy
     // order inside a merged row is an accident of how the transaction was assembled.
     for (const row of rows) {

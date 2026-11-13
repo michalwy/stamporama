@@ -615,3 +615,39 @@ describe("buildPackingList — issue format (#2444)", () => {
     );
   });
 });
+
+// ── The buyer's order summary (#2512): every copy its own row, in the order given ──
+
+describe("buildPackingList for the order summary", () => {
+  it("prints identical copies as separate rows when merging is off", () => {
+    const set = soldSet(0);
+    const list = buildPackingList([copy({ set }), copy({ set }), copy({ set })], AREAS, LOCATIONS, MAPS, {
+      grouping: "set",
+      merge: false,
+    });
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.quantity),
+      [1, 1, 1]
+    );
+    assert.equal(list.groups[0].copyCount, 3);
+  });
+
+  it("keeps the order the copies came in", () => {
+    const set = soldSet(0);
+    const list = buildPackingList(
+      [
+        copy({ set, stampId: "c", locationId: "klaser", locationRef: "A20" }),
+        copy({ set, stampId: "a", locationId: null, locationRef: null }),
+        copy({ set, stampId: "b", locationId: "pudlo", locationRef: "A1" }),
+      ],
+      AREAS,
+      LOCATIONS,
+      MAPS,
+      { grouping: "set", rowOrder: "given", merge: false }
+    );
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.locationRef),
+      ["A20", null, "A1"]
+    );
+  });
+});
