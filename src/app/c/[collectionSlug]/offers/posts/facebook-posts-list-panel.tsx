@@ -28,6 +28,7 @@ import { DeleteFacebookPostDialog, deletedPostMessage } from "./delete-post-dial
 import { NewFacebookPostDialog } from "./new-post-dialog";
 import { postsViewNarrowings, type PostsNarrowing } from "./posts-view-params";
 import { usePostsView } from "./use-posts-view";
+import { calendarDay, relativeDay, shortDay, shortDayTime } from "./post-list-dates";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -57,8 +58,8 @@ interface FacebookPostsListPanelProps {
 
 /**
  * The list of Facebook posts (#1850): each post's number and title (#1862), group, lots and how many
- * are still for sale, where it stands, its layout, the day it went up and its link — the row opening
- * the post's own screen. Newest first, paged on the server like trades; the group, stage and no-title
+ * are still for sale, where it stands with the dates that matter at that stage, its layout and its
+ * link, and under them its figures (#2502) — the row opening the post's own screen. Newest first, paged on the server like trades; the group, stage and no-title
  * filters live in the URL (`group`, a comma-separated set, `stage`, and `untitled`) and are remembered
  * per collection (#2108, `use-posts-view.ts`), so the list comes back as it was left however it is
  * reached; while one narrows the list, the band under the toolbar says so with *Clear filters*.
@@ -360,11 +361,7 @@ function FacebookPostRow({
               <span style={CHIP}>Posted alone{post.forSaleCount === 0 ? " · closed" : ""}</span>
             </Tooltip>
           )}
-          {post.postedOn && (
-            <Tooltip content="The day the post went up">
-              <span style={META_INLINE}>posted {post.postedOn}</span>
-            </Tooltip>
-          )}
+          <PostDates post={post} />
           {post.link && (
             <a
               href={post.link}
@@ -377,6 +374,7 @@ function FacebookPostRow({
             </a>
           )}
         </div>
+        {post.figures.lotCount > 0 && <PostFigures post={post} />}
       </div>
       {deleting && (
         <DeleteFacebookPostDialog
@@ -389,6 +387,150 @@ function FacebookPostRow({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** The dates beside a post's stage chip (#2502), by its stage: when it was made — and submitted, while
+ *  it waits for approval — since when it has been up and when its auctions end, or when it went up and
+ *  when it ended. A date that was never recorded is left out. */
+function PostDates({ post }: { post: FacebookPostListItem }) {
+  const now = new Date();
+  const { dates } = post;
+  const parts: { key: string; text: string; hint: string }[] = [];
+  if (post.stage === "preparing" || post.stage === "ready" || post.stage === "pending") {
+    parts.push({ key: "created", text: `created ${shortDay(new Date(dates.createdAt), now)}`, hint: "When the post was made" });
+  }
+  if (dates.submittedAt) {
+    const at = new Date(dates.submittedAt);
+    parts.push({
+      key: "submitted",
+      text: `submitted ${shortDay(at, now)} (${relativeDay(at, now)})`,
+      hint: "When the post was submitted to the group for approval",
+    });
+  }
+  if (dates.upSince) {
+    const day = calendarDay(dates.upSince);
+    parts.push(
+      post.stage === "up"
+        ? { key: "up", text: `up since ${shortDay(day, now)} (${relativeDay(day, now)})`, hint: "The day the post went up" }
+        : { key: "up", text: `up ${shortDay(day, now)}`, hint: "The day the post went up" }
+    );
+  }
+  if (dates.endsFrom && dates.endsTo) {
+    const from = new Date(dates.endsFrom);
+    const to = new Date(dates.endsTo);
+    parts.push(
+      dates.endsFrom === dates.endsTo
+        ? { key: "ends", text: `auctions end ${shortDayTime(from, now)} (${relativeDay(from, now)})`, hint: "When the post's auctions end" }
+        : {
+            key: "ends",
+            text: `auctions end ${shortDayTime(from, now)} – ${shortDayTime(to, now)}`,
+            hint: "The post's auctions end at different times — the earliest and the latest",
+          }
+    );
+  }
+  if (dates.endedAt) {
+    parts.push({ key: "ended", text: `ended ${shortDay(new Date(dates.endedAt), now)}`, hint: "When the post's last lot ended" });
+  }
+  return (
+    <>
+      {parts.map((p) => (
+        <Tooltip key={p.key} content={p.hint}>
+          <span style={META_INLINE}>{p.text}</span>
+        </Tooltip>
+      ))}
+    </>
+  );
+}
+
+const FIGURE_LABEL: React.CSSProperties = { color: "var(--color-text-muted)" };
+const FIGURE_VALUE: React.CSSProperties = {
+  color: "var(--color-text-secondary)",
+  fontWeight: 500,
+  fontVariantNumeric: "tabular-nums",
+};
+
+/** "over 2 of 3 lots" — said where a figure leaves some lots out. */
+function overLots(counted: number, of: number): string | null {
+  return counted < of ? `over ${counted} of ${of} lots` : null;
+}
+
+/** The row of figures under a post's chips (#2502): lots and copies, what it asks, its catalogue value
+ *  and cost, and what has sold — money in the base currency. Nothing missing reads as 0. */
+function PostFigures({ post }: { post: FacebookPostListItem }) {
+  const { figures: f, baseCurrency } = post;
+  const money = (amount: string | null) => (amount === null ? "—" : `${amount} ${baseCurrency}`);
+  const askingNotes = [
+    f.asking.unpriced > 0 ? `${f.asking.unpriced} unpriced` : null,
+    f.asking.unconvertible > 0 ? `${f.asking.unconvertible} with no rate` : null,
+  ].filter((n): n is string => n !== null);
+  const costMarks = [f.cost.estimated ? "estimate" : null, f.cost.opening ? "incl. opening value" : null].filter(
+    (n): n is string => n !== null
+  );
+  const items: { key: string; label: string; value: string; note?: string; hint: string }[] = [
+    {
+      key: "lots",
+      label: "Lots",
+      value: `${f.lotCount} · ${f.copyCount} ${f.copyCount === 1 ? "copy" : "copies"}`,
+      hint: "Lots in the post, and how many copies they hold in all",
+    },
+    {
+      key: "asking",
+      label: "Asking",
+      value: money(f.asking.amount),
+      note: askingNotes.length ? askingNotes.join(", ") : undefined,
+      hint: "The lots' prices summed — a quick buy's asking price, an auction's starting price — in the base currency. Lots with no price yet are left out and counted.",
+    },
+    {
+      key: "catalogue",
+      label: "Catalogue",
+      value: money(f.catalogue.amount),
+      note: f.catalogue.amount !== null ? (overLots(f.catalogue.lots, f.lotCount) ?? undefined) : undefined,
+      hint: "The catalogue value of the lots' copies, as each offer's price table reads it",
+    },
+    {
+      key: "cost",
+      label: "Cost",
+      value: money(f.cost.amount),
+      note:
+        f.cost.amount !== null
+          ? [...costMarks, overLots(f.cost.lots, f.lotCount)].filter((n): n is string => n !== null).join(", ") || undefined
+          : undefined,
+      hint: "What the lots' copies cost, as each offer's price table reads it",
+    },
+    {
+      key: "sold",
+      label: "Sold",
+      value:
+        f.sold.lots === 0
+          ? "—"
+          : `${f.sold.lots} ${f.sold.lots === 1 ? "lot" : "lots"} · ${money(f.sold.amount)}`,
+      note: f.sold.unconvertible > 0 ? `${f.sold.unconvertible} with no rate` : undefined,
+      hint: "Lots in a recorded sale and what they brought — a cancelled sale does not count",
+    },
+  ];
+  return (
+    <div
+      style={{
+        ...ROW_LINK_ABOVE,
+        display: "flex",
+        alignItems: "baseline",
+        gap: "1.25rem",
+        marginTop: "0.35rem",
+        flexWrap: "wrap",
+        fontSize: "0.75rem",
+      }}
+    >
+      {items.map((it) => (
+        <Tooltip key={it.key} content={it.hint}>
+          <span style={{ whiteSpace: "nowrap" }}>
+            <span style={FIGURE_LABEL}>{it.label} </span>
+            <span style={FIGURE_VALUE}>{it.value}</span>
+            {it.note && <span style={FIGURE_LABEL}> ({it.note})</span>}
+          </span>
+        </Tooltip>
+      ))}
     </div>
   );
 }
