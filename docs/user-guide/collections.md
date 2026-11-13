@@ -22,7 +22,8 @@ The **Your Collections** page lists all collections you own, sorted by creation 
 
 Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
-- The collection name, at the top, with the [Action items](action-items.md) bell beside it
+- The collection name, at the top, with the [Action items](action-items.md) bell beside it and the
+  button that [folds the sidebar to icons](#folding-the-sidebar)
 - **Pinned**, above everything else, once you have pinned something — the screens you use nearly all
   the time and the records you are working on for weeks, always in view while the sections below
   stay folded. See [Pinned](#pinned) below
@@ -74,6 +75,34 @@ Pins belong to the collection and are kept on the server, so they are the same o
 sign in from. Pinned starts empty — nothing is pinned for you. A pinned record that is deleted
 disappears from Pinned by itself; one that is only closed — a sold offer, a completed purchase —
 stays until you unpin it. The phone screens have no sidebar and are not affected.
+
+### Folding the sidebar
+
+The button at the top right of the sidebar, beside the bell, **folds it to a narrow column of
+icons**, giving the screen beside it the width; the same button at the top of the folded column
+opens it whole again. `⌘\` (`Ctrl+\` on Windows and Linux) does the same from anywhere.
+
+The folded column keeps everything within one click:
+
+- the collection's initial at the top — hover it for the name;
+- a **magnifier** for [Jump to…](quick-jump.md), opening the field beside the column (⌘K opens it
+  too), and the [Action items](action-items.md) bell;
+- your **pinned** entries, each as its icon — a pinned record as its kind's icon;
+- **Dashboard** and **Overview**;
+- **one icon per section**. Click it and the section's entries open beside the column, sub-entries
+  included, in the section's colour; choose one to go there and the panel closes. Click outside it
+  or press Escape to close it without choosing;
+- **All collections**, **Settings**, **Phone screens** and **Sign out** at the bottom. The theme
+  switch and the app version are in the whole sidebar only.
+
+Hover any icon for its name. The icon of the screen you are on is highlighted — or, for a screen
+inside a section, that section's icon.
+
+Whether the sidebar is folded is remembered **on this browser**, for every collection, since how
+much room it may take depends on the screen in front of you. Until you choose, a **narrow window**
+(below 1100 pixels wide) shows the sidebar folded and a wider one shows it whole; once you have
+folded or unfolded it yourself, your choice stays at every width. The phone screens have no sidebar
+and are not affected.
 
 ## Settings
 

@@ -14,6 +14,8 @@ import { Icon, type IconName } from "@/app/icons";
 import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { sectionTintForHref } from "./nav-sections";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { Tooltip } from "./shared/tooltip";
+import { railIconButtonStyle } from "./sidebar-rail-style";
 
 /**
  * The quick-jump box (#431) — one field in the sidebar that takes a type prefix and a short number
@@ -61,14 +63,26 @@ const KIND_ICON: Record<RecentEntityKind, IconName> = {
 export function QuickJumpBox({
   collectionId,
   collectionSlug,
+  rail = false,
 }: {
   collectionId: string;
   /** Only to read which section an entry's link lands in (#1193). */
   collectionSlug: string;
+  /**
+   * On the folded sidebar's rail (#2505) the box is a search icon, and the field opens beside the
+   * rail when the icon is pressed or ⌘K is — the same field, the same recents, only out of the way
+   * until it is wanted.
+   */
+  rail?: boolean;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const fieldBoxRef = useRef<HTMLDivElement>(null);
+  /** On the rail: whether the field is out beside it. The expanded sidebar always shows the field. */
+  const [fieldOpen, setFieldOpen] = useState(false);
+  const fieldShown = !rail || fieldOpen;
   const [value, setValue] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -113,17 +127,53 @@ export function QuickJumpBox({
   });
   const activeEntry = active >= 0 ? shown[active] : undefined;
 
+  const { style: fieldPlacement } = useAnchoredPlacement({
+    open: rail && fieldOpen,
+    anchor: triggerRef,
+    floatingRef: fieldBoxRef,
+    side: "right",
+  });
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        // On the rail the field is not on screen yet; it takes the keyboard once it is.
+        if (rail) setFieldOpen(true);
         inputRef.current?.focus();
         inputRef.current?.select();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [rail]);
+
+  // The rail's field takes the keyboard once it is out, whichever way it was opened — a frame later,
+  // because it is drawn hidden until its placement is measured and a hidden field takes no focus.
+  useEffect(() => {
+    if (!rail || !fieldOpen) return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [rail, fieldOpen]);
+
+  // A click anywhere but the icon, the field or its recents puts the rail's field away.
+  useEffect(() => {
+    if (!rail || !fieldOpen) return;
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (
+        triggerRef.current?.contains(t) ||
+        fieldBoxRef.current?.contains(t) ||
+        panelRef.current?.contains(t)
+      ) {
+        return;
+      }
+      setFieldOpen(false);
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [rail, fieldOpen]);
 
   // Placed against the field's own box and portalled to `<body>`: the sidebar scrolls, so it sets
   // `overflow-y`, and a box that is not `visible` on one axis is not visible on the other either —
@@ -148,6 +198,7 @@ export function QuickJumpBox({
 
   function go(href: string) {
     setOpen(false);
+    setFieldOpen(false);
     setActive(-1);
     setValue("");
     setMessage(null);
@@ -174,6 +225,7 @@ export function QuickJumpBox({
         setValue("");
         setMessage(null);
         setOpen(false);
+        setFieldOpen(false);
         router.push(data.href);
         return;
       }
@@ -191,8 +243,8 @@ export function QuickJumpBox({
       ? "Type a prefix and a number, e.g. o 200."
       : null;
 
-  return (
-    <div style={{ padding: "0.5rem 0.75rem 0" }}>
+  const field = (
+    <>
       <TextInput
         ref={inputRef}
         value={value}
@@ -223,8 +275,10 @@ export function QuickJumpBox({
             if (activeEntry) go(activeEntry.href);
             else void jump();
           } else if (e.key === "Escape") {
-            // One surface at a time, the innermost first — the panel, then the field.
+            // One surface at a time, the innermost first — the panel, then the field (on the rail,
+            // the field goes away with the keyboard).
             if (panelOpen) setOpen(false);
+            else if (rail) setFieldOpen(false);
             else inputRef.current?.blur();
           }
         }}
@@ -259,8 +313,56 @@ export function QuickJumpBox({
           {message ?? hint}
         </p>
       )}
+    </>
+  );
 
-      {panelOpen &&
+  return (
+    <div style={rail ? { display: "flex", justifyContent: "center" } : { padding: "0.5rem 0.75rem 0" }}>
+      {rail ? (
+        <>
+          <Tooltip content="Jump to… (⌘K)" placement="right">
+            <button
+              ref={triggerRef}
+              type="button"
+              aria-label="Jump to an entity by number, or pick a recently visited one"
+              aria-expanded={fieldOpen}
+              onClick={() => {
+                setFieldOpen((v) => !v);
+                setOpen(false);
+              }}
+              style={railIconButtonStyle(fieldOpen)}
+            >
+              <Icon name="search" />
+            </button>
+          </Tooltip>
+          {fieldOpen &&
+            typeof document !== "undefined" &&
+            createPortal(
+              <div
+                ref={fieldBoxRef}
+                style={{
+                  ...fieldPlacement,
+                  width: "16rem",
+                  boxSizing: "border-box",
+                  padding: "0.5rem",
+                  background: "var(--color-bg-elevated)",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.5rem",
+                  boxShadow: "0 8px 24px rgb(0 0 0 / 0.16)",
+                  zIndex: 200,
+                }}
+              >
+                {field}
+              </div>,
+              document.body
+            )}
+        </>
+      ) : (
+        field
+      )}
+
+      {fieldShown &&
+        panelOpen &&
         typeof document !== "undefined" &&
         createPortal(
           <div

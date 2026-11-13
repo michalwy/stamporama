@@ -159,6 +159,12 @@ import {
   ZoomIn,
   ZoomOut,
   type LucideIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Library,
+  Vault,
+  Inbox,
+  HeartHandshake,
 } from "lucide-react";
 
 /**
@@ -212,6 +218,16 @@ const GLYPHS = {
   settings: Settings,
   signOut: LogOut,
   collections: Boxes,
+  /** The sidebar's sections as one icon each, on the folded rail (#2505). Each is told apart from
+   *  every entry inside it, since the section's flyout lists those entries with their own icons:
+   *  the catalogue is the reference library, the collection the vault it is kept in, Intake what
+   *  arrives, Partners the people dealt with both ways (`trades` keeps the bare handshake). Selling
+   *  shares `sell`'s coins on purpose — the section is that act. */
+  sectionCatalog: Library,
+  sectionCollection: Vault,
+  sectionSelling: HandCoins,
+  sectionIntake: Inbox,
+  sectionPartners: HeartHandshake,
   /** The phone screens (#2002, ADR-0072) — the full app's way to the phone start screen. */
   phone: Smartphone,
   /** The full app, seen from a phone screen (#2002) — the way back to the desk's screens. */
@@ -326,6 +342,11 @@ const GLYPHS = {
   previous: ChevronLeft,
   /** Folds a side panel away; `expand` brings it back. */
   hidePanel: ChevronLeft,
+  /** Folds the sidebar down to its icon rail (#2505), and `unfoldSidebar` opens it again. The
+   *  sidebar's own drawing rather than `hidePanel`'s chevron: the chevron folds a panel inside a
+   *  screen, and this changes the frame every screen sits in. */
+  foldSidebar: PanelLeftClose,
+  unfoldSidebar: PanelLeftOpen,
   /** Drag handle on a reorderable row. */
   dragGrip: GripVertical,
   /** Moves something up a hand-sorted order, or into the leading slot. */
