@@ -9,7 +9,7 @@ import { phoneHomePath } from "@/lib/phone";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ActionItemsBell } from "./action-items-bell";
 import { QuickJumpBox } from "./quick-jump-box";
-import { Icon } from "@/app/icons";
+import { Icon, type IconName } from "@/app/icons";
 import { AppVersionLabel } from "./shared/app-version-label";
 import { usePersistedCollectionValue } from "./shared/use-persisted-collection-value";
 import {
@@ -17,8 +17,26 @@ import {
   SECTION_ROUTES,
   SECTION_TINTS,
   sectionForPath,
+  sectionTintForHref,
   type SectionKey,
 } from "./nav-sections";
+import {
+  NAV_SECTIONS,
+  NAV_TOP,
+  SECTION_ORDER,
+  isNavScreenActive,
+  navScreenByPath,
+  type NavNode,
+} from "./nav-entries";
+import { useSidebarPins } from "./shared/use-sidebar-pins";
+import { Tooltip } from "./shared/tooltip";
+import { dragStyle, InsertionLine, showLineAt, useReorderList } from "./shared/reorder-list";
+import {
+  movePinIds,
+  type SidebarPinData,
+  type SidebarPinKind,
+  type SidebarPinRecordKind,
+} from "@/lib/sidebar-pin-rules";
 
 interface CollectionSidebarProps {
   collectionSlug: string;
@@ -193,6 +211,7 @@ function NavGroup({
   label,
   href,
   active = false,
+  pin,
   children,
 }: {
   icon: React.ReactNode;
@@ -201,6 +220,8 @@ function NavGroup({
   href?: string;
   /** Only meaningful with `href`; a heading-only group lights nothing of its own. */
   active?: boolean;
+  /** Only with `href`: the main screen can be pinned like any entry (#2504). */
+  pin?: RowPin;
   children: React.ReactNode;
 }) {
   const tint = useContext(SectionTintContext);
@@ -208,7 +229,7 @@ function NavGroup({
   return (
     <div>
       {href ? (
-        <NavItem href={href} icon={icon} label={label} active={active} />
+        <NavItem href={href} icon={icon} label={label} active={active} pin={pin} />
       ) : (
         <div
           style={{
@@ -242,12 +263,19 @@ function NavGroup({
   );
 }
 
+/** The pin a sidebar row offers while the pointer is over it (#2504). */
+interface RowPin {
+  pinned: boolean;
+  onToggle: () => void;
+}
+
 function NavItem({
   href,
   icon,
   label,
   active,
   nested = false,
+  pin,
 }: {
   href: string;
   /** Omitted for an entry inside a {@link NavGroup}, where the group's icon names the subject. */
@@ -257,8 +285,12 @@ function NavItem({
   /** A child of a {@link NavGroup}: one step down in size and colour, so the rank is legible even
    * where the indent alone is not — a screen inside a subject reads as such before it is read. */
   nested?: boolean;
+  /** Pinning from the sidebar itself (#2504): a pin that appears at the row's end under the
+   * pointer, and takes the pin back where the entry is pinned already. */
+  pin?: RowPin;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [pinHover, setPinHover] = useState(false);
   const tint = useContext(SectionTintContext);
   const router = useRouter();
 
@@ -295,10 +327,13 @@ function NavItem({
     ? `color-mix(in srgb, var(--color-tag-${tint}) 55%, ${restingText})`
     : restingText;
 
-  return (
+  const link = (
     <Link
       href={href}
       prefetch={false}
+      // A pinned row is dragged by its wrapper (#2504); the link's own drag would carry a URL off
+      // the sidebar instead.
+      draggable={false}
       onFocus={warmUp}
       onMouseEnter={() => {
         setHovered(true);
@@ -306,6 +341,8 @@ function NavItem({
       }}
       onMouseLeave={() => setHovered(false)}
       style={{
+        flex: 1,
+        minWidth: 0,
         display: "flex",
         alignItems: "center",
         gap: "0.5rem",
@@ -343,8 +380,144 @@ function NavItem({
           {icon}
         </span>
       ) : null}
-      {label}
+      <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {label}
+      </span>
     </Link>
+  );
+
+  if (!pin) return link;
+  return (
+    <div
+      style={{ position: "relative", display: "flex" }}
+      onMouseEnter={() => setPinHover(true)}
+      onMouseLeave={() => setPinHover(false)}
+      onFocus={() => setPinHover(true)}
+      onBlur={(e) => {
+        // Focus moving from the link onto its own pin keeps the pin there.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPinHover(false);
+      }}
+    >
+      {link}
+      {/* Over the row's end rather than beside it, so a row is as wide with a pin as without; drawn
+          only under the pointer or the keyboard, so twenty resting rows are not twenty pins. */}
+      {pinHover ? (
+        <Tooltip
+          content={pin.pinned ? "Unpin from the top of the sidebar" : "Pin to the top of the sidebar"}
+          style={{ position: "absolute", right: "0.25rem", top: "50%", transform: "translateY(-50%)" }}
+        >
+          <button
+            type="button"
+            aria-label={pin.pinned ? `Unpin ${label}` : `Pin ${label}`}
+            aria-pressed={pin.pinned}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              pin.onToggle();
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "0.25rem",
+              border: "none",
+              borderRadius: "0.25rem",
+              background: "var(--color-bg-elevated)",
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+            }}
+          >
+            <Icon name={pin.pinned ? "unpin" : "pin"} size="sm" />
+          </button>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+}
+
+/** The mark a pinned record carries: its list's own icon in the sidebar, as the Recent list does. */
+const RECORD_PIN_ICONS: Record<SidebarPinRecordKind, IconName> = {
+  purchase: "purchases",
+  offer: "offers",
+  post: "marketplaces",
+  sale: "sales",
+  issue: "issues",
+  contact: "contacts",
+};
+
+interface PinnedEntry {
+  pin: SidebarPinData;
+  label: string;
+  icon: IconName;
+  /** The hue of the section it belongs to, so a pinned entry speaks as it does in its section. */
+  tint: string | null;
+  active: boolean;
+}
+
+/**
+ * The Pinned section (#2504): the handful of screens used nearly all the time and the record worked
+ * on for weeks, at the very top and always in view, while the sections below fold away.
+ *
+ * Not a fold of its own — it is what stays when everything else is folded. Each entry speaks in its
+ * own section's hue and lights as that entry does in its section, so a pinned *Prepare* and the
+ * *Prepare* under Offers are one row seen twice; the section keeps it too, so it always reads
+ * complete. Rows are dragged into order, and the pin under the pointer takes one off.
+ */
+function PinnedSection({
+  base,
+  pins,
+  onUnpin,
+  onReorder,
+}: {
+  base: string;
+  pins: PinnedEntry[];
+  onUnpin: (kind: SidebarPinKind, target: string) => void;
+  onReorder: (orderedIds: string[]) => void;
+}) {
+  const drag = useReorderList(pins.length > 1, (from, to) =>
+    onReorder(movePinIds(pins.map((p) => p.pin.id), from, to))
+  );
+
+  if (pins.length === 0) return null;
+  return (
+    <>
+      <div
+        style={{
+          ...sectionLabelStyle,
+          cursor: "default",
+          paddingTop: "0.5rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        <Icon name="pin" size="sm" />
+        Pinned
+        <span
+          aria-hidden
+          style={{ flex: 1, height: "1px", marginLeft: "0.125rem", background: "var(--color-border)" }}
+        />
+      </div>
+      <div
+        {...(drag?.containerProps ?? {})}
+        style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}
+      >
+        {pins.map((entry, i) => (
+          <div key={entry.pin.id}>
+            {showLineAt(drag, i) && <InsertionLine />}
+            <div {...(drag?.itemProps(i) ?? {})} style={{ borderRadius: "0.375rem", ...dragStyle(drag, i) }}>
+              <SectionTintContext.Provider value={entry.tint}>
+                <NavItem
+                  href={`${base}${entry.pin.href}`}
+                  icon={<Icon name={entry.icon} />}
+                  label={entry.label}
+                  active={entry.active}
+                  pin={{ pinned: true, onToggle: () => onUnpin(entry.pin.kind, entry.pin.target) }}
+                />
+              </SectionTintContext.Provider>
+            </div>
+          </div>
+        ))}
+        {showLineAt(drag, pins.length) && <InsertionLine />}
+      </div>
+    </>
   );
 }
 
@@ -392,24 +565,83 @@ export function CollectionSidebar({
     };
   }
 
-  /**
-   * Whether a nav entry owns the current screen.
-   *
-   * `startsWith` is right for a section whose sub-routes all belong to it, but wrong where two
-   * entries sit on one branch — Auction lots (`/auctions`) and Auction sales (`/auctions/sales`)
-   * would otherwise both light up on a sale (#376). The shorter of such a pair asks for `exact`.
-   *
-   * `except` is the softer form of that, for a parent whose *other* sub-routes are still its own
-   * (#502): the offer list owns `/offers/[offerId]`, so opening an offer must keep Offers lit, but
-   * it yields the two branches that became siblings of it.
-   */
-  function isActive(href: string, exact = false, except: string[] = []) {
-    if (exact || href === base) return pathname === href;
-    if (except.some((branch) => pathname === branch || pathname.startsWith(`${branch}/`))) {
-      return false;
-    }
-    return pathname.startsWith(href);
+  const { pins, isPinned, pin, unpin, reorder } = useSidebarPins(collectionId);
+
+  /** The pin a screen's row offers: pinned by its path under the collection (#2504). */
+  function screenPin(path: string): RowPin {
+    const pinned = isPinned("screen", path);
+    return {
+      pinned,
+      onToggle: () =>
+        pinned ? void unpin("screen", path) : void pin({ kind: "screen", target: path, href: path }),
+    };
   }
+
+  /** One entry of the nav table, drawn as a row or as a group with its children. */
+  function renderNode(node: NavNode) {
+    if (node.type === "item") {
+      const { screen } = node;
+      return (
+        <NavItem
+          key={screen.path}
+          href={`${base}${screen.path}`}
+          icon={<Icon name={screen.icon} />}
+          label={screen.label}
+          active={isNavScreenActive(pathname, base, screen)}
+          pin={screenPin(screen.path)}
+        />
+      );
+    }
+    return (
+      <NavGroup
+        key={node.label}
+        icon={<Icon name={node.icon} />}
+        label={node.label}
+        href={node.head ? `${base}${node.head.path}` : undefined}
+        active={node.head ? isNavScreenActive(pathname, base, node.head) : false}
+        pin={node.head ? screenPin(node.head.path) : undefined}
+      >
+        {node.children.map((child) => (
+          <NavItem
+            key={child.path}
+            href={`${base}${child.path}`}
+            label={child.label}
+            active={isNavScreenActive(pathname, base, child)}
+            pin={screenPin(child.path)}
+            nested
+          />
+        ))}
+      </NavGroup>
+    );
+  }
+
+  /** The pins as rows: a screen named and marked by its entry, a record by what it is called. A
+   * screen the sidebar no longer has is left out. */
+  const pinnedEntries: PinnedEntry[] = pins.flatMap((p): PinnedEntry[] => {
+    if (p.kind === "screen") {
+      const screen = navScreenByPath(p.target);
+      if (!screen) return [];
+      return [
+        {
+          pin: p,
+          label: screen.pinnedLabel ?? screen.label,
+          icon: screen.icon,
+          tint: screen.section ? SECTION_TINTS[screen.section] : null,
+          active: isNavScreenActive(pathname, base, screen),
+        },
+      ];
+    }
+    const href = `${base}${p.href}`;
+    return [
+      {
+        pin: p,
+        label: p.label ?? p.href,
+        icon: RECORD_PIN_ICONS[p.kind],
+        tint: sectionTintForHref(href, base),
+        active: pathname === href || pathname.startsWith(`${href}/`),
+      },
+    ];
+  });
 
   return (
     <aside
@@ -493,321 +725,22 @@ export function CollectionSidebar({
           flex: 1,
         }}
       >
-        {/* The operational Dashboard (#1808; ADR-0067): the work waiting across the collection. First,
-            outside every section and never folded away — it is the screen opened every day, and
-            entries are ordered by how often they are wanted (#971). */}
-        <NavItem
-          href={`${base}/dashboard`}
-          icon={<Icon name="dashboard" />}
-          label="Dashboard"
-          active={isActive(`${base}/dashboard`)}
+        {/* Pinned (#2504): the screens and records the collector keeps at hand, above everything
+            else and never folded away. Absent until something is pinned. */}
+        <PinnedSection
+          base={base}
+          pins={pinnedEntries}
+          onUnpin={(kind, target) => void unpin(kind, target)}
+          onReorder={(ids) => void reorder(ids)}
         />
 
-        {/* Outside every section and never folded away (#762): it is the one screen that is about
-            the collection as a whole, and the way back when a section has been collapsed.
-            Collection structure (#1711) hangs beneath it as the Overview's breakdown, the way
-            Variant prices hangs under Stamps; the holdings tile still opens it too (ADR-0056). */}
-        <NavGroup
-          icon={<Icon name="overview" />}
-          label="Overview"
-          href={base}
-          active={isActive(base)}
-        >
-          <NavItem
-            href={`${base}/inventory/structure`}
-            label="Collection structure"
-            active={isActive(`${base}/inventory/structure`)}
-            nested
-          />
-        </NavGroup>
+        {NAV_TOP.map((node) => renderNode(node))}
 
-        <NavSection {...sectionProps("catalog")}>
-          <NavItem
-            href={`${base}/issues`}
-            icon={<Icon name="issues" />}
-            label="Issues"
-            active={isActive(`${base}/issues`)}
-          />
-          {/* The variant-pricing worklist (#618) sits under Stamps rather than beside it (#762):
-              what it lists is stamp *trees* that are not fully priced, which makes it a second view
-              of the same subject — the rule Auctions and Offers are grouped by — and its route says
-              the same thing. The Stamps row itself is the stamp list, so the subject is named once. */}
-          <NavGroup
-            icon={<Icon name="stamps" />}
-            label="Stamps"
-            href={`${base}/stamps`}
-            active={isActive(`${base}/stamps`, false, [`${base}/stamps/variant-prices`])}
-          >
-            <NavItem
-              href={`${base}/stamps/variant-prices`}
-              label="Variant prices"
-              active={isActive(`${base}/stamps/variant-prices`)}
-              nested
-            />
-          </NavGroup>
-          {/* Checklists that span issues (#1416) — a set collected across publications, which no issue
-              owns and so no issue's page can hold (ADR-0031). An issue's own checklists stay on
-              the issue. After Stamps, because what it lists are sets of them. */}
-          <NavItem
-            href={`${base}/checklists`}
-            icon={<Icon name="checklists" />}
-            label="Checklists"
-            active={isActive(`${base}/checklists`)}
-          />
-          {/* Areas are how the catalogue is organised (#1234) — the tree issues and stamps hang on,
-              and the facet every catalogue screen filters by — so the collector looks for them
-              here. #775 moved them out of Settings on frequency, and that stands; it filed them
-              under Collection, which this corrects. Last in the section, because Issues and Stamps
-              are the lists opened daily and the tree is reached when it needs changing (#971). The
-              address is still `/areas`. */}
-          <NavItem
-            href={`${base}/areas`}
-            icon={<Icon name="areas" />}
-            label="Areas"
-            active={isActive(`${base}/areas`)}
-          />
-        </NavSection>
-
-        <NavSection {...sectionProps("collection")}>
-          {/* Card scans used to hang under Inventory (#725, #762). It was retired onto opening
-              balances (#1326): a card of stamps already owned is scanned on its opening balance,
-              under Intake, like any other document's. */}
-          {/* Replacements (#1936) sit under Inventory: what they list are copies, pairs of them,
-              and the route says the same thing — the rule Variant prices sits under Stamps by. */}
-          <NavGroup
-            icon={<Icon name="inventory" />}
-            label="Inventory"
-            href={`${base}/inventory`}
-            active={isActive(`${base}/inventory`, false, [
-              `${base}/inventory/structure`,
-              `${base}/inventory/replacements`,
-            ])}
-          >
-            <NavItem
-              href={`${base}/inventory/replacements`}
-              label="Replacements"
-              active={isActive(`${base}/inventory/replacements`)}
-              nested
-            />
-          </NavGroup>
-          {/* How complete any chosen area and years are (#2266), counting only the copies of chosen
-              conditions and dispositions. In Collection, not beside Checklists (#2268): it answers how
-              much of the catalogue is held, and in what — the checklists are only its measure. Right
-              after Inventory, whose copies it counts. The address is still `/completeness`. */}
-          <NavItem
-            href={`${base}/completeness`}
-            icon={<Icon name="completeness" />}
-            label="Completeness"
-            active={isActive(`${base}/completeness`)}
-          />
-          {/* Locations and Albums follow Inventory, being where the paper physically sits. */}
-          <NavItem
-            href={`${base}/locations`}
-            icon={<Icon name="locations" />}
-            label="Locations"
-            active={isActive(`${base}/locations`)}
-          />
-          {/* Albums (#767) sit in Collection rather than in Settings: the *template* is
-              configuration and lives in Settings beside the hawid stock (#765/#766), while an album
-              is operational data — a binder being filled — and is worked in. */}
-          <NavItem
-            href={`${base}/albums`}
-            icon={<Icon name="albums" />}
-            label="Albums"
-            active={isActive(`${base}/albums`)}
-          />
-        </NavSection>
-
-        {/* Trading is split by *direction* (#351): what comes in and what goes out are two
-            different jobs, done on different days, and one "Trading" heading made a five-item list
-            you had to read to the end to find either. **Selling leads**: buying is what a collection
-            is built from, but selling is the side worked on daily — offers prepared, batches posted,
-            orders caught up with — and the section reached first should be the one opened most. */}
-        <NavSection {...sectionProps("selling")}>
-          {/* Where a listing is *made*: the row itself is the offer list — the screen the day is
-              spent on — and under it the builder that composes a hundred-copy lot (#760) and the
-              batch posted from it (#502). Each of those is its own sitting, and both were once
-              reachable only by first landing on the list and finding the way out of it. */}
-          <NavGroup
-            icon={<Icon name="offers" />}
-            label="Offers"
-            href={`${base}/offers`}
-            // Not exact: an offer's own detail screen is still the list's, so it keeps this row
-            // lit. Only the branches that became entries of their own are yielded.
-            active={isActive(`${base}/offers`, false, [
-              `${base}/offers/lot-builder`,
-              `${base}/offers/series-from-singles`,
-              `${base}/offers/prepare`,
-              `${base}/offers/listing`,
-              `${base}/offers/allegro`,
-              `${base}/offers/delcampe`,
-              `${base}/offers/posts`,
-              `${base}/offers/proposals`,
-            ])}
-          >
-            <NavItem
-              href={`${base}/offers/lot-builder`}
-              label="Lot Builder"
-              active={isActive(`${base}/offers/lot-builder`)}
-              nested
-            />
-            {/* The other way a listing gets composed (#1210): series that the singles already up on
-                a platform, plus the copies not offered there yet, could now go out whole. Beside the
-                lot builder and ahead of Bulk Listing, since both compose and Bulk Listing posts. */}
-            <NavItem
-              href={`${base}/offers/series-from-singles`}
-              label="Series from Singles"
-              active={isActive(`${base}/offers/series-from-singles`)}
-              nested
-            />
-            {/* The step between composing and posting (#1894): the offers still being prepared,
-                priced in place and marked ready together — Bulk Listing does the same for the Ready
-                ones, so the two stand side by side in the order an offer passes through them. */}
-            <NavItem
-              href={`${base}/offers/prepare`}
-              label="Prepare"
-              active={isActive(`${base}/offers/prepare`)}
-              nested
-            />
-            <NavItem
-              href={`${base}/offers/listing`}
-              label="Bulk Listing"
-              active={isActive(`${base}/offers/listing`)}
-              nested
-            />
-            {/* Offers prepared for one contact each (#2287): composed and priced like any offer, for
-                one buyer rather than a platform, so under Offers after the batch screens. */}
-            <NavItem
-              href={`${base}/offers/proposals`}
-              label="Proposals"
-              active={isActive(`${base}/offers/proposals`)}
-              nested
-            />
-          </NavGroup>
-          {/* Sales leads the two marketplace screens (#971): of the three rows that sit after
-              Offers it is the one opened daily — every order, on every platform and off them —
-              while the per-platform views are read when one wants to know what a single
-              marketplace has been doing. The order used to follow the *pipeline* (offers go out,
-              the marketplace shows them, sales come back); it now follows how often the screen is
-              wanted, which is the same rule that puts Selling before Intake at the top of this
-              section. */}
-          <NavItem
-            href={`${base}/sales`}
-            icon={<Icon name="sales" />}
-            label="Sales"
-            active={isActive(`${base}/sales`)}
-          />
-          {/* What the marketplaces have already done with what was posted (#502, #611) — its own
-              group (#762) rather than two more children of Offers. Composing a listing and reading
-              back what a platform has since done with it are opposite ends of the work, and a
-              five-child Offers group said all five were the same job. The children take the **bare
-              platform name** (#971): the group names the set and the child says which one, which
-              is the same principle that leaves a child without an icon. It is also what lets the
-              two labels be uniform even though the screens are not the same kind of thing — the
-              Allegro screen is what has *sold* and the Delcampe one is what is *listed* — since
-              neither label claims either way. Each page keeps its own heading, which is where a
-              screen standing alone has to say what it shows. */}
-          <NavGroup icon={<Icon name="marketplaces" />} label="Marketplaces">
-            <NavItem
-              href={`${base}/offers/allegro`}
-              label="Allegro"
-              active={isActive(`${base}/offers/allegro`)}
-              nested
-            />
-            <NavItem
-              href={`${base}/offers/delcampe`}
-              label="Delcampe"
-              active={isActive(`${base}/offers/delcampe`)}
-              nested
-            />
-            {/* The posts of several lots put up in the Facebook groups (#1850), and each post's own
-                screen under it — a post was otherwise reached only through one of its lots. */}
-            <NavItem
-              href={`${base}/offers/posts`}
-              label="Facebook"
-              active={isActive(`${base}/offers/posts`)}
-              nested
-            />
-          </NavGroup>
-          {/* What parcels are packed with (#1897): the envelopes and cards bought on purchase orders,
-              what is on hand and what it is worth. Selling's, closing it, because a sale is where
-              supplies are spent — the shipping cost is what the track is for. */}
-          <NavItem
-            href={`${base}/supplies`}
-            icon={<Icon name="parcel" />}
-            label="Packing supplies"
-            active={isActive(`${base}/supplies`)}
-          />
-        </NavSection>
-
-        <NavSection {...sectionProps("buying")}>
-          {/* Leads the section (#532): what is being looked for comes before what has been ordered.
-              It is the screen opened *before* a fair or a dealer's list, whereas the intake documents
-              are what is written up afterwards. */}
-          <NavItem
-            href={`${base}/wants`}
-            icon={<Icon name="wants" />}
-            label="Want list"
-            active={isActive(`${base}/wants`)}
-          />
-          <NavItem
-            href={`${base}/purchases`}
-            icon={<Icon name="purchases" />}
-            // Intake documents, not Purchases (#1323): opening balances are listed here too, and
-            // they were not bought. The address stays `/purchases`, which nobody reads.
-            label="Intake documents"
-            active={isActive(`${base}/purchases`)}
-          />
-          {/* Two entries, not one (#376). The lots screen and the settlement screen answer different
-              questions on different days — "what do I bid on next", across every seller, versus
-              "what do I owe for this parcel" — and reaching the second through the first made the
-              daily screen double as a doorway. Lots leads, being the daily job (ADR-0021 §9). */}
-          <NavGroup icon={<Icon name="auctions" />} label="Auctions">
-            <NavItem
-              href={`${base}/auctions`}
-              label="Lots"
-              // Exact: every sale route lives under `/auctions`, and `startsWith` would light this
-              // entry on the sales screens too.
-              active={isActive(`${base}/auctions`, true)}
-              nested
-            />
-            <NavItem
-              href={`${base}/auctions/sales`}
-              label="Sales"
-              active={isActive(`${base}/auctions/sales`)}
-              nested
-            />
-          </NavGroup>
-        </NavSection>
-
-        {/* The screens that serve **both** directions, under a heading of their own (#762) rather
-            than trailing the nav on spacing alone: once every other entry folds away, a tail
-            hanging under a collapsed Intake reads as part of it. A trade is the one part of the
-            hobby where the two directions are the same act — material leaves and material arrives
-            in one agreement (#646); one address book holds the house you bid with, the marketplace
-            you list on and the collector you swap with; and Colnect's lists (#686) are what a
-            partner reads before offering anything, next to the wish list saying what this
-            collection is after. Filing any of them under Selling or Intake would pick one half. */}
-        <NavSection {...sectionProps("partners")}>
-          <NavItem
-            href={`${base}/trades`}
-            icon={<Icon name="trades" />}
-            label="Trades"
-            active={isActive(`${base}/trades`)}
-          />
-          <NavItem
-            href={`${base}/contacts`}
-            icon={<Icon name="contacts" />}
-            label="Contacts"
-            active={isActive(`${base}/contacts`)}
-          />
-          <NavItem
-            href={`${base}/colnect`}
-            icon={<Icon name="link" />}
-            label="Colnect"
-            active={isActive(`${base}/colnect`)}
-          />
-        </NavSection>
+        {SECTION_ORDER.map((key) => (
+          <NavSection key={key} {...sectionProps(key)}>
+            {NAV_SECTIONS[key].map((node) => renderNode(node))}
+          </NavSection>
+        ))}
       </nav>
 
       {/* Footer */}
@@ -834,7 +767,7 @@ export function CollectionSidebar({
           href={`${base}/settings`}
           icon={<Icon name="settings" />}
           label="Settings"
-          active={isActive(`${base}/settings`)}
+          active={isNavScreenActive(pathname, base, { path: "/settings" })}
         />
         {/* The way to the phone start screen (#2002, ADR-0072 §3), for a desk page opened on a phone
             — there is no redirect by device. Never `active`: a phone screen has no sidebar. */}

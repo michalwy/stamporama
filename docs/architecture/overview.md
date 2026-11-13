@@ -250,6 +250,10 @@ What is individually wrong with a copy beyond its condition — a thin, a thinne
 
 A named **view of one list** — every filter (area, years and search with its fields included), the sort and the grouping — kept per collection and per list so it is the same on every device. `list` is the list's stable key (`LIST_KEYS`, `src/lib/list-views.ts`), unique with `name` per collection; `view` is `{ params, stored, local }` as `readListView` captured it — the address wholesale, each remembered value as the one in force, the stored preferences — and is a `Json` value the text-trim extension leaves alone; `refs` maps the parameters that name records to their kind, and `labels` keeps those records' names at the last save, so `listListPresets` (`src/lib/list-presets.ts`) can drop the ids gone since and name them. Where each list keeps what is not in its address is `shared/list-view-specs.ts`; the control is `ListPresetsControl`.
 
+### Sidebar pins (`SidebarPin`, #2504)
+
+The entries the collector keeps in the **Pinned** section at the top of the sidebar, per collection and on the server so they are the same on every device. `kind` is `screen` — a sidebar entry, `target` its path under the collection — or one of the record kinds in `SIDEBAR_PIN_RECORD_KINDS` (`src/lib/sidebar-pin-rules.ts`), `target` the record's id; `href` is where the entry goes, under the collection, and `label` the name a record goes by as its own screen gives it, brought up to date by that screen's *Pin to sidebar* button whenever the two differ. `position` is the dragged order. There is no foreign key to the record — six kinds are six tables — so `listSidebarPins` (`src/lib/sidebar-pins.ts`) leaves out a pin whose record is no longer in the collection. A pinned screen is named, marked and lit from the sidebar's own table, `nav-entries.ts`, which the sidebar is drawn from too.
+
 ### Physical holdings (`Item`)
 
 `Item` represents a collector's physical copies. Per ADR-0007, there is **one row per physical copy** — no quantity field — because copies of the same stamp and condition can differ (e.g. postmark type) in ways that affect value and intent.

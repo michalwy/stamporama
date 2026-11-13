@@ -23,6 +23,9 @@ The **Your Collections** page lists all collections you own, sorted by creation 
 Once inside a collection at `/c/[slug]`, the left sidebar shows:
 
 - The collection name, at the top, with the [Action items](action-items.md) bell beside it
+- **Pinned**, above everything else, once you have pinned something — the screens you use nearly all
+  the time and the records you are working on for weeks, always in view while the sections below
+  stay folded. See [Pinned](#pinned) below
 - **Dashboard**, first in the list — the [work waiting on you](dashboard.md) across the collection
 - **Overview**, pinned above the sections — the one screen about the collection as a whole — with
   [Collection structure](overview.md#collection-structure), its breakdown, indented beneath it
@@ -51,6 +54,26 @@ Once inside a collection at `/c/[slug]`, the left sidebar shows:
   quick-switch dropdown: changing collection is a rare enough act that it does not need a permanent
   control in the sidebar's most prominent row
 - The running app version, shown in muted text at the bottom of the sidebar (and again at the foot of the Settings navigation). Where the build was stamped with one, the **release date** follows it — `v0.68.0 · 2026-08-07` — and hovering the date gives the full time in your own time zone. A build made outside the release process (a local development run) shows the version alone
+
+### Pinned
+
+Hover over any entry of the sidebar — a sub-entry such as *Prepare*, *Facebook* or *Lot Builder*
+included — and a **pin** appears at its end: click it and the entry is added to **Pinned** at the
+top of the sidebar. A record can be pinned too, from its own screen: an opening balance, a purchase,
+an offer, a Facebook post, a sale, an issue or a contact has a **Pin to sidebar** button in its
+header. A pinned record shows its list's icon and the name it goes by, such as *Opening balance #3 ·
+Klaser 1*; rename the record and the pin follows the next time you open it.
+
+- **Click** a pinned entry to open it. It is highlighted when you are on it, exactly as the same
+  entry is in its own section — and it stays in its section too, so a section always reads complete.
+- **Drag** pinned entries up and down to put them in the order you want.
+- **Unpin** with the pin that appears when you hover over a pinned entry, or with the same pin on the
+  entry in its section, or with **Unpin** on the record's screen.
+
+Pins belong to the collection and are kept on the server, so they are the same on every device you
+sign in from. Pinned starts empty — nothing is pinned for you. A pinned record that is deleted
+disappears from Pinned by itself; one that is only closed — a sold offer, a completed purchase —
+stays until you unpin it. The phone screens have no sidebar and are not affected.
 
 ## Settings
 
