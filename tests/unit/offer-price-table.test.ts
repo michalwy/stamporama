@@ -476,19 +476,19 @@ describe("your price vs every other price (#2477)", () => {
 
   it("puts a tick at every known price on a linear scale from zero, your price marked apart", () => {
     const scale = priceScale(rows, 0)!;
+    // Catalogue is the highest price, so the axis runs 10% past it (#2497): 1.254.
     assert.deepEqual(
       scale.ticks.map((t) => [t.key, Number(t.position.toFixed(3))]),
       [
-        ["minimum", 0.044],
-        ["cost", 0.061],
-        ["estimated", 0.596],
-        ["catalogue", 1],
+        ["minimum", 0.04],
+        ["cost", 0.056],
+        ["estimated", 0.542],
+        ["catalogue", 0.909],
       ]
     );
-    assert.equal(Number(scale.own!.position.toFixed(3)), 0.167);
-    assert.equal(Number(scale.costPosition!.toFixed(3)), 0.061);
+    assert.equal(Number(scale.own!.position.toFixed(3)), 0.152);
     // Between Cost and Estimated.
-    assert.ok(scale.own!.position > scale.costPosition! && scale.own!.position < 0.596);
+    assert.ok(scale.own!.position > 0.056 && scale.own!.position < 0.542);
   });
 
   it("alternates labels above and below the axis where ticks sit close together", () => {
@@ -517,5 +517,92 @@ describe("your price vs every other price (#2477)", () => {
       priceScale(offerPriceRows({ minimum: null, catalogue: null, estimated: null, market: null, cost: null, own: null })),
       null
     );
+  });
+});
+
+describe("the price scale's zones (#2497)", () => {
+  // The issue's own example: Minimum 0.05, Cost 0.40, Estimated 1.19, Catalogue 2.00.
+  const figures = { minimum: "0.05", catalogue: "2.00", estimated: "1.19", market: null, cost: "0.40" };
+  const zoneAt = (scale: NonNullable<ReturnType<typeof priceScale>>, position: number) =>
+    scale.zones.find((z) => z.start <= position && (position < z.end || z.end === 1))?.key;
+  const zones = (scale: NonNullable<ReturnType<typeof priceScale>>) =>
+    scale.zones.map((z) => [z.key, z.label, Number(z.start.toFixed(3)), Number(z.end.toFixed(3))]);
+
+  it("colours the axis in five zones and moves your price through them as it rises", () => {
+    const scale = priceScale(offerPriceRows({ ...figures, own: "0.29" }))!;
+    // Axis to 2.20, 10% past Catalogue.
+    assert.deepEqual(zones(scale), [
+      ["below", "Below Min and Cost", 0, 0.023],
+      ["minimumCost", "Min–Cost", 0.023, 0.182],
+      ["costEstimated", "Cost–Est.", 0.182, 0.541],
+      ["estimatedCatalogue", "Est.–Cat.", 0.541, 0.909],
+      ["aboveCatalogue", "Above Cat.", 0.909, 1],
+    ]);
+    assert.equal(zoneAt(scale, scale.own!.position), "minimumCost");
+    const at = (own: string) => {
+      const s = priceScale(offerPriceRows({ ...figures, own }))!;
+      return zoneAt(s, s.own!.position);
+    };
+    assert.equal(at("0.80"), "costEstimated");
+    assert.equal(at("1.50"), "estimatedCatalogue");
+    assert.equal(at("2.10"), "aboveCatalogue");
+  });
+
+  it("runs pale teal from Cost to Catalogue with no Estimated", () => {
+    const scale = priceScale(offerPriceRows({ ...figures, estimated: null, own: "0.29" }))!;
+    assert.deepEqual(
+      scale.zones.map((z) => [z.key, z.label]),
+      [
+        ["below", "Below Min and Cost"],
+        ["minimumCost", "Min–Cost"],
+        ["costEstimated", "Cost–Cat."],
+        ["aboveCatalogue", "Above Cat."],
+      ]
+    );
+  });
+
+  it("ends red at Minimum with no Cost, and draws no green where Estimated is above Catalogue", () => {
+    const noCost = priceScale(offerPriceRows({ ...figures, cost: null, own: null }))!;
+    assert.deepEqual(
+      noCost.zones.map((z) => [z.key, z.label]),
+      [
+        ["below", "Below Min"],
+        ["costEstimated", "Min–Est."],
+        ["estimatedCatalogue", "Est.–Cat."],
+        ["aboveCatalogue", "Above Cat."],
+      ]
+    );
+    const high = priceScale(offerPriceRows({ ...figures, estimated: "2.40", own: null }))!;
+    assert.deepEqual(
+      high.zones.map((z) => [z.key, z.label]),
+      [
+        ["below", "Below Min and Cost"],
+        ["minimumCost", "Min–Cost"],
+        ["costEstimated", "Cost–Cat."],
+        ["aboveCatalogue", "Above Cat."],
+      ]
+    );
+    // Estimated is the highest price, so no headroom: the axis ends at it.
+    assert.equal(high.zones.at(-1)!.end, 1);
+  });
+
+  it("orders the floor by price when Minimum is above Cost, and runs the last zone to the end with no Catalogue", () => {
+    const scale = priceScale(
+      offerPriceRows({ minimum: "0.50", catalogue: null, estimated: "1.00", market: "3.00", cost: "0.20", own: null })
+    )!;
+    assert.deepEqual(zones(scale), [
+      ["below", "Below Min and Cost", 0, 0.067],
+      ["minimumCost", "Cost–Min", 0.067, 0.167],
+      ["costEstimated", "Min–Est.", 0.167, 0.333],
+      ["estimatedCatalogue", "Above Est.", 0.333, 1],
+    ]);
+  });
+
+  it("leaves Market out of the zones, and draws none when no bounding price is known", () => {
+    const scale = priceScale(
+      offerPriceRows({ minimum: null, catalogue: null, estimated: null, market: "1.00", cost: null, own: "0.50" })
+    )!;
+    assert.deepEqual(scale.zones, []);
+    assert.equal(scale.ticks.length, 1);
   });
 });

@@ -21,6 +21,7 @@ import {
   type OfferPriceRowKey,
   type PriceMargin,
   type PriceScaleKey,
+  type PriceScaleZoneKey,
 } from "@/lib/offer-price-table";
 import { trendStatement } from "@/lib/price-trend";
 
@@ -364,6 +365,49 @@ export function OfferPriceTable({
           names={NAME}
         />
       )}
+      {scale && scale.zones.length > 0 && <PriceZoneLegend zones={scale.zones} />}
+    </div>
+  );
+}
+
+/** Each zone of the price scale in its own token (#2497). */
+const PRICE_ZONE_COLOR: Record<PriceScaleZoneKey, string> = {
+  below: "var(--color-price-zone-below)",
+  minimumCost: "var(--color-price-zone-minimum-cost)",
+  costEstimated: "var(--color-price-zone-cost-estimated)",
+  estimatedCatalogue: "var(--color-price-zone-estimated-catalogue)",
+  aboveCatalogue: "var(--color-price-zone-above-catalogue)",
+};
+
+/** The short legend under the price scale (#2497): a swatch and a name for each zone drawn on it. */
+function PriceZoneLegend({ zones }: { zones: NonNullable<ReturnType<typeof priceScale>>["zones"] }) {
+  return (
+    <div
+      style={{
+        gridColumn: "1 / -1",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "0.25rem 0.75rem",
+        marginTop: "0.25rem",
+        fontSize: "0.6875rem",
+        color: "var(--color-text-muted)",
+      }}
+    >
+      {zones.map((zone) => (
+        <span key={zone.key} style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+          <span
+            aria-hidden
+            style={{
+              display: "inline-block",
+              width: "0.625rem",
+              height: "0.625rem",
+              borderRadius: "2px",
+              background: PRICE_ZONE_COLOR[zone.key],
+            }}
+          />
+          {zone.label}
+        </span>
+      ))}
     </div>
   );
 }
@@ -374,8 +418,8 @@ const SCALE_AXIS_BAND = 0.875;
 
 /**
  * **The price scale under the price table** (#2477): a linear axis from 0 to the highest price on it,
- * a labelled tick at every reference price that is known, the stretch below Cost shaded, and the offer's
- * own price as an accent marker — so its place among the others reads at a glance. Where ticks sit
+ * a labelled tick at every reference price that is known, the axis coloured in zones between them
+ * (#2497, {@link PRICE_ZONE_COLOR}), and the offer's own price as an accent marker on top — so its place among the others reads at a glance. Where ticks sit
  * close together their labels alternate above and below the axis ({@link priceScale}). A label is
  * pulled in by its own position (`translateX(-position)`), so one at either end stays inside the
  * table. Each label's hover gives the figure; the marker's names the offer's own price.
@@ -408,20 +452,20 @@ function PriceScaleBar({
         fontSize: "0.6875rem",
       }}
     >
-      {scale.costPosition !== null && scale.costPosition > 0 && (
+      {scale.zones.map((zone) => (
         <span
+          key={zone.key}
           aria-hidden
           style={{
             position: "absolute",
-            left: 0,
-            width: pct(scale.costPosition),
+            left: pct(zone.start),
+            width: pct(zone.end - zone.start),
             top: `${SCALE_LABEL_LINE + 0.1875}rem`,
             height: `${SCALE_AXIS_BAND - 0.375}rem`,
-            background: "var(--color-warning-soft)",
-            borderRadius: "2px",
+            background: PRICE_ZONE_COLOR[zone.key],
           }}
         />
-      )}
+      ))}
       <span
         aria-hidden
         style={{
@@ -482,6 +526,7 @@ function PriceScaleBar({
                 height: "0.625rem",
                 background: "var(--color-accent)",
                 borderRadius: "2px",
+                boxShadow: "0 0 0 1px var(--color-bg-elevated)",
                 transform: "rotate(45deg)",
               }}
             />
