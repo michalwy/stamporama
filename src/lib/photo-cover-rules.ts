@@ -98,6 +98,53 @@ export function normalizePlatformCoverColor(value: string | null | undefined): s
   return normalizeCoverColor(value) ?? DEFAULT_PHOTO_COVER_COLOR;
 }
 
+// ── The eyedropper (#2493) ──────────────────────────────────────────────────
+//
+// A bar in a colour taken from the photo itself, so it keeps the photo's tone. One pixel of a scan is
+// grain or a printing dot and rarely the tone the eye sees, so the colour is the average of a small
+// square around the click, read from the photo alone — never from the covers drawn over it.
+
+/** How far the eyedropper reaches around the pixel clicked, in the photo's own pixels: the square it
+ *  averages is `2 × radius + 1` across. */
+export const EYEDROPPER_RADIUS = 3;
+
+/** The square the eyedropper averages, in the photo's own pixels, around a point given in fractions of
+ *  the photo — cut back at the photo's edges, never empty. */
+export function eyedropperRegion(
+  point: { x: number; y: number },
+  photo: { width: number; height: number },
+  radius: number = EYEDROPPER_RADIUS
+): { x: number; y: number; width: number; height: number } {
+  const width = Math.max(1, Math.floor(photo.width));
+  const height = Math.max(1, Math.floor(photo.height));
+  const cx = Math.min(width - 1, Math.max(0, Math.floor(point.x * width)));
+  const cy = Math.min(height - 1, Math.max(0, Math.floor(point.y * height)));
+  const left = Math.max(0, cx - radius);
+  const top = Math.max(0, cy - radius);
+  const right = Math.min(width - 1, cx + radius);
+  const bottom = Math.min(height - 1, cy + radius);
+  return { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+}
+
+/** The average colour of RGBA pixels (as a canvas reads them), lowercase `#rrggbb`; a transparent
+ *  pixel says nothing about the photo's tone and is left out. Null when no pixel is left. */
+export function averagePixelColor(rgba: ArrayLike<number>): string | null {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let n = 0;
+  for (let i = 0; i + 3 < rgba.length; i += 4) {
+    if (rgba[i + 3] === 0) continue;
+    r += rgba[i];
+    g += rgba[i + 1];
+    b += rgba[i + 2];
+    n += 1;
+  }
+  if (n === 0) return null;
+  const hex = (sum: number) => Math.round(sum / n).toString(16).padStart(2, "0");
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
 function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }

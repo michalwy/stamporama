@@ -1086,6 +1086,12 @@ photos are what holds the offer back) walks you through them one at a time:
   bar starts in the colour you last used on this browser; the very first starts in the platform's
   *Bars in*. Recolouring a bar puts the offer's images out of date like any other change to covers,
   and they show the new colour once regenerated.
+- To keep a bar in the **photo's own tone** — the stamp's background, say — press the
+  **eyedropper** beside the colours and click the photo. The colour there becomes the next bar's
+  colour, and the selected bar's if one is selected; the click draws nothing. The colour is the
+  average of a few pixels around the click, so grain and printing dots even out, and it is read from
+  the photo alone — clicking a cover takes the photo's colour under it. **Escape**, or the button
+  again, puts the eyedropper down without taking anything.
 - **Enter** saves the photo and brings the next. With nothing drawn the button reads **Nothing to
   cover** — that counts as checked too, so a photo with nothing to hide is never asked about again.
   **Skip** and **Previous** move without saving.

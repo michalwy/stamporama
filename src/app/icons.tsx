@@ -99,6 +99,7 @@ import {
   LockOpen,
   Pin,
   PinOff,
+  Pipette,
   LogOut,
   Map,
   MapPin,
@@ -459,6 +460,8 @@ const GLYPHS = {
   annotateText: Type,
   /** The view on screen, marks and all, kept as a new photo. */
   snapshot: Camera,
+  /** Takes a colour from the photo itself (#2493) — the cover editor's eyedropper. */
+  eyedropper: Pipette,
 
   /** Fills a bid box with a figure the row already knows — a ceiling, upwards. */
   bidCeiling: ArrowUpToLine,

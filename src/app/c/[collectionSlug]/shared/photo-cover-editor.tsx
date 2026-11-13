@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEscapeLayer } from "@/app/escape-stack";
+import { Icon } from "@/app/icons";
+import { useToast } from "@/app/toast-provider";
 import {
+  averagePixelColor,
   DEFAULT_PHOTO_COVER_COLOR,
+  eyedropperRegion,
   MIN_COVER_SIZE,
   normalizeCoverColor,
   normalizePhotoCoverShape,
@@ -155,6 +160,27 @@ export function CoverColorPicker({
   );
 }
 
+/**
+ * The colour of the photo around a point given in fractions of it (#2493): the average of a small
+ * square of the photo's own pixels, read from the image alone, so the covers drawn over it never
+ * colour what is taken. Null when the browser will not let the pixels be read.
+ */
+function colorOfPhotoAt(img: HTMLImageElement, point: { x: number; y: number }): string | null {
+  if (!img.naturalWidth || !img.naturalHeight) return null;
+  const region = eyedropperRegion(point, { width: img.naturalWidth, height: img.naturalHeight });
+  const canvas = document.createElement("canvas");
+  canvas.width = region.width;
+  canvas.height = region.height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return null;
+  try {
+    context.drawImage(img, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
+    return averagePixelColor(context.getImageData(0, 0, region.width, region.height).data);
+  } catch {
+    return null;
+  }
+}
+
 const TOOLBAR_SELECT: CSSProperties = {
   fontSize: "0.8125rem",
   padding: "0.25rem 0.375rem",
@@ -173,7 +199,7 @@ const TOOLBAR_SELECT: CSSProperties = {
  * clicking it, moved by dragging it and resized by its corners, removed with Delete — or all at
  * once with *Clear all*, which a proposal carried from the previous photo needs (#1703). The shape,
  * style and bar colour of the *next* cover are chosen in the toolbar, which also restyles the
- * selected one.
+ * selected one. A bar's colour can also be taken from the photo with the eyedropper (#2493).
  */
 export function PhotoCoverEditor({
   collectionId,
@@ -195,12 +221,19 @@ export function PhotoCoverEditor({
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const { toast } = useToast();
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
   const [area, setArea] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [style, setStyle] = useState<PhotoCoverStyle>(defaultStyle);
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [draft, setDraft] = useState<PhotoCover | null>(null);
+  // The eyedropper (#2493): while on, a click on the photo takes its colour instead of drawing.
+  const [pickingOn, setPicking] = useState(false);
+  const picking = pickingOn && !disabled;
+  // Escape puts the eyedropper down without taking anything — and only that, not the dialog too.
+  useEscapeLayer(() => setPicking(false), picking);
   const [lastColor, setLastColor] = usePersistedCollectionValue(COVER_COLOR_NAMESPACE, collectionId);
   // The colour the next bar is drawn in: the last one used, else the platform's.
   const color = normalizeCoverColor(lastColor) ?? defaultColor;
@@ -264,6 +297,15 @@ export function PhotoCoverEditor({
     if (disabled || e.button !== 0) return;
     const target = e.target as HTMLElement;
     const p = pointAt(e.clientX, e.clientY);
+    if (picking) {
+      // One click takes the colour and puts the eyedropper down; it draws, selects and moves nothing.
+      e.preventDefault();
+      setPicking(false);
+      const taken = imgRef.current ? colorOfPhotoAt(imgRef.current, p) : null;
+      if (taken) recolor(taken);
+      else toast({ message: "The colour of this photo could not be read.", tone: "error" });
+      return;
+    }
     const corner = target.dataset.corner as Corner | undefined;
     const coverIndex = target.dataset.cover != null ? Number(target.dataset.cover) : null;
     surfaceRef.current!.setPointerCapture(e.pointerId);
@@ -383,6 +425,27 @@ export function PhotoCoverEditor({
               disabled={disabled}
               onChange={recolor}
             />
+            <Tooltip content="Take a colour from the photo">
+              <button
+                type="button"
+                aria-label="Take a colour from the photo"
+                aria-pressed={picking}
+                disabled={disabled}
+                onClick={() => setPicking((on) => !on)}
+                style={{
+                  ...TOOLBAR_SELECT,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "0.25rem",
+                  cursor: disabled ? "default" : "pointer",
+                  border: `1px solid ${picking ? "var(--color-action-primary)" : "var(--color-border)"}`,
+                  boxShadow: picking ? "inset 0 0 0 1px var(--color-action-primary)" : "none",
+                  color: picking ? "var(--color-action-primary)" : TOOLBAR_SELECT.color,
+                }}
+              >
+                <Icon name="eyedropper" size="sm" />
+              </button>
+            </Tooltip>
           </>
         )}
         <button
@@ -405,7 +468,9 @@ export function PhotoCoverEditor({
           Clear all
         </button>
         <span style={{ color: "var(--color-text-muted)", marginLeft: "auto" }}>
-          Drag across a symbol to cover it · R / E rectangle or ellipse · Delete removes
+          {picking
+            ? "Click the photo to take its colour · Escape cancels"
+            : "Drag across a symbol to cover it · R / E rectangle or ellipse · Delete removes"}
         </span>
       </div>
       <div
@@ -439,6 +504,7 @@ export function PhotoCoverEditor({
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- collection-scoped bytes, as every photo here */}
           <img
+            ref={imgRef}
             src={src}
             alt=""
             draggable={false}
@@ -454,6 +520,8 @@ export function PhotoCoverEditor({
               style={{
                 ...coverAppearance(cover),
                 cursor: disabled ? "default" : "move",
+                // With the eyedropper up a click goes through a cover to the photo under it.
+                pointerEvents: picking ? "none" : undefined,
                 outline: i === selected ? "2px solid var(--color-action-primary)" : "1px dashed rgba(255,255,255,0.8)",
               }}
             />
@@ -475,6 +543,7 @@ export function PhotoCoverEditor({
                   background: "#fff",
                   border: "1px solid var(--color-action-primary)",
                   cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                  pointerEvents: picking ? "none" : undefined,
                 }}
               />
             ))}

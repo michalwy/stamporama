@@ -107,6 +107,10 @@ Every bar drawn before was black and was given black, and the fingerprint names 
 when it is not black, so no image generated before went out of date; recolouring a bar does put them
 out of date, as any change to covers does.
 
+*Amended by #2493:* the editor can also take a bar's colour from the photo with an eyedropper — the
+average of a few pixels around the click, read from the photo without its covers. It is one more way
+to choose the same `PhotoCover.color`; nothing stored changes.
+
 ## Consequences
 
 - A copy photo can be shown to a buyer only through offer images for the covers to matter; anything
