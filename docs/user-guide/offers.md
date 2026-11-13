@@ -303,8 +303,22 @@ Until the offer has a price the column is empty.
 **The price scale** under the table draws the same figures along one line, from 0 on the left to the
 highest of them on the right: a labelled tick for each price that is known — **Min**, **Cost**,
 **Est.**, **Cat.**, **Market**, **Market trend** — and a marker for your price, so you see at a glance
-where it sits among them. The stretch below Cost is shaded: a price there sells at a loss. Where ticks
-sit close together their labels alternate above and below the line; hover a label for its figure.
+where it sits among them. Where ticks sit close together their labels alternate above and below the
+line; hover a label for its figure.
+
+The line is **coloured in zones**, so you see at a glance which one your price falls in:
+
+- **red** below both Minimum and Cost;
+- **coral** between Minimum and Cost, whichever is lower — under the platform's minimum, or at a loss;
+- **pale teal** from Cost to Estimated — a price that pays, nothing wrong;
+- **green** from Estimated to Catalogue;
+- **blue** above Catalogue.
+
+A zone whose price is not known is left out and its neighbour runs on to the next price: with no
+Estimated, pale teal runs from Cost to Catalogue; with no Cost, red ends at Minimum. Where Estimated is
+above Catalogue there is no green. Market and Market trend are ticks only. When Catalogue is the
+highest price, the line runs a little past it so the blue zone shows. A short legend under the line
+names the zones drawn on it.
 With no price yet the scale shows the ticks without the marker. The column and the scale follow your
 price as soon as you leave its field.
 

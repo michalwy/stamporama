@@ -79,6 +79,14 @@
   --color-issue-open-bar: #14b8a6;
   /* Transient "just added" highlight (#158): a warm tint that fades out */
   --color-bg-highlight-flash: #fde68a;
+  /* The offer's price scale zones (#2497): below Minimum and Cost, between them, Cost to Estimated
+     (a pale teal, not a warning), Estimated to Catalogue, above Catalogue. Muted, so the ticks and
+     the price marker read on top of them. */
+  --color-price-zone-below: #fca5a5;
+  --color-price-zone-minimum-cost: #fdc0a0;
+  --color-price-zone-cost-estimated: #ccfbf1;
+  --color-price-zone-estimated-catalogue: #86efac;
+  --color-price-zone-above-catalogue: #93c5fd;
   /* Text tokens */
   --color-text-primary: #020617;
   --color-text-secondary: #334155;
@@ -166,6 +174,12 @@
   --color-issue-open-bar: #14b8a6;
   /* Transient "just added" highlight (#158): a warm tint that fades out */
   --color-bg-highlight-flash: #4d3a10;
+  /* The offer's price scale zones (#2497), the dark half. */
+  --color-price-zone-below: #7f1d1d;
+  --color-price-zone-minimum-cost: #9a4a2e;
+  --color-price-zone-cost-estimated: #164e4a;
+  --color-price-zone-estimated-catalogue: #166534;
+  --color-price-zone-above-catalogue: #1e3a8a;
   /* Text tokens */
   --color-text-primary: #f1f5f9;
   --color-text-secondary: #cbd5e1;

@@ -398,22 +398,100 @@ export interface PriceScaleTick {
   side: "above" | "below";
 }
 
+/**
+ * The five zones the scale is coloured in (#2497), left to right: below both Minimum and Cost, between
+ * the two, Cost to Estimated, Estimated to Catalogue, above Catalogue.
+ */
+export type PriceScaleZoneKey = "below" | "minimumCost" | "costEstimated" | "estimatedCatalogue" | "aboveCatalogue";
+
+export interface PriceScaleZone {
+  key: PriceScaleZoneKey;
+  /** Where it starts and ends on the axis, as a tick's `position`; never empty. */
+  start: number;
+  end: number;
+  /** The legend's name for it, from the prices that actually bound it — `Cost–Cat.` with no Estimated. */
+  label: string;
+}
+
 export interface PriceScale {
   ticks: PriceScaleTick[];
   /** The offer's own price, marked apart from the ticks; null while it has none. */
   own: { amount: string; position: number } | null;
-  /** Where Cost sits, the stretch below it shaded; null while the cost is not known. */
-  costPosition: number | null;
+  /** The coloured zones in axis order, each one only where it has width; empty when no price that
+   *  bounds a zone (Minimum, Cost, Estimated, Catalogue) is known. */
+  zones: PriceScaleZone[];
 }
 
 /** How close two ticks may sit, as a share of the axis, before their labels go to opposite sides. */
 export const PRICE_SCALE_MIN_GAP = 0.16;
 
+/** How far the axis runs past Catalogue, as a share of it, when Catalogue is the highest price — so the
+ *  zone above it shows (#2497). */
+export const PRICE_SCALE_HEADROOM = 0.1;
+
+type ScaleBound = { key: PriceScaleKey; value: number };
+
+/**
+ * **The scale's zones** (#2497), each bounded by reference prices as the collector settled them on
+ * 2026-11-13: red below both Minimum and Cost, coral between them (whichever is lower first), a pale
+ * teal from Cost to Estimated — acceptable, not a warning — green from Estimated to Catalogue, blue
+ * above Catalogue.
+ *
+ * A zone whose bounding price is unknown is not drawn and its neighbour runs on to the next known
+ * price: with no Estimated, pale teal runs from Cost to Catalogue; with no Cost, red ends at Minimum;
+ * with no Catalogue, the last zone runs to the end of the axis. Where Estimated is at or above
+ * Catalogue there is no green: pale teal runs to Catalogue, then blue. Market and Market trend bound
+ * nothing. The zones are contiguous from 0 to `max`, each starting where the one before ends, so an
+ * Estimated below Cost cannot run a zone backwards — it just leaves no pale teal; a zone with no width
+ * is dropped. No zone at all when none of the four bounding prices is known.
+ */
+function scaleZones(bounds: Partial<Record<PriceScaleKey, number>>, max: number): PriceScaleZone[] {
+  const bound = (key: PriceScaleKey): ScaleBound | null => (bounds[key] === undefined ? null : { key, value: bounds[key]! });
+  const minimum = bound("minimum");
+  const cost = bound("cost");
+  const estimated = bound("estimated");
+  const catalogue = bound("catalogue");
+  if (!minimum && !cost && !estimated && !catalogue) return [];
+
+  const floor = [minimum, cost].filter((b): b is ScaleBound => b !== null).sort((a, b) => a.value - b.value);
+  const green = estimated && (!catalogue || estimated.value < catalogue.value) ? estimated : null;
+  const name = (key: PriceScaleKey) => PRICE_SCALE_LABEL[key];
+  const span = (from: ScaleBound | null, to: ScaleBound | null) =>
+    from && to ? `${name(from.key)}–${name(to.key)}` : from ? `Above ${name(from.key)}` : to ? `Below ${name(to.key)}` : "";
+
+  // Each drawn zone, with the price that ends it (null: runs to the end of the axis).
+  const plan: Array<{ key: PriceScaleZoneKey; to: ScaleBound | null; label: (from: ScaleBound | null) => string }> = [];
+  if (floor.length > 0)
+    plan.push({
+      key: "below",
+      to: floor[0],
+      label: () => (floor.length === 2 ? `Below ${name("minimum")} and ${name("cost")}` : `Below ${name(floor[0].key)}`),
+    });
+  if (floor.length === 2) plan.push({ key: "minimumCost", to: floor[1], label: (from) => span(from, floor[1]) });
+  const tealTo = green ?? catalogue;
+  plan.push({ key: "costEstimated", to: tealTo, label: (from) => span(from, tealTo) });
+  if (green) plan.push({ key: "estimatedCatalogue", to: catalogue, label: (from) => span(from, catalogue) });
+  if (catalogue) plan.push({ key: "aboveCatalogue", to: null, label: () => `Above ${name("catalogue")}` });
+
+  const zones: PriceScaleZone[] = [];
+  let from: ScaleBound | null = null;
+  let start = 0;
+  for (const step of plan) {
+    const endValue = step.to ? Math.min(max, Math.max(start * max, step.to.value)) : max;
+    const end = endValue / max;
+    if (end > start) zones.push({ key: step.key, start, end, label: step.label(from) });
+    start = Math.max(start, end);
+    from = step.to;
+  }
+  return zones;
+}
+
 /**
  * **The price scale under the table** (#2477): a linear axis from 0 to the highest price on it — the
  * offer's own price included — with a tick for every reference row whose price is known and a marker
- * for the offer's own price, so where it sits among them reads at a glance. A row with no price has no
- * tick. Labels go above the axis unless the tick sits within `minGap` of the last label there, then
+ * for the offer's own price, so where it sits among them reads at a glance, over the coloured zones of
+ * {@link scaleZones} (#2497). Where Catalogue is the highest price the axis runs `PRICE_SCALE_HEADROOM`
+ * past it, so the zone above Catalogue has width. A row with no price has no tick. Labels go above the axis unless the tick sits within `minGap` of the last label there, then
  * below, so ticks close together alternate; ticks in price order, a tie in the table's order.
  *
  * Null when there is nothing to draw: no known price at all, or every price zero.
@@ -432,8 +510,13 @@ export function priceScale(rows: readonly OfferPriceRow[], minGap = PRICE_SCALE_
   const ownRow = rows.find((row) => row.key === "own");
   const ownValue = ownRow ? known(ownRow.amount) : null;
   const own = ownValue !== null && ownValue > 0 ? { amount: ownRow!.amount!, value: ownValue } : null;
-  const max = Math.max(0, own?.value ?? 0, ...references.map((r) => r.value));
-  if (max <= 0) return null;
+  const highest = Math.max(0, own?.value ?? 0, ...references.map((r) => r.value));
+  if (highest <= 0) return null;
+  const catalogueValue = references.find((r) => r.key === "catalogue")?.value;
+  // With Catalogue the highest price, the axis runs a little past it so the zone above shows (#2497).
+  const max = catalogueValue !== undefined && catalogueValue >= highest && catalogueValue > 0
+    ? catalogueValue * (1 + PRICE_SCALE_HEADROOM)
+    : highest;
   const at = (value: number) => value / max;
 
   let lastAbove = -Infinity;
@@ -450,11 +533,12 @@ export function priceScale(rows: readonly OfferPriceRow[], minGap = PRICE_SCALE_
       else lastBelow = position;
       return { key: reference.key, amount: reference.amount, position, side };
     });
-  const cost = references.find((r) => r.key === "cost");
+  const bounds: Partial<Record<PriceScaleKey, number>> = {};
+  for (const r of references) if (r.key !== "market" && r.key !== "marketTrend") bounds[r.key] = r.value;
   return {
     ticks,
     own: own ? { amount: own.amount, position: at(own.value) } : null,
-    costPosition: cost ? at(cost.value) : null,
+    zones: scaleZones(bounds, max),
   };
 }
 
