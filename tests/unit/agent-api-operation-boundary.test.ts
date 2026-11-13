@@ -1116,6 +1116,8 @@ const SALE_API_WRITES = new Map<string, string>([
   ["moveSaleLinesThroughApi", "src/lib/sales.ts"],
   // Setting or clearing the collector's note (#2379), the sale marked.
   ["setSaleNoteThroughApi", "src/lib/sales.ts"],
+  // Cancelling a sale the buyer never paid for (#2500), the sale marked — the one status change open.
+  ["cancelSaleThroughApi", "src/lib/sales.ts"],
   ["findOrCreateBuyer", "src/lib/facebook-sales.ts"],
 ]);
 
@@ -1126,7 +1128,7 @@ describe("the agent API's operation modules (#1949)", () => {
   const domain = readFileSync(path.join(ROOT, "src/lib/sales.ts"), "utf8");
   const salesWriters = [
     ...domain.matchAll(
-      /export async function ((?:create|update|set|delete|remove|add|swap|mark|confirm|record|settle|merge|move)[A-Za-z]*)\(/g
+      /export async function ((?:create|update|set|delete|remove|add|swap|mark|confirm|record|settle|merge|move|cancel)[A-Za-z]*)\(/g
     ),
   ].map((match) => match[1]);
 
@@ -1164,6 +1166,12 @@ describe("the agent API's operation modules (#1949)", () => {
       1,
       "`setSaleNoteThroughApi` writes a sale without the to-review marker (#1948)"
     );
+    // A cancel (#2500) is one write to one sale, marked once.
+    assert.equal(
+      [...exportedFunctionBody(domain, "cancelSaleThroughApi").matchAll(/markSaleWrittenByApi\(tx,/g)].length,
+      1,
+      "`cancelSaleThroughApi` writes a sale without the to-review marker (#1948)"
+    );
   });
 
   it("reach no other writer of a sale — no delete, no status, no header, line, packing or share link", () => {
@@ -1175,6 +1183,8 @@ describe("the agent API's operation modules (#1949)", () => {
     assert.ok(salesWriters.includes("moveSaleLines") && salesWriters.includes("moveSaleLinesThroughApi"));
     // The screen's note write (#2379) writes no marker either.
     assert.ok(salesWriters.includes("updateSaleNote") && salesWriters.includes("setSaleNoteThroughApi"));
+    // The screen's cancel (#2500) writes no marker either.
+    assert.ok(salesWriters.includes("cancelSale") && salesWriters.includes("cancelSaleThroughApi"));
     const closed = new Set([
       ...salesWriters.filter((name) => !SALE_API_WRITES.has(name)),
       ...SALE_SHARE_WRITES,

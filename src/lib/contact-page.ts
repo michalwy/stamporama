@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { getContactListItem, type ContactListItem } from "./contacts";
 import { resolveBuyerHandling } from "./sales";
+import { SALE_CANCELLED } from "./sale-status";
 import { auctionLotExposure, countAuctionLots, type AuctionLotExposure } from "./auctions";
 import { lotOutcome } from "./auction-lot";
 import {
@@ -106,6 +107,9 @@ export interface ContactSales {
   unpaidCount: number;
   /** Sales not yet *Sent* — *Ordered*, *Paid* or *Packed*. */
   unsentCount: number;
+  /** Sales cancelled (#2500) — of all time, not the period's: a buyer who failed to pay once is worth
+   *  knowing about whatever period is open. Every other figure here leaves them out. */
+  cancelledCount: number;
   rows: ContactSaleRow[];
 }
 
@@ -401,22 +405,27 @@ export async function readSales(
   baseCurrency: string,
   dateWhere: { gte?: Date; lt?: Date } | undefined
 ): Promise<ContactSales> {
-  const sales = await prisma.sale.findMany({
-    where: { ...where, ...(dateWhere ? { soldAt: dateWhere } : {}) },
-    orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      saleNo: true,
-      soldAt: true,
-      status: true,
-      currency: true,
-      fxRateToBase: true,
-      buyerHandling: true,
-      buyerPaidTotal: true,
-      platform: { select: { name: true } },
-      lines: { select: { price: true, _count: { select: { items: true } } } },
-    },
-  });
+  // A cancelled sale counts nowhere (#2500) — not in the count, the revenue or the rows; it has a
+  // figure of its own.
+  const [sales, cancelledCount] = await Promise.all([
+    prisma.sale.findMany({
+      where: { ...where, status: { not: SALE_CANCELLED }, ...(dateWhere ? { soldAt: dateWhere } : {}) },
+      orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        saleNo: true,
+        soldAt: true,
+        status: true,
+        currency: true,
+        fxRateToBase: true,
+        buyerHandling: true,
+        buyerPaidTotal: true,
+        platform: { select: { name: true } },
+        lines: { select: { price: true, _count: { select: { items: true } } } },
+      },
+    }),
+    prisma.sale.count({ where: { ...where, status: SALE_CANCELLED } }),
+  ]);
 
   const rows: ContactSaleRow[] = sales.map((s) => {
     const gross = s.lines.reduce((sum, l) => sum + Number(l.price), 0);
@@ -459,6 +468,7 @@ export async function readSales(
       .length,
     unsentCount: sales.filter((s) => (UNSENT_SALE_STATUSES as readonly string[]).includes(s.status))
       .length,
+    cancelledCount,
     rows,
   };
 }

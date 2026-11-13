@@ -1,5 +1,5 @@
 import { formatEntityNo } from "./quick-jump";
-import { isSaleSent } from "./sale-status";
+import { isSaleCancelled, isSaleSent } from "./sale-status";
 
 /**
  * Moving sold sets to another sale of the same buyer (#2204) — the pure half: which sale may give
@@ -34,6 +34,7 @@ export function saleMoveSourceRefusal(
   total: number
 ): string | null {
   if (moving === 0) return "Tick at least one sold set to move.";
+  if (isSaleCancelled(source.status)) return "This sale is cancelled — its sets are a record only.";
   if (isSaleSent(source.status)) {
     return "This sale has already been sent — a parcel that has gone is not split.";
   }
@@ -60,6 +61,7 @@ export function saleMoveTargetRefusal(
   if (target.buyerId !== source.buyerId) return `${no} is to another buyer.`;
   if (target.platformId !== source.platformId) return `${no} is on another platform.`;
   if (target.currency !== source.currency) return `${no} is in ${target.currency}, not ${source.currency}.`;
+  if (isSaleCancelled(target.status)) return `${no} is cancelled.`;
   if (isSaleSent(target.status)) return `${no} has already been sent.`;
   return null;
 }

@@ -12,6 +12,7 @@ import { offersSummary } from "./offers";
 import { auctionLotExposure } from "./auctions";
 import { realizedProceedsByGroup, realizedProfit } from "./sales";
 import type { ProfitFigures } from "./sale-profit";
+import { SALE_CANCELLED } from "./sale-status";
 import { summarizePurchaseReturn, type PurchaseReturnCopy } from "./purchase-return";
 import { openWantGapSummary, type OpenWantGapSummary } from "./wants";
 import { readCollectionAreas } from "./areas";
@@ -138,7 +139,8 @@ export async function getOverviewValue(
     auctionLotExposure(ownerId, collectionId, {}),
     realizedProfit(collectionId, baseCurrency),
     purchaseRecoup(collectionId, baseCurrency),
-    prisma.sale.count({ where: { collectionId } }),
+    // A cancelled sale counts nowhere (#2500).
+    prisma.sale.count({ where: { collectionId, status: { not: SALE_CANCELLED } } }),
   ]);
 
   return {

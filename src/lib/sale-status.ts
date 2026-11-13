@@ -20,6 +20,34 @@ export function isSaleStatus(value: string): value is SaleStatus {
   return VALID_SALE_STATUS.has(value as SaleStatus);
 }
 
+/**
+ * A **cancelled** sale (#2500, ADR-0082): the buyer never paid, and the sale is kept as a record.
+ * Not a place in the fulfilment lifecycle — it is never chosen from the status select, only reached
+ * by cancelling a sale not yet sent, and never left — so it is a token of its own beside
+ * {@link SaleStatus} rather than one of them.
+ */
+export const SALE_CANCELLED = "cancelled";
+
+/** Every status a sale's row can carry: a place in the lifecycle, or cancelled. */
+export type SaleRecordStatus = SaleStatus | typeof SALE_CANCELLED;
+
+/** The Sales list's status chips (#392, #2500): the lifecycle, then *Cancelled*. */
+export const SALE_RECORD_STATUSES: readonly SaleRecordStatus[] = [...SALE_STATUS_ORDER, SALE_CANCELLED];
+
+export function isSaleRecordStatus(value: string): value is SaleRecordStatus {
+  return value === SALE_CANCELLED || isSaleStatus(value);
+}
+
+export function isSaleCancelled(status: string): boolean {
+  return status === SALE_CANCELLED;
+}
+
+/** Whether a sale in `status` can be cancelled (#2500): only while it is not yet sent. A parcel
+ *  already gone is a return, not a cancellation. */
+export function canCancelSale(status: string): boolean {
+  return (UNSENT_SALE_STATUSES as readonly string[]).includes(status);
+}
+
 /** A sale not yet sent: everything before *Sent* — the sales still open to more sold sets (#1950).
  * Read by the contact page's *Not yet sent* figure and by the *Sell* dialog's list of sales. */
 export const UNSENT_SALE_STATUSES: readonly SaleStatus[] = ["ordered", "paid", "packed"];

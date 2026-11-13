@@ -166,11 +166,11 @@ describe("the sale operations (#1949)", () => {
     return { id, offerNo: offer.offerNo, setIds: offer.sets.map((set) => set.id) };
   }
 
-  it("carries the seven operations, five of them writes", () => {
-    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "move_sale_sets", "set_sale_note"];
+  it("carries the eight operations, six of them writes", () => {
+    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "move_sale_sets", "set_sale_note", "cancel_sale"];
     for (const name of names) assert.ok(OPERATIONS.some((operation) => operation.name === name), name);
     const writing = OPERATIONS.filter((operation) => names.includes(operation.name) && operation.writes).map((o) => o.name);
-    assert.deepEqual(writing.sort(), ["find_or_create_buyer", "move_sale_sets", "sell_offer", "sell_offer_set", "set_sale_note"]);
+    assert.deepEqual(writing.sort(), ["cancel_sale", "find_or_create_buyer", "move_sale_sets", "sell_offer", "sell_offer_set", "set_sale_note"]);
   });
 
   it("deletes no sale and moves none — no such operation exists", () => {
@@ -182,7 +182,10 @@ describe("the sale operations (#1949)", () => {
     // A third records a proposal's accepted lots as a sale (#2303), as `sell_offer` records an offer's,
     // into a new sale or the buyer's open one, marked to review — it deletes and moves nothing.
     // A fourth writes the collector's private note (#2379), and nothing else about the sale.
-    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets", "convert_proposal_to_sale", "set_sale_note"];
+    // A fifth cancels a sale the buyer never paid for (#2500): the sale is kept, as a record, and the
+    // one status it reaches is *Cancelled* — nothing is deleted and nothing moves through payment or
+    // shipping.
+    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets", "convert_proposal_to_sale", "set_sale_note", "cancel_sale"];
     const offenders = OPERATIONS.filter((operation) => {
       if (LEAVES_SALES_STANDING.includes(operation.name)) return false;
       const words = operation.name.split("_");
@@ -504,6 +507,53 @@ describe("the sale operations (#1949)", () => {
       assert.equal((await refused(readOnlyToken, "POST", `/sales/${source.id}/lines/move`, { lines: [first], to: "new" })).status, 403);
       // Every refusal left the lines where they were.
       assert.equal((await getSaleDetail(userId, source.id))!.lines.length, 2);
+    });
+  });
+
+  describe("cancel_sale (#2500)", () => {
+    it("cancels an unsent sale, withdrawing the offers named and putting the rest back, the sale marked", async () => {
+      await prisma.contact.create({ data: { collectionId, name: "Piotr Niepłacący", buyer: true } });
+      const kept = await facebookOffer(1);
+      const dropped = await facebookOffer(1);
+      const sale = await ok<AgentSale>(token, "POST", `/offers/${kept.id}/sale`, {
+        price: "4.00",
+        buyer: "Piotr Niepłacący",
+        sold_at: "2026-11-10",
+      });
+      await ok<AgentSale>(token, "POST", `/offers/${dropped.id}/sale`, { price: "3.00", sale: sale.id });
+
+      const cancelled = await ok<AgentSale>(token, "POST", `/sales/${sale.id}/cancel`, {
+        reason: "Not paid",
+        withdraw: [dropped.id],
+      });
+      assert.equal(cancelled.status, "cancelled");
+      assert.deepEqual(cancelled.lines, []);
+      assert.equal(cancelled.net, "0.00");
+      assert.equal(cancelled.cancelled?.reason, "Not paid");
+      assert.deepEqual(
+        cancelled.cancelled?.lines.map((line) => [line.offerId, line.offer]),
+        [
+          [kept.id, "active"],
+          [dropped.id, "withdrawn"],
+        ]
+      );
+      assert.ok(cancelled.toReview?.actions.includes("cancelled the sale — 1 offer back to active, 1 withdrawn"));
+      assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: kept.id } })).state, "active");
+      assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: dropped.id } })).state, "withdrawn");
+
+      const listed = await ok<ListResponse<AgentSaleRow>>(token, "GET", "/sales?status=cancelled");
+      assert.ok(listed.items.some((row) => row.id === sale.id && row.status === "cancelled"));
+
+      // Refused: a second cancel, a sent sale, a read-only token.
+      assert.match((await refused(token, "POST", `/sales/${sale.id}/cancel`, {})).message, /already cancelled/);
+      const sent = await ok<AgentSale>(token, "POST", `/offers/${(await facebookOffer(1)).id}/sale`, {
+        price: "2.00",
+        buyer: "Piotr Niepłacący",
+        sold_at: "2026-11-11",
+      });
+      await prisma.sale.update({ where: { id: sent.id }, data: { status: "sent" } });
+      assert.match((await refused(token, "POST", `/sales/${sent.id}/cancel`, {})).message, /not yet sent/);
+      assert.equal((await refused(readOnlyToken, "POST", `/sales/${sent.id}/cancel`, {})).status, 403);
     });
   });
 

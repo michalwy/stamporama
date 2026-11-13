@@ -99,6 +99,20 @@ export function saleLineAddedAction(line: {
 }
 
 /**
+ * What cancelling a sale through the API says (#2500): *cancelled the sale — 2 offers back to
+ * active, 1 withdrawn*, the offers named only where the cancel moved any.
+ */
+export function saleCancelledAction(outcomes: { active: number; withdrawn: number }): string {
+  const parts = [
+    ...(outcomes.active > 0
+      ? [`${outcomes.active} ${outcomes.active === 1 ? "offer" : "offers"} back to active`]
+      : []),
+    ...(outcomes.withdrawn > 0 ? [`${outcomes.withdrawn} withdrawn`] : []),
+  ];
+  return parts.length > 0 ? `cancelled the sale — ${parts.join(", ")}` : "cancelled the sale";
+}
+
+/**
  * The chip's hint: what the API did, and when it last wrote. `formatAt` is the screen's own instant
  * formatter, so the hint reads the time the way every other time there does.
  */

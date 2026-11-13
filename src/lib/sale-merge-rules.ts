@@ -1,5 +1,5 @@
 import { formatEntityNo } from "./quick-jump";
-import { isSaleSent } from "./sale-status";
+import { isSaleCancelled, isSaleSent } from "./sale-status";
 import type { StoredSaleApiReview } from "./sale-review";
 
 /**
@@ -81,6 +81,9 @@ export function saleMergeRefusal(
   if (a.platformId !== b.platformId) return "Only sales on the same platform can be merged.";
   if (a.currency !== b.currency) return "Only sales in the same currency can be merged.";
   for (const side of [a, b]) {
+    if (isSaleCancelled(side.status)) {
+      return `Sale ${formatEntityNo(side.saleNo)} is cancelled — a cancelled sale cannot be merged.`;
+    }
     if (isSaleSent(side.status)) {
       return `Sale ${formatEntityNo(side.saleNo)} has already been sent — a sent sale cannot be merged.`;
     }

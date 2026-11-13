@@ -10,9 +10,11 @@ import {
   moveSaleLinesThroughApi,
   recordSaleLinesThroughApi,
   setSaleNoteThroughApi,
+  cancelSaleThroughApi,
   type ApiSaleTarget,
-  type SaleStatus,
 } from "../../sales";
+import type { SaleRecordStatus } from "../../sale-status";
+import type { CancelOfferOutcome } from "../../sale-cancel-rules";
 import { SELLABLE_OFFER_STATES } from "../../sale-rules";
 import { saleLineAddedAction } from "../../sale-review";
 import {
@@ -74,8 +76,14 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // remark, plain text — through `setSaleNoteThroughApi`, which marks the sale *to review* in the same
 // transaction. It is the one part of a sale's own record the agent may write.
 //
-// **No deleting, and no moving a sale.** No operation removes a sale or a line, changes a sale's
-// status, its header, a line's price or set, or its packing, shipping or share link — those stay in
+// **A fifth, since #2500**: `cancel_sale` cancels a sale the buyer never paid for — kept as
+// *Cancelled*, its copies and supplies released, each offer it closed back to active or withdrawn as
+// the agent says — through `cancelSaleThroughApi`, which marks the sale *to review* in the cancel's
+// transaction. It is the one status change the agent may make: a buyer who did not pay is something
+// an agent reading the conversation learns first.
+//
+// **No deleting, and no moving a sale.** No operation removes a sale or a line, moves a sale through
+// its fulfilment statuses, changes its header, a line's price or set, or its packing, shipping or share link — those stay in
 // the app, where the collector has the parcel in view. `tests/unit/agent-api-operation-boundary.test.ts`
 // holds it as a fact about what this module imports.
 //
@@ -160,7 +168,7 @@ const LIST_SALES_PARAMETERS: readonly ParameterSpec[] = [
     type: "string[]",
     required: false,
     description:
-      "Restrict to sales in these fulfilment statuses: `ordered`, `paid`, `packed`, `sent`, `received`. Left out, every status.",
+      "Restrict to sales in these statuses: the fulfilment statuses `ordered`, `paid`, `packed`, `sent`, `received`, or `cancelled` — a sale the buyer never paid for, kept as a record that counts nowhere. Left out, every status.",
     values: AGENT_SALE_STATUSES,
   },
   {
@@ -215,7 +223,7 @@ export async function readSales(
         }
       : {}),
     ...(buyerValue !== null ? { buyerId: await resolveBuyerParam(context, buyerValue) } : {}),
-    ...(statuses.length > 0 ? { statuses: [...statuses] as SaleStatus[] } : {}),
+    ...(statuses.length > 0 ? { statuses: [...statuses] as SaleRecordStatus[] } : {}),
     ...(from !== null ? { soldFrom: new Date(`${parseIsoDate(from, "sold_from")}T00:00:00.000Z`) } : {}),
     ...(to !== null ? { soldTo: new Date(`${parseIsoDate(to, "sold_to")}T00:00:00.000Z`) } : {}),
     ...(optionalBoolean(params, "to_review") === true ? { toReview: true } : {}),
@@ -720,4 +728,56 @@ export const setSaleNoteOperation: Operation = {
     description: "The sale as it now stands, in `get_sale`'s shape, marked `toReview` with whether the note was set or cleared.",
   },
   handler: async (context, params) => setSaleNote(context, params),
+};
+
+// ── cancel_sale (#2500) ──────────────────────────────────────────────────────
+
+export async function cancelSaleThroughAgent(context: OperationContext, params: ParsedParams): Promise<AgentSale> {
+  const saleId = requiredString(params, "saleId");
+  await assertSale(context, saleId);
+  // The per-offer choice (#2500): the offers named are withdrawn, every other offer the sale closed
+  // goes back to active — the dialog's default.
+  const offerOutcomes: Record<string, CancelOfferOutcome> = Object.fromEntries(
+    stringList(params, "withdraw").map((offerId) => [offerId, "withdrawn" as const])
+  );
+  await refusingDomainGuards(() =>
+    cancelSaleThroughApi(context.ownerId, context.collectionId, saleId, {
+      reason: optionalString(params, "reason"),
+      offerOutcomes,
+    })
+  );
+  return readSaleById(context, saleId);
+}
+
+export const cancelSaleOperation: Operation = {
+  name: "cancel_sale",
+  method: "POST",
+  path: "/sales/{saleId}/cancel",
+  description:
+    "Cancel a sale the buyer never paid for, as the app's Cancel sale does. The sale is kept with the status `cancelled` and counts nowhere — not in revenue, profit or sold counts. Its copies become available again and its packing supplies go back to stock. Each offer the sale closed goes back to active (marked out of step with its listing), or is withdrawn when named in `withdraw`. Only a sale not yet sent can be cancelled, and a cancelled sale is never reopened — a buyer who pays after all is a new sale. The sale waits for the collector's review.",
+  writes: true,
+  parameters: [
+    SALE_ID_PARAMETER,
+    {
+      name: "reason",
+      in: "body",
+      type: "string",
+      required: false,
+      description: "Why the sale is cancelled, shown on it — such as `Not paid`. Left out, none.",
+    },
+    {
+      name: "withdraw",
+      in: "body",
+      type: "string[]",
+      required: false,
+      description:
+        "The offers the sale closed that are to be withdrawn rather than put back on sale, by their ids from `get_sale`'s lines. Every other offer the sale closed goes back to active; an offer the sale did not close only gets its set back. Left out, every offer goes back to active.",
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "The sale as it now stands, in `get_sale`'s shape: status `cancelled`, no lines, and `cancelled` with when, why and what it had sold — each set with what became of its offer. Marked `toReview`.",
+  },
+  handler: async (context, params) => cancelSaleThroughAgent(context, params),
 };

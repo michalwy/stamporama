@@ -3,6 +3,7 @@ import { prisma, type DbTransaction } from "./db";
 import { changeServiceSupplies } from "./service-supplies";
 import { canExpressInBase, computeSupplyBatchCost, purchaseCostsOf } from "./purchase-allocation";
 import { settleSupplies } from "./supply-settlement";
+import { isSaleCancelled } from "./sale-status";
 import {
   saleSuppliesCost,
   supplyLineCost,
@@ -150,11 +151,13 @@ function quantityOf(input: SaleSupplyLineInput): number {
 async function assertSale(ownerId: string, saleId: string): Promise<string> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
-    select: { collectionId: true, collection: { select: { ownerId: true } } },
+    select: { collectionId: true, status: true, collection: { select: { ownerId: true } } },
   });
   if (!sale || sale.collection.ownerId !== ownerId) {
     throw new Error("Sale not found or access denied.");
   }
+  // A cancelled sale's supplies went back to stock (#2500); it takes none again.
+  if (isSaleCancelled(sale.status)) throw new Error("This sale is cancelled and cannot be changed.");
   return sale.collectionId;
 }
 

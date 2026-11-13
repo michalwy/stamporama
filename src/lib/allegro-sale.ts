@@ -1,4 +1,5 @@
 import "server-only";
+import { claimedSaleLines } from "./sale-cancel-rules";
 import { prisma } from "./db";
 import { getModulePlatform } from "./module-platform";
 import { ALLEGRO_PLATFORM_MODULE } from "./platform-modules";
@@ -226,11 +227,18 @@ export async function getAllegroOrderSalePrefill(
   const claims = await prisma.sale.findMany({
     where: { collectionId, externalRef: orderId },
     orderBy: { saleNo: "asc" },
-    select: { id: true, saleNo: true, lines: { select: { offerId: true } } },
+    select: {
+      id: true,
+      saleNo: true,
+      status: true,
+      lines: { select: { offerId: true } },
+      cancelledLines: { select: { offerId: true } },
+    },
   });
   const claimed = claims[0] ?? null;
+  // A cancelled sale (#2500) accounts for what it had sold, so its order offers nothing to record.
   const recordedOfferIds = new Set(
-    claims.flatMap((sale) => sale.lines.flatMap((line) => (line.offerId ? [line.offerId] : [])))
+    claims.flatMap((sale) => claimedSaleLines(sale).flatMap((line) => (line.offerId ? [line.offerId] : [])))
   );
 
   // The sets still sellable, per offer. Read once for the whole platform rather than per line: a

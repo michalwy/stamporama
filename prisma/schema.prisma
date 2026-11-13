@@ -5847,6 +5847,8 @@ model Offer {
   proposal      Proposal?      @relation("OfferProposal", fields: [proposalId], references: [id], onDelete: SetNull)
   sets       OfferSet[]
   saleLines  SaleLine[]
+  // The lines of cancelled sales this offer was on (#2500) — a record only; nothing is sold by them.
+  cancelledSaleLines SaleCancelledLine[]
   /** Listing images owned by this offer (#311): the generated collages, and the files uploaded
    * straight to it for a manual attachment (#313). */
   photos     Photo[]
@@ -6344,7 +6346,16 @@ model Sale {
   // Fulfillment status in lifecycle order (#191): ordered → paid → packed → sent → received.
   // Defaults `ordered` — a freshly recorded sale is placed but not yet paid/shipped. Each change
   // also appends a `SaleStatusEvent` so the transition timeline is preserved for reporting/audit.
+  // Or **`cancelled`** (#2500, ADR-0082): the buyer never paid, and the sale is kept as a record
+  // rather than deleted. Reached only from an unsent status and never left; its sold sets are gone
+  // (their copies and offers released as a delete releases them) and what they were is kept in
+  // `cancelledLines`. A cancelled sale counts nowhere — revenue, profit, sold counts, figures.
   status        String   @default("ordered")
+  // Why the sale was cancelled (#2500) — free text, prefilled *Not paid* by the dialog; null on a
+  // sale that is not cancelled, or one cancelled without a reason.
+  cancelReason  String?
+  // When the sale was cancelled (#2500); null on a sale that is not.
+  cancelledAt   DateTime?
   // The *to review* marker (#1948), the sale-side twin of `AuctionSale`'s (#1626): set by every
   // write the agent API makes to this sale, cleared only by the collector's *Confirm*.
   // `apiReviewAt` is the latest such write and null means no marker; `apiReviewCreated` says the API
@@ -6371,6 +6382,8 @@ model Sale {
   // Packing supplies the parcel used (#1898): with the postage, what *my shipping* is.
   supplyLines   SaleSupplyLine[]
   statusEvents  SaleStatusEvent[]
+  // What a cancelled sale had sold (#2500) — see `SaleCancelledLine`. Empty on any other sale.
+  cancelledLines SaleCancelledLine[]
   // What was said with the buyer about this sale (#2149) — see `ConversationEntry`.
   conversationEntries ConversationEntry[]
   // The collector's own files about the sale (#2198) — see `SaleAttachment`.
@@ -6536,6 +6549,43 @@ model SaleStatusEvent {
 
   @@index([saleId])
   @@map("sale_status_event")
+}
+
+// One sold set of a **cancelled** sale (#2500, ADR-0082), as it read when the sale was cancelled.
+//
+// Cancelling deletes the sale's `SaleLine`s — that is what frees their copies (the no-double-sale
+// `UNIQUE` on `sale_line_item.itemId`), their sets and their offers, exactly as deleting the sale does
+// — so what the buyer had bought is kept here instead, as words and an amount: the line's heading and
+// catalogue numbers as the sale's screen named them, and its price in the sale's currency. A record,
+// not a sale line: no read that counts sales, sold sets or copies looks at this table.
+model SaleCancelledLine {
+  id           String   @id @default(cuid())
+  saleId       String
+  // The offer the line came through, for a link back to it; `SetNull` so deleting the offer leaves
+  // the record. Null on a set that was on no offer, and on free extras.
+  offerId      String?
+  // The offer's number as it was — kept beside `offerId` so the heading still reads once the offer
+  // is gone.
+  offerNo      Int?
+  // The line's heading (`saleLineName().title`) and its muted second line of catalogue numbers.
+  title        String
+  numbers      String?
+  // The line's price, in the sale's currency.
+  price        Decimal  @db.Decimal(10, 2)
+  freeExtra    Boolean  @default(false)
+  // What the cancel did to the line's offer (#2500): `active` (back on sale, marked out of step with
+  // its listing) or `withdrawn`. Null where it did nothing to one — a set on no offer, or an offer
+  // the sale had not closed because it still had sets of its own to sell.
+  offerOutcome String?
+  // The line's place on the sale's screen, so the record reads in the order the sale did.
+  position     Int
+
+  sale  Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  offer Offer? @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@index([saleId])
+  @@index([offerId])
+  @@map("sale_cancelled_line")
 }
 
 // The conversation log (#2149, ADR-0073): what was said with a buyer — an agreement, an address, an

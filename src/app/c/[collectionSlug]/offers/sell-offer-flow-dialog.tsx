@@ -12,7 +12,7 @@ import { useSellableOffers, useSalesInfinite, useInvalidateSales } from "@/app/c
 import { useInvalidateOffers } from "./use-offers-query";
 import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog";
 import { saleStatusChipStyle, saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
-import { UNSENT_SALE_STATUSES } from "@/lib/sale-status";
+import { SALE_STATUS_ORDER, UNSENT_SALE_STATUSES } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 import { planOfferSale, saleTargetOf, soldIntoSaleMessage } from "@/lib/offer-sale-plan";
@@ -128,8 +128,9 @@ export function SellOfferFlowDialog({
   );
   const { data: salesPages, isLoading: loadingSales } = useSalesInfinite(collectionId, {
     platformId: target?.platformId,
-    // The list's own order is newest first; with the switch off it holds only unsent sales.
-    statuses: showSent ? undefined : [...UNSENT_SALE_STATUSES],
+    // The list's own order is newest first; with the switch off it holds only unsent sales. With it
+    // on, every lifecycle status — a cancelled sale (#2500) takes nothing more.
+    statuses: showSent ? [...SALE_STATUS_ORDER] : [...UNSENT_SALE_STATUSES],
   });
   const existingSales = useMemo(
     () => (salesPages?.pages.flatMap((p) => p.items) ?? []).filter((s) => s.currency === target?.currency),

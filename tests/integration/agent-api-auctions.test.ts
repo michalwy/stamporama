@@ -395,7 +395,10 @@ describe("auction reads (#1036)", () => {
     // sale from an auction house's, so a name about attachments is judged by its other words —
     // `add_auction_sale_attachments` would still be caught. **Nor is a sale's note** (#2379), the same
     // way: `set_sale_note` writes the collector's remark on one of their own sales, and
-    // `set_auction_sale_note` would still be caught.
+    // `set_auction_sale_note` would still be caught. **Nor is cancelling one of the collector's own
+    // sales** (#2500): `cancel_sale` is a sale the buyer never paid for, kept as a record; it is
+    // judged without `sale`, the one word it has beyond the verb, so `cancel_auction_sale` would still
+    // be caught.
     //
     // **Nor is a proposal's lot** (#2303). A proposal's lots are Direct offers put together for one
     // buyer (ADR-0075), which the agent is allowed to add, price and take out — judged, like a
@@ -404,7 +407,7 @@ describe("auction reads (#1036)", () => {
       const words = name.split("_");
       const auctionWords = words.includes("purchase") || words.includes("proposal")
         ? words.filter((word) => word !== "lot" && word !== "lots")
-        : words.includes("attachments") || words.includes("note")
+        : words.includes("attachments") || words.includes("note") || name === "cancel_sale"
           ? words.filter((word) => word !== "sale" && word !== "sales")
           : words;
       return WRITE_VERBS.has(words[0]) && auctionWords.some((word) => AUCTION_WORDS.has(word));

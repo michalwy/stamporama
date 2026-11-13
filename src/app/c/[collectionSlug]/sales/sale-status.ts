@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { SALE_STATUS_ORDER, type SaleStatus } from "@/lib/sale-status";
+import { isSaleCancelled, SALE_STATUS_ORDER, type SaleStatus } from "@/lib/sale-status";
 
 // Shared presentation for a sale's fulfillment status (#191), used by the list row badge and the
 // detail-view inline control so the label + tint stay in sync. Order comes from the domain module.
@@ -41,7 +41,11 @@ export function saleStatusChipStyle(token: string): CSSProperties {
   };
 }
 
+/** A cancelled sale (#2500): the error tint, as a deal that fell through. */
+const CANCELLED_META = { label: "Cancelled", token: "error" };
+
 /** Meta for any stored status string, falling back to a raw label for unknown values. */
 export function saleStatusMeta(status: string): { label: string; token: string } {
+  if (isSaleCancelled(status)) return CANCELLED_META;
   return SALE_STATUS_META[status as SaleStatus] ?? { label: status, token: "muted" };
 }
