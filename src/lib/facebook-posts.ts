@@ -1448,19 +1448,31 @@ export async function takeFacebookPostBackToReady(ownerId: string, offerId: stri
  * and rejecting do. A lot of a post that is up is withdrawn alone, as before: the post stays, and the
  * lot is simply no longer for sale. A lot already withdrawn with its post is left as it is, so a bulk
  * withdraw ticking several lots of one post reads as done rather than refused.
+ *
+ * Returns the ids of the offers it withdrew — empty for a lot already withdrawn with its post — so
+ * the agent's `withdraw_offer` (#2511) can name the lots that went with the one it was asked about.
+ * `→ withdrawn` is the only state this ever writes, which the agent API's boundary test reads off
+ * this body.
  */
-export async function withdrawOfferOrPost(ownerId: string, offerId: string): Promise<void> {
+export async function withdrawOfferOrPost(ownerId: string, offerId: string): Promise<string[]> {
   const offer = await prisma.offer.findUnique({
     where: { id: offerId },
     select: { state: true, facebookPostId: true },
   });
-  if (!offer?.facebookPostId) return setOfferState(ownerId, offerId, "withdrawn");
+  if (!offer?.facebookPostId) {
+    await setOfferState(ownerId, offerId, "withdrawn");
+    return [offerId];
+  }
   await assertPostOwner(ownerId, offer.facebookPostId);
-  if (offer.state === "withdrawn") return;
-  if (offer.state !== "pending") return setOfferState(ownerId, offerId, "withdrawn");
+  if (offer.state === "withdrawn") return [];
+  if (offer.state !== "pending") {
+    await setOfferState(ownerId, offerId, "withdrawn");
+    return [offerId];
+  }
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: offer.facebookPostId, state: "pending" },
     select: { id: true },
   });
   for (const lot of lots) await setOfferState(ownerId, lot.id, "withdrawn");
+  return lots.map((lot) => lot.id);
 }

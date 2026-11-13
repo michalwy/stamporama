@@ -1137,9 +1137,9 @@ async function runOverOffers(
  * stated in exactly one place. */
 export async function withdrawOffersAction(offerIds: string[]): Promise<BulkOfferActionState> {
   const session = await getSession();
-  return runOverOffers(offerIds, "Failed to withdraw the offer.", (offerId) =>
-    withdrawOfferOrPost(session.user.id, offerId)
-  );
+  return runOverOffers(offerIds, "Failed to withdraw the offer.", async (offerId) => {
+    await withdrawOfferOrPost(session.user.id, offerId);
+  });
 }
 
 /** What a bulk *Mark ready* did (#1893): the ordinary outcome, plus which of the offers it ran on are

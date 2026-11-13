@@ -149,8 +149,8 @@ export interface AgentOfferRow {
   readonly name?: string;
   readonly label: string;
   readonly platform: string;
-  /** `preparing`, `ready`, `active`, `paused`, `sold` or `withdrawn`. Nothing on this surface moves
-   *  it: going live is the collector's act and there is no operation for it (#711). */
+  /** `preparing`, `ready`, `active`, `paused`, `sold` or `withdrawn`. Going live is the collector's
+   *  act and there is no operation for it (#711); the one move open here is `withdraw_offer` (#2511). */
   readonly state: string;
   /** `fixed` — a quick buy at a stated asking price — or `auction`. */
   readonly listingType: string;

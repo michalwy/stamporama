@@ -100,6 +100,7 @@ import {
   listOffersOperation,
   setOfferPriceOperation,
   setOfferTextOperation,
+  withdrawOfferOperation,
 } from "./operations/offers";
 import {
   cancelSaleOperation,
@@ -282,6 +283,7 @@ export const OPERATIONS: readonly Operation[] = [
   draftOfferOperation,
   setOfferPriceOperation,
   setOfferTextOperation,
+  withdrawOfferOperation,
   listSalesOperation,
   getSaleOperation,
   findOrCreateBuyerOperation,

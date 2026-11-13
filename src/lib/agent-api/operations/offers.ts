@@ -5,6 +5,7 @@ import { countItems, listItemsPaginated } from "../../items";
 import { copyMarketMedian, marketStampIdsOf } from "../../market-value";
 import { readMarketMedians } from "../../market-values";
 import { reduceForFaults } from "../../valuation";
+import { withdrawOfferOrPost } from "../../facebook-posts";
 import {
   OfferActionBlockedError,
   countOffers,
@@ -16,7 +17,9 @@ import {
 } from "../../offers";
 import { OFFER_STATES, isAuctionListing, normalizeListingType } from "../../offer-rules";
 import type { OfferListingType } from "../../offer-rules";
-import { invalidRequest, notFound } from "../errors";
+import { invalidRequest, isApiError, notFound } from "../errors";
+import { checkBatchSize, countStatuses, refusalOf } from "../batch";
+import type { BatchRefusal } from "../batch";
 import { listResponse, parseListWindow } from "../list";
 import {
   optionalBoolean,
@@ -50,10 +53,15 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // ## The boundary, and why it is absence rather than a flag
 //
 // **The agent writes inside Stamporama and nowhere else. It never publishes to a marketplace.**
-// There is no publish operation here, no state operation, and no way to reach `active` at all:
-// `draft_offer` creates a `preparing` listing and nothing in this file moves it. That is not a
-// switch somebody could turn on — an operation that does not exist cannot be called, and a switch
-// is something that can be flipped (`agent-api.md`, *What is deliberately absent*).
+// There is no publish operation here and no way to reach `active` at all: `draft_offer` creates a
+// `preparing` listing and nothing in this file moves it forward. That is not a switch somebody could
+// turn on — an operation that does not exist cannot be called, and a switch is something that can be
+// flipped (`agent-api.md`, *What is deliberately absent*).
+//
+// **The one state move open is `withdraw_offer` (#2511)**, which the collector opened on 2026-11-14:
+// taking a listing off sale publishes nothing and goes nowhere but `withdrawn`, which is terminal. It
+// is the app's own *Withdraw…* — `withdrawOfferOrPost`, never `setOfferState`, which can reach
+// `active` and stays forbidden.
 //
 // The asymmetry is the argument. An agent that misreads costs a minute; an agent that mispublishes
 // lists a stamp at the wrong price under the collector's name, on someone else's platform, where
@@ -731,4 +739,104 @@ export const setOfferTextOperation: Operation = {
       "The listing as it now stands, in `get_offer`'s shape, so the text that was actually written — or rendered — can be read back rather than assumed. A field with no template to render from — neither the listing's own nor the marketplace's — renders as nothing and keeps what it had.",
   },
   handler: async (context, params) => setOfferText(context, params),
+};
+
+// ── withdraw_offer (#2511) ───────────────────────────────────────────────────
+
+// **The app's *Withdraw…*, an offer at a time, in the order sent** — the offers list's bulk withdraw
+// (`withdrawOffersAction`) said on the wire. Each offer goes through `withdrawOfferOrPost`, the one
+// path the row action and the bulk bar both take, so the lifecycle's refusals (a sold offer has
+// nothing to withdraw) and Facebook's rules (#1779: a lot of a post waiting for approval takes every
+// pending lot of it along; a lot of a post that is up goes alone; a lot already withdrawn with its
+// post is done) are stated in exactly one place. One refused offer stops nothing (#2173's batch rule),
+// and nothing is marked for review: a withdraw adds no sale, amount or status that marker guards.
+
+/** How many offers one call withdraws — the cap the batch writes take (#2173). */
+export const MAX_WITHDRAW_OFFERS = 100;
+
+/** An offer the call withdrew, or found already withdrawn with its post. */
+export interface AgentOfferWithdrawn {
+  readonly index: number;
+  readonly offerId: string;
+  /** `withdrawn` — this call withdrew it; `unchanged` — a lot already withdrawn with its post. */
+  readonly status: "withdrawn" | "unchanged";
+  readonly offerNo: number;
+  /** The offer's state now — `withdrawn` either way. */
+  readonly state: string;
+  /** The other lots of its Facebook post withdrawn with it, a post waiting for approval being taken
+   *  back whole. Absent when it went alone. */
+  readonly withdrawnWith?: readonly { readonly offerId: string; readonly offerNo: number }[];
+}
+
+export type AgentOfferWithdrawAnswer = AgentOfferWithdrawn | (BatchRefusal & { readonly offerId: string });
+
+export interface AgentOfferWithdrawResponse {
+  readonly withdrawn: number;
+  readonly unchanged: number;
+  readonly refused: number;
+  readonly offers: readonly AgentOfferWithdrawAnswer[];
+}
+
+export async function withdrawOffers(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<AgentOfferWithdrawResponse> {
+  const offerIds = stringList(params, "offer_ids");
+  checkBatchSize(offerIds, "offer_ids", MAX_WITHDRAW_OFFERS, "offer id", "an id from `list_offers`");
+
+  const offers: AgentOfferWithdrawAnswer[] = [];
+  for (const [index, offerId] of offerIds.entries()) {
+    try {
+      const { offerNo } = await assertOffer(context, offerId);
+      const done = await refusingDomainGuards(() => withdrawOfferOrPost(context.ownerId, offerId));
+      const others = done.filter((id) => id !== offerId);
+      const numbers =
+        others.length === 0
+          ? []
+          : await prisma.offer.findMany({
+              where: { id: { in: others }, collectionId: context.collectionId },
+              select: { id: true, offerNo: true },
+              orderBy: { offerNo: "asc" },
+            });
+      const now = await prisma.offer.findUniqueOrThrow({ where: { id: offerId }, select: { state: true } });
+      offers.push({
+        index,
+        offerId,
+        status: done.includes(offerId) ? "withdrawn" : "unchanged",
+        offerNo,
+        state: now.state,
+        ...(numbers.length > 0
+          ? { withdrawnWith: numbers.map((row) => ({ offerId: row.id, offerNo: row.offerNo })) }
+          : {}),
+      });
+    } catch (err) {
+      if (!isApiError(err)) console.error("[api/v1] withdraw_offer offer failed", err);
+      offers.push({ ...refusalOf(index, err), offerId });
+    }
+  }
+  return { ...countStatuses(offers, ["withdrawn", "unchanged", "refused"] as const), offers };
+}
+
+export const withdrawOfferOperation: Operation = {
+  name: "withdraw_offer",
+  method: "POST",
+  path: "/offers/withdraw",
+  description:
+    "Withdraw one listing or several, as the app's *Withdraw…* does — when the stamp went elsewhere, the listing was taken down on the marketplace, or the collector changed their mind. It changes Stamporama's record only: nothing is sent to the marketplace, so a listing still up there is the collector's to take down. A withdrawn listing is closed for good — it cannot be reopened, here or in the app — and its copies are free to be listed again. Only an open listing can be withdrawn (`preparing`, `ready`, `pending`, `active` or `paused`); a sold or already withdrawn one is refused with the reason and left as it is. On Facebook, a lot of a post that is up is withdrawn alone and the post stays; a lot of a post still waiting for the group's approval takes every pending lot of that post with it; and a lot already withdrawn with its post counts as done. Each listing succeeds or is refused on its own.",
+  writes: true,
+  parameters: [
+    {
+      name: "offer_ids",
+      in: "body",
+      type: "string[]",
+      required: true,
+      description: `The listings to withdraw, by id from \`list_offers\` — one, or up to ${MAX_WITHDRAW_OFFERS}. They are withdrawn in the order sent.`,
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "The counts `withdrawn`, `unchanged` and `refused`, and `offers` in the order sent — each with its `index` and `offerId`, then `status` `withdrawn` (this call withdrew it) or `unchanged` (a Facebook lot already withdrawn with its post), its `offerNo`, its `state` now, and in `withdrawnWith` the other lots of its post that were withdrawn with it; or `status: refused` with the `reason`, the listing left as it was.",
+  },
+  handler: async (context, params) => withdrawOffers(context, params),
 };
