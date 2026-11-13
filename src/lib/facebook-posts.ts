@@ -35,6 +35,13 @@ import {
   type FacebookTitleEdge,
   type FacebookTitleWordsMode,
 } from "./facebook-post-rules";
+import {
+  facebookPostListDates,
+  facebookPostListFigures,
+  type FacebookPostListDates,
+  type FacebookPostListFigures,
+} from "./facebook-post-list-figures";
+import { POST_LIST_LOT_FIGURES_SELECT, readPostListLotFigures } from "./facebook-post-list-reads";
 import { allocateEntityNumber } from "./items";
 import {
   changeLotGroupTitleWords,
@@ -804,6 +811,11 @@ export interface FacebookPostListItem {
   /** The day the post went up — its earliest lot's listing date, `YYYY-MM-DD` — or null before then. */
   postedOn: string | null;
   link: string | null;
+  /** The dates beside its stage chip, by stage (#2502). */
+  dates: FacebookPostListDates;
+  /** The figures under its chips (#2502), money in {@link baseCurrency}. */
+  figures: FacebookPostListFigures;
+  baseCurrency: string;
 }
 
 export interface FacebookPostListFilters {
@@ -883,12 +895,33 @@ export async function listFacebookPostsPaginated(
       postNo: true,
       title: true,
       layout: true,
+      createdAt: true,
       group: { select: { id: true, name: true, archivedAt: true } },
-      lots: { orderBy: { facebookLotNo: "asc" }, select: { state: true, url: true, listingDate: true } },
+      lots: {
+        orderBy: { facebookLotNo: "asc" },
+        select: {
+          ...POST_LIST_LOT_FIGURES_SELECT,
+          state: true,
+          url: true,
+          listingDate: true,
+          stateChangedAt: true,
+          closedAt: true,
+          endsAt: true,
+        },
+      },
     },
   });
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
+  const { baseCurrency } = await prisma.collection.findUniqueOrThrow({
+    where: { id: collectionId },
+    select: { baseCurrency: true },
+  });
+  const lotFigures = await readPostListLotFigures(
+    collectionId,
+    baseCurrency,
+    page.flatMap((row) => row.lots)
+  );
 
   // A post following its group's layout reads it live, as its screen does; a page names few groups.
   const settings = new Map<string, Awaited<ReturnType<typeof readFacebookGroupSettings>>>();
@@ -903,6 +936,7 @@ export async function listFacebookPostsPaginated(
       .map((l) => l.listingDate)
       .filter((d): d is Date => d !== null)
       .sort((a, b) => a.getTime() - b.getTime());
+    const stage = facebookPostStage(row.lots);
     return {
       postId: row.id,
       postNo: row.postNo,
@@ -910,13 +944,27 @@ export async function listFacebookPostsPaginated(
       group: { id: row.group.id, name: row.group.name, archived: row.group.archivedAt !== null },
       lotCount: row.lots.length,
       forSaleCount: row.lots.filter((l) => !(CLOSED_OFFER_STATES as readonly string[]).includes(l.state)).length,
-      stage: facebookPostStage(row.lots),
+      stage,
       layout: facebookPostLayout(
         { layout: row.layout, lotCount: row.lots.length },
         settings.get(row.group.id) ?? { multiLotLayout: "text" }
       ),
       postedOn: posted.length ? posted[0].toISOString().slice(0, 10) : null,
       link: facebookPostLink(row.lots),
+      dates: facebookPostListDates(
+        stage,
+        row.createdAt,
+        row.lots.map((l) => ({
+          state: l.state,
+          auction: isAuctionListing(normalizeListingType(l.listingType)),
+          listingDate: l.listingDate,
+          stateChangedAt: l.stateChangedAt,
+          closedAt: l.closedAt,
+          endsAt: l.endsAt,
+        }))
+      ),
+      figures: facebookPostListFigures(row.lots.map((l) => lotFigures.get(l.id)!)),
+      baseCurrency,
     };
   });
   return { items, nextCursor: hasMore ? String(offset + pageSize) : null };

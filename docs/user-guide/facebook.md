@@ -653,9 +653,32 @@ posts of several lots and posts of one offer alike, so it is the whole of Facebo
 Each row shows the post's number, title and group, where it stands (being prepared, ready to post,
 waiting for approval, up in the group, or over), how many lots it holds and how many of them are still
 for sale — neither sold nor withdrawn — and its layout (**Text** or **Captions**), or **Posted alone**
-for a post of one offer — **No lots yet** for a post made by hand that has none; then the day it went
-up and its link. Click a row to open the post's screen. **New post…** at the right of the toolbar
+for a post of one offer — **No lots yet** for a post made by hand that has none; then its dates and
+its link. Click a row to open the post's screen. **New post…** at the right of the toolbar
 makes a post by hand ([above](#a-post-with-several-lots)).
+
+Beside where it stands, each row gives the dates that matter at that stage:
+
+- **Being prepared** or **Ready to post** — when the post was made.
+- **Waiting for approval** — when it was made and when it was submitted, with how long ago
+  (*submitted 12 Nov (1 day ago)*).
+- **Up in the group** — since when it has been up, and for auctions when they end (*auctions end 14 Nov
+  20:00 (tomorrow)*); when its auctions end at different times, the earliest and the latest.
+- **Over** — when it went up and when its last lot ended.
+
+A date the app did not record is left out rather than guessed — a post submitted for approval before
+mid-October 2026 shows no submission date.
+
+Under the chips a row of figures says what the post holds and how it has done, money in the
+collection's base currency:
+
+- **Lots** — how many lots, and how many copies they hold in all.
+- **Asking** — the lots' prices summed: a quick buy's asking price, an auction's starting price. Lots
+  with no price yet are left out and counted (*3 unpriced*).
+- **Catalogue** and **Cost** — the catalogue value and the cost of the lots' copies, as each offer's
+  price table works them out; where some lots have none, the figure says over how many it was taken.
+- **Sold** — how many lots are in a recorded sale and what they brought, or *—* while nothing is sold.
+  A cancelled sale does not count.
 Narrow the list with the **group** filter, the **stage** chips and **No title**; click a lit chip again
 to show every post. The list remembers its filters for the collection: leave it and come back — from
 the sidebar, a post's screen or Quick jump — and it shows the same group and chips, and a reload or a

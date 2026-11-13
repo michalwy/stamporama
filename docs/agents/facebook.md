@@ -456,6 +456,22 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (#844). The params keep their pre-#2108 names (`group`, `stage`, `untitled`). A **stored** group that
   no longer holds a post is pruned against the menu's options; one a link names is taken as written.
   While any filter narrows the list, the band under the toolbar names them with *Clear filters*.
+  **Each row carries its dates and figures** (#2502, settled with the collector on 2026-11-13 from a
+  mockup): dates beside the stage chip by stage, and a row of figures under the chips. The rules are
+  `facebook-post-list-figures.ts` (pure, unit-tested); the page's reads are `facebook-post-list-reads.ts`,
+  every lookup asked once for the page as the Prepare screen asks them (#2222) — holdings by set, the
+  pending copies' cost estimates, the rates. **Nothing new is stored**: *created* is the post's
+  `createdAt`, *submitted* the pending lots' `stateChangedAt` (#1811) — left out when at or before
+  `STATE_CHANGED_RECORDED_FROM`, since that column's backfill was an estimate — *up since* the earliest
+  `listingDate` (which an approval stamps, not a submission), the auctions' end their `endsAt`, and
+  *ended* the last lot's end: an auction at `endsAt` (or `closedAt` where it closed earlier), anything
+  else at `closedAt`. Where any lot lacks the date the post's is taken from, it is left out — the
+  extreme of the others could be the wrong one. A lot's catalogue and cost are `offerPriceFigures`'
+  own, per set in the base currency, so the list says what the offer's price table says; *Asking* is
+  each lot's stated price (an auction's starting price) converted at today's rate (#208), unpriced lots
+  counted apart; *Sold* is the lots with a sale line and what the lines brought — a cancelled sale's
+  lines are gone (#2500, ADR-0082) and the read filters `status = cancelled` and free extras besides.
+  The integration test is `tests/integration/facebook-posts-list-figures.test.ts`.
 
 - **A post is deleted with every offer in it** (#2060, decided with the collector on 2026-10-18), in
   any stage, from the ⋮ beside the post screen's title and from the row's ⋮ on the list of posts —
