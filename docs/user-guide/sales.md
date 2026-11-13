@@ -480,6 +480,9 @@ A sale carries a **fulfillment status** that tracks its progress through a fixed
 
 **Ordered → Paid → Packed → Sent → Delivered**
 
+A sale the buyer never paid for can instead be [**Cancelled**](#cancelling-a-sale-the-buyer-never-paid-for)
+— kept as a record, outside the sequence.
+
 A new sale starts at **Ordered**. On the detail screen's header, the **Status** control lets you
 either pick any step from the dropdown or click the **→ next** button to advance one step. Each
 change is saved immediately and stamped with the moment it happened, so the sale keeps a timeline
@@ -1053,11 +1056,48 @@ undo each other: moved sets can be moved back the same way, or the two sales mer
 - **Both halves keep the order number.** On Allegro the worklist reads them together, so the order
   is not offered again; anything still left on it is added to the first of the two.
 
+## Cancelling a sale the buyer never paid for
+
+When a buyer wins lots and then never pays, **cancel** the sale rather than deleting it. On the
+sale's screen, **⋮ → Cancel sale…** — offered while the sale is *Ordered*, *Paid* or *Packed*; a
+parcel already sent is a return, not a cancellation.
+
+The dialog lists the **offers the sale closed** and asks, for each, whether it goes **back to
+active** (the listing is still up, or you will put it back) or is **withdrawn**. *Back to active* is
+chosen to start with. Sets on no offer, and sets of an offer that still had others to sell, are
+simply released. You can give a **reason** — it starts as *Not paid* — and it is shown on the
+cancelled sale.
+
+Cancelling releases exactly what deleting does:
+
+- the sale's **copies** are no longer sold, and can be sold again;
+- its **packing supplies** go back to stock;
+- an offer back to active is open again — on Facebook its lot is open in its post — and is marked
+  **out of step** with its listing, so you remember to put the quantity back; its listing photos are
+  made again if they had been cleaned up. A withdrawn offer is closed, as any withdrawn offer.
+
+The sale itself is **kept**, with the status **Cancelled**. It counts **nowhere**: not in revenue,
+profit, sold counts, the Overview, the profit and loss screen or a contact's figures. Its screen is a
+record — the buyer, when and why it was cancelled, and **what the buyer had bought**, each set with
+its price and what became of its offer. Its note, attachments and conversation stay, and you can
+still add to them. A cancelled sale is never reopened: if the buyer pays after all, record a new
+sale.
+
+On the Sales list a cancelled sale has a red **Cancelled** chip and its reason where the proceeds
+would be. The **Cancelled** status chip lists only cancelled sales; the other status chips leave
+them out, and with no chip they are shown with the rest.
+
+**The buyer is remembered.** Their contact page shows how many of their sales were cancelled —
+*2 cancelled* — under their number of sales, and recording a new sale to them shows *This buyer has
+2 cancelled sales.* under the buyer. It is a warning only; the sale is recorded as usual.
+
 ## Deleting
 
 From a list row's **⋮** menu you can **delete** a sale — that removes the record, makes its copies
 available again, returns any offers it marked sold to **Active**, returns its packing supplies
-to stock, and deletes its [attachments](#attachments).
+to stock, and deletes its [attachments](#attachments). It leaves **no trace**, so it is for a sale
+recorded by mistake; a buyer who never paid is better [cancelled](#cancelling-a-sale-the-buyer-never-paid-for).
+Deleting a cancelled sale removes its record, and the buyer's count of cancelled sales with it.
 
 ## Finding a sale
 

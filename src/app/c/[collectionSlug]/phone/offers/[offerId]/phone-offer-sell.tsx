@@ -14,6 +14,7 @@ import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { PurchaseContactSelect } from "@/app/c/[collectionSlug]/purchases/purchase-contact-select";
 import { useInvalidateSales } from "@/app/c/[collectionSlug]/sales/use-sales-query";
 import { useFacebookBuyerLookup } from "@/app/c/[collectionSlug]/sales/use-facebook-buyer-lookup";
+import { BuyerCancelledWarning } from "@/app/c/[collectionSlug]/sales/buyer-cancelled-warning";
 
 /**
  * Selling the offer from the phone (#2009): who bought it and for how much, and nothing else — the
@@ -41,7 +42,7 @@ export function PhoneOfferSell({
   const [buyerName, setBuyerName] = useState("");
   const [buyerProfileUrl, setBuyerProfileUrl] = useState("");
   const [price, setPrice] = useState(() => phoneSalePriceDefault(offer.price));
-  const { conflict: buyerConflict, who: buyerWho } = useFacebookBuyerLookup(
+  const { conflict: buyerConflict, who: buyerWho, contactId: buyerContactId } = useFacebookBuyerLookup(
     collectionId,
     offer.buyerByFacebookProfile,
     buyerName,
@@ -122,6 +123,11 @@ export function PhoneOfferSell({
             }}
           />
         )}
+        {/* A buyer whose sales were cancelled is named as one (#2500). */}
+        <BuyerCancelledWarning
+          collectionId={collectionId}
+          buyerId={offer.buyerByFacebookProfile ? buyerContactId : buyerId || null}
+        />
       </div>
 
       {offer.buyerByFacebookProfile && (

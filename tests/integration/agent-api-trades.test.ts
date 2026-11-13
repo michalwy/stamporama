@@ -384,7 +384,11 @@ describe("the want, checklist and trade operations (#712)", () => {
       //     prepares for one contact — and not a trade proposal to a partner, which `proposal` is
       //     here for. None of them reaches the buyer: marking one sent, declining it and its link stay
       //     in the app, and the import guard holds `moveProposal` and the link's writers out.
+      //   - `cancel_sale` (#2500) cancels one of the collector's own sales the buyer never paid for:
+      //     it is kept as a record in this collection and nothing goes to the buyer — `cancel` is
+      //     forbidden here for a trade, which is a partner's too.
       const exempt = new Set([
+        "cancel_sale",
         "set_stamp_colnect_id",
         "set_stamp_colnect_ids",
         "list_proposals",

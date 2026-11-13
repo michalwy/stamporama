@@ -24,6 +24,7 @@ import { CUSTOM_SHIPPING_OPTION } from "@/lib/sale-rules";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { formControl } from "@/app/control-style";
 import { useFacebookBuyerLookup } from "./use-facebook-buyer-lookup";
+import { BuyerCancelledWarning } from "./buyer-cancelled-warning";
 
 const INPUT_STYLE: React.CSSProperties = {
   ...formControl,
@@ -238,7 +239,7 @@ export function SaleFormDialog({
 
   // Who the buyer typed by their Facebook profile is (#1777) — the lookup the save makes, shared with
   // the phone's *Sell* (#2009).
-  const { conflict: buyerConflict, who: buyerWho } = useFacebookBuyerLookup(
+  const { conflict: buyerConflict, who: buyerWho, contactId: buyerContactId } = useFacebookBuyerLookup(
     collectionId,
     buyerByFacebookProfile,
     buyerName,
@@ -397,6 +398,13 @@ export function SaleFormDialog({
                         setBuyerId(id);
                         setBuyerName(name);
                       }}
+                    />
+                  )}
+                  {/* A new sale to a buyer whose sales were cancelled says so (#2500). */}
+                  {mode === "add" && (
+                    <BuyerCancelledWarning
+                      collectionId={collectionId}
+                      buyerId={buyerByFacebookProfile ? buyerContactId : buyerId || null}
                     />
                   )}
                 </div>

@@ -9,6 +9,10 @@ replaced by an offer-owned model (`Offer ⊃ Set ⊃ Item`, `Lot` removed). §3 
 
 Offers and sales name a `Platform` since [ADR-0071](0071-platform-entity.md) (#1955), no longer a platform contact; the currency lock (§4) reads it unchanged.
 
+**Amended by [ADR-0082](0082-a-sale-can-be-cancelled.md) (#2500):** a sale not yet sent can be
+**cancelled** — kept with the status `cancelled`, outside the fulfilment lifecycle, its lines
+released as a delete releases them and kept as a record, counting nowhere.
+
 ## Context
 
 A collector sells stamps — individually or in sets — across several marketplaces at once

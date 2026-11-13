@@ -17,11 +17,30 @@
 //  - **The *to review* marker travels with the sale** (#1948), on the list and on the record, so an
 //    agent reading back what it recorded sees that it is still waiting for the collector.
 
-import { SALE_STATUS_ORDER } from "../sale-status";
+import { SALE_RECORD_STATUSES } from "../sale-status";
 import { invalidRequest } from "./errors";
 
-/** The fulfilment statuses, in lifecycle order — `list_sales`'s closed vocabulary. */
-export const AGENT_SALE_STATUSES: readonly string[] = SALE_STATUS_ORDER;
+/** The fulfilment statuses, in lifecycle order, then `cancelled` (#2500) — `list_sales`'s closed
+ *  vocabulary. */
+export const AGENT_SALE_STATUSES: readonly string[] = SALE_RECORD_STATUSES;
+
+/** What a cancelled sale had sold (#2500), one set as the sale's screen named it when it was cancelled. */
+export interface AgentCancelledLine {
+  readonly offerId: string | null;
+  readonly offerNo: number | null;
+  readonly set: string;
+  readonly numbers: string | null;
+  readonly price: string;
+  /** What the cancel did to the offer: `active`, `withdrawn`, or null where it did nothing to one. */
+  readonly offer: string | null;
+}
+
+/** How a sale was cancelled (#2500): when, why, and what it had sold. */
+export interface AgentSaleCancellation {
+  readonly at: string;
+  readonly reason: string | null;
+  readonly lines: readonly AgentCancelledLine[];
+}
 
 /** The *to review* marker as the agent reads it, or null when nothing waits. */
 export interface AgentSaleReview {
@@ -92,6 +111,9 @@ export interface AgentSale {
   readonly shippingCost: string | null;
   readonly shippingCurrency: string | null;
   readonly net: string;
+  /** How the sale was cancelled (#2500), or null on a sale that is not. A cancelled sale has no
+   *  `lines` — they were released — and its `net` is zero: it counts nowhere. */
+  readonly cancelled: AgentSaleCancellation | null;
   readonly toReview: AgentSaleReview | null;
   readonly path: string;
 }
@@ -194,6 +216,16 @@ export function saleRecord(
     shippingCost: string | null;
     shippingCurrency: string | null;
     netProceeds: string;
+    cancelReason: string | null;
+    cancelledAt: Date | null;
+    cancelledLines: readonly {
+      offerId: string | null;
+      offerNo: number | null;
+      title: string;
+      numbers: string | null;
+      price: string;
+      offerOutcome: string | null;
+    }[];
     apiReview: { at: string; created: boolean; actions: readonly string[] } | null;
   },
   offerNos: ReadonlyMap<string, number>,
@@ -232,6 +264,20 @@ export function saleRecord(
     shippingCost: detail.shippingCost,
     shippingCurrency: detail.shippingCurrency,
     net: detail.netProceeds,
+    cancelled: detail.cancelledAt
+      ? {
+          at: detail.cancelledAt.toISOString(),
+          reason: detail.cancelReason,
+          lines: detail.cancelledLines.map((line) => ({
+            offerId: line.offerId,
+            offerNo: line.offerNo,
+            set: line.title,
+            numbers: line.numbers,
+            price: line.price,
+            offer: line.offerOutcome,
+          })),
+        }
+      : null,
     toReview: review(detail.apiReview),
     path,
   };

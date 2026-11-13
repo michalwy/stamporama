@@ -1,4 +1,5 @@
 import "server-only";
+import { claimedSaleLines } from "./sale-cancel-rules";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "./db";
 import { getModulePlatform } from "./module-platform";
@@ -279,14 +280,24 @@ export async function getAllegroWorklist(
   const claims = await prisma.sale.findMany({
     where: { collectionId, externalRef: { in: orderRows.map((row) => row.orderId) } },
     orderBy: { saleNo: "asc" },
-    select: { id: true, saleNo: true, externalRef: true, lines: { select: { offerId: true } } },
+    select: {
+      id: true,
+      saleNo: true,
+      externalRef: true,
+      status: true,
+      lines: { select: { offerId: true } },
+      cancelledLines: { select: { offerId: true } },
+    },
   });
-  const claimByOrder = new Map<string, (typeof claims)[number]>();
+  // A cancelled sale (#2500) accounts for what it had sold: the order was dealt with by cancelling it.
+  type Claim = { id: string; saleNo: number; lines: { offerId: string | null }[] };
+  const claimByOrder = new Map<string, Claim>();
   for (const sale of claims) {
     if (!sale.externalRef) continue;
+    const lines = [...claimedSaleLines(sale)];
     const first = claimByOrder.get(sale.externalRef);
-    if (first) claimByOrder.set(sale.externalRef, { ...first, lines: [...first.lines, ...sale.lines] });
-    else claimByOrder.set(sale.externalRef, sale);
+    if (first) claimByOrder.set(sale.externalRef, { ...first, lines: [...first.lines, ...lines] });
+    else claimByOrder.set(sale.externalRef, { id: sale.id, saleNo: sale.saleNo, lines });
   }
 
   const orders: WorklistOrder[] = orderRows.flatMap((row) => {

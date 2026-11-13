@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listSalesPaginated } from "@/lib/sales";
-import { isSaleStatus } from "@/lib/sale-status";
+import { isSaleRecordStatus } from "@/lib/sale-status";
 import { readSearchParam } from "@/lib/text-input";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { SALE_SEARCH_FIELD_KEYS } from "@/lib/sale-search-fields";
@@ -30,7 +30,7 @@ export async function GET(
   // what it said, which is #735's rule for the offers list. An unrecognised status is
   // dropped rather than refused — a stale link narrows to nothing otherwise, and the chips are the
   // authority on what exists.
-  const statuses = (sp.get("status") || "").split(",").filter(isSaleStatus);
+  const statuses = (sp.get("status") || "").split(",").filter(isSaleRecordStatus);
   const search = readSearchParam(sp);
   // The fields that search matches, ticked beside the box (#2243) — absent is every field.
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), SALE_SEARCH_FIELD_KEYS);

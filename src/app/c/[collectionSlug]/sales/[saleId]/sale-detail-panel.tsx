@@ -48,9 +48,10 @@ import { UnpackedCopiesDialog } from "./unpacked-copies-dialog";
 import { SaleSuppliesCard } from "./sale-supplies-card";
 import { SaleAttachmentsCard } from "./sale-attachments-card";
 import { SaleNoteCard } from "./sale-note-card";
-import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import type { SaleAttachmentData } from "@/lib/sale-attachments";
 import { MergeSalesDialog } from "./merge-sales-dialog";
+import { CancelSaleDialog } from "./cancel-sale-dialog";
 import { MoveSaleSetsDialog } from "./move-sale-sets-dialog";
 import { RemoveSaleSetsDialog } from "./remove-sale-sets-dialog";
 import { saleMoveSourceRefusal } from "@/lib/sale-move-rules";
@@ -59,7 +60,13 @@ import { saleLineHeading } from "@/lib/sale-line-name";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { ConversationButton } from "@/app/c/[collectionSlug]/shared/conversation-panel";
 import { SALE_STATUS_ORDER, SALE_STATUS_META, type SaleStatus } from "../sale-status";
-import { asksAboutUnpackedCopies, asksForShipment, isSaleSent, isSaleStatus } from "@/lib/sale-status";
+import {
+  asksAboutUnpackedCopies,
+  asksForShipment,
+  canCancelSale,
+  isSaleSent,
+  isSaleStatus,
+} from "@/lib/sale-status";
 import {
   restoredSaleStatusChoice,
   saleStatusChoiceReducer,
@@ -155,7 +162,9 @@ type Dialog =
   | { kind: "moveSets"; lineIds: string[] }
   /** The ticked sets to remove (#2315), and those a refusal named as no longer on the sale. */
   | { kind: "removeSets"; lineIds: string[]; goneLineIds?: string[] }
-  | { kind: "unpacked"; next: SaleStatus };
+  | { kind: "unpacked"; next: SaleStatus }
+  /** *Cancel sale* (#2500): the buyer never paid. */
+  | { kind: "cancel" };
 
 interface SaleDetailPanelProps {
   collectionId: string;
@@ -526,6 +535,24 @@ export function SaleDetailPanel({
                   setEditingNote(true);
                 },
               },
+              // *Cancel sale* (#2500): kept as Cancelled, unlike the list's *Delete*, which leaves no
+              // trace. Only while the parcel has not gone — a sent one is a return.
+              ...(canCancelSale(sale.status)
+                ? [
+                    {
+                      key: "cancel",
+                      label: "Cancel sale…",
+                      icon: "cancel",
+                      danger: true,
+                      separatorBefore: true,
+                      disabled: isPending,
+                      onSelect: () => {
+                        setError(undefined);
+                        setDialog({ kind: "cancel" });
+                      },
+                    } as RowAction,
+                  ]
+                : []),
             ]}
           />
         </div>
@@ -1049,6 +1076,34 @@ export function SaleDetailPanel({
       />
 
       {/* Dialogs */}
+      {dialog.kind === "cancel" && (
+        <CancelSaleDialog
+          saleNo={sale.saleNo}
+          lines={sale.lines}
+          closedOfferIds={sale.closedOfferIds}
+          isPending={isPending}
+          error={error}
+          onClose={() => {
+            if (!isPending) {
+              setDialog({ kind: "none" });
+              setError(undefined);
+            }
+          }}
+          onConfirm={(reason, outcomes) =>
+            run(
+              async () => {
+                const { cancelSaleAction } = await import("@/app/actions/sales");
+                return cancelSaleAction(sale.id, reason, outcomes);
+              },
+              () => {
+                setDialog({ kind: "none" });
+                toast({ message: `Sale s${sale.saleNo} cancelled` });
+              }
+            )
+          }
+        />
+      )}
+
       {dialog.kind === "editHeader" && (
         <SaleFormDialog
           mode="edit"

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { DialogActions, DialogBody, DialogShell, DIALOG_MAX_HEIGHT, DIALOG_MAX_WIDTH } from "@/app/dialog-shell";
 import { formControl } from "@/app/control-style";
+import { BuyerCancelledWarning } from "@/app/c/[collectionSlug]/sales/buyer-cancelled-warning";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
@@ -308,6 +309,8 @@ export function ConvertProposalDialog({
                 {sales.length === 0 && (
                   <p style={{ ...MUTED, marginTop: "0.5rem" }}>{contactName} has no sale still open.</p>
                 )}
+                {/* A new sale to a buyer whose sales were cancelled says so (#2500). */}
+                {target === NEW_SALE && <BuyerCancelledWarning collectionId={collectionId} buyerId={contactId} />}
               </section>
             </div>
           )}

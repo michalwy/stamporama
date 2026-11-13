@@ -23,6 +23,8 @@ import {
   SaleLinesGoneError,
   swapSaleLineSet,
   deleteSale,
+  cancelSale,
+  countBuyerCancelledSales,
   setSaleStatus,
   setSaleLineItemPacked,
   markSaleCopiesPacked,
@@ -39,6 +41,7 @@ import {
   type SaleStatus,
 } from "@/lib/sales";
 import { isSaleMergePick, type SaleMergeChoices } from "@/lib/sale-merge-rules";
+import { isCancelOfferOutcome, type CancelOfferOutcome } from "@/lib/sale-cancel-rules";
 import {
   createSaleShareToken,
   revokeSaleShareToken,
@@ -508,6 +511,45 @@ export async function deleteSaleAction(saleId: string): Promise<SaleActionState>
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to delete the sale.");
+  }
+}
+
+/**
+ * Cancel a sale the buyer never paid for (#2500): kept as *Cancelled* with the reason, its copies and
+ * packing supplies released, and each offer it closed back to active or withdrawn as `offerOutcomes`
+ * says. An outcome that is neither is dropped, and its offer goes back to active.
+ */
+export async function cancelSaleAction(
+  saleId: string,
+  reason: string,
+  offerOutcomes: Record<string, string>
+): Promise<SaleActionState> {
+  const session = await getSession();
+  const outcomes: Record<string, CancelOfferOutcome> = {};
+  for (const [offerId, outcome] of Object.entries(offerOutcomes)) {
+    if (isCancelOfferOutcome(outcome)) outcomes[offerId] = outcome;
+  }
+  try {
+    const result = await cancelSale(session.user.id, saleId, { reason, offerOutcomes: outcomes });
+    // An offer back on sale may have had its cleaned-up images queued again (#2317).
+    if (result.photoRuns > 0) kickOfferPhotoWorker();
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to cancel the sale.");
+  }
+}
+
+/** How many of a buyer's sales were cancelled (#2500) — the warning a new sale to them shows. Zero
+ *  when the buyer cannot be read, so a failed lookup never stops a sale being recorded. */
+export async function countBuyerCancelledSalesAction(
+  collectionId: string,
+  buyerId: string
+): Promise<number> {
+  const session = await getSession();
+  try {
+    return await countBuyerCancelledSales(session.user.id, collectionId, buyerId);
+  } catch {
+    return 0;
   }
 }
 

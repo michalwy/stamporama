@@ -193,9 +193,13 @@ finding which went and to whom. It can:
 - **list a sale's [attachments](sales.md#attachments)** — your photos of the parcel, the posting
   receipt — and fetch them, which a **read only** token can do too, and **add** pictures and PDFs to
   a sale. Adding a file changes nothing else on the sale and does not mark it for review; removing
-  one stays on the sale's own screen.
+  one stays on the sale's own screen;
+- **[cancel a sale](sales.md#cancelling-a-sale-the-buyer-never-paid-for) the buyer never paid
+  for** — one not yet sent — with a reason, saying which of the offers it closed are withdrawn; the
+  rest go back to active, exactly as in the dialog. It reads cancelled sales too, with what they had
+  sold.
 
-Every sale it records, adds to, moves sets between or writes a note on is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
+Every sale it records, adds to, moves sets between, writes a note on or cancels is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
 until you confirm it. **It cannot delete a sale or move one along** — no *Paid*, *Packed* or *Sent*,
 no packing, shipping, prices or buyer changed afterwards; that stays on the sale's own screen. It
 does not record a running auction's current bid either: the price it sells at is the one it read.

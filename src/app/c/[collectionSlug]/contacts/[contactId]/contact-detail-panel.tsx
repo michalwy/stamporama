@@ -30,6 +30,8 @@ import { AUCTION_SALE_STATUS_LABEL, type AuctionLotOutcome } from "@/lib/auction
 import { TAG_FILTER_PARAM, TAG_MODE_PARAM } from "@/lib/tag-filter";
 import { PURCHASE_STATUS_META, type PurchaseStatus } from "@/lib/purchase-status";
 import { isTradeStatus } from "@/lib/trade-rules";
+import { SALE_CANCELLED } from "@/lib/sale-status";
+import { cancelledSalesLabel } from "@/lib/sale-cancel-rules";
 import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
@@ -593,7 +595,20 @@ function SalesCard({
   return (
     <DetailCard title="Sales · as buyer">
       <FieldGrid min="10rem">
-        <Figure label="Sales" href={href()}>
+        {/* The buyer's cancelled sales (#2500), of all time, beside the sales they are left out of. */}
+        <Figure
+          label="Sales"
+          href={href()}
+          hint={
+            s.cancelledCount > 0 ? (
+              <Tooltip content="Sales to this buyer that were cancelled, of all time — they count in no other figure">
+                <Link href={href([SALE_CANCELLED])} style={{ color: "var(--color-error)", textDecoration: "none" }}>
+                  {cancelledSalesLabel(s.cancelledCount)}
+                </Link>
+              </Tooltip>
+            ) : undefined
+          }
+        >
           {s.count}
         </Figure>
         <Figure label="Revenue" href={href()} hint={moneyHint(s.revenue, "sale")}>

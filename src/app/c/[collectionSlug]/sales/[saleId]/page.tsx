@@ -16,6 +16,8 @@ import { listSaleAttachments } from "@/lib/sale-attachments";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { RecordRecentVisit } from "@/app/c/[collectionSlug]/shared/record-recent-visit";
 import { SaleDetailPanel } from "./sale-detail-panel";
+import { CancelledSaleView } from "./cancelled-sale-view";
+import { isSaleCancelled } from "@/lib/sale-status";
 import { Screen } from "@/app/screen";
 
 interface SaleDetailPageProps {
@@ -78,17 +80,22 @@ export default async function SaleDetailPage({ params }: SaleDetailPageProps) {
         label={`Sale ${formatEntityNo(sale.saleNo)}`}
         sublabel={sale.buyerName ?? sale.platformName}
       />
-      <SaleDetailPanel
-        collectionId={collection.id}
-        sale={sale}
-        carriers={carriers}
-        packingSupplies={packingSupplies}
-        buyerMessage={buyerMessage}
-        areas={areas}
-        locations={locations}
-        issueHeaderById={issueHeaderById}
-        attachments={attachments ?? []}
-      />
+      {/* A cancelled sale is a record (#2500): its own read-only screen, not the editor. */}
+      {isSaleCancelled(sale.status) ? (
+        <CancelledSaleView collectionId={collection.id} sale={sale} attachments={attachments ?? []} />
+      ) : (
+        <SaleDetailPanel
+          collectionId={collection.id}
+          sale={sale}
+          carriers={carriers}
+          packingSupplies={packingSupplies}
+          buyerMessage={buyerMessage}
+          areas={areas}
+          locations={locations}
+          issueHeaderById={issueHeaderById}
+          attachments={attachments ?? []}
+        />
+      )}
     </Screen>
   );
 }

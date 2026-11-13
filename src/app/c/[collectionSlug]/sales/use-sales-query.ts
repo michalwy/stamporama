@@ -10,7 +10,7 @@ import type {
   FreeExtraCandidates,
 } from "@/lib/sales";
 import type { ItemListItem } from "@/lib/items";
-import type { SaleStatus } from "@/lib/sale-status";
+import type { SaleRecordStatus } from "@/lib/sale-status";
 import type { SaleSearchField } from "@/lib/sale-search-fields";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { writeFreeExtraFilterQuery, type FreeExtraFilters } from "@/lib/free-extra-filters";
@@ -32,7 +32,7 @@ export interface SaleFilters {
    * for all of them. Still a **list** although the chips became mutually exclusive (#972, reversing
    * #475), for the offers list's reason (#735): a link or a remembered value written while they
    * were multi-select has to go on meaning what it said, and one axis keeps one filter on it. */
-  statuses?: SaleStatus[];
+  statuses?: SaleRecordStatus[];
   /** Free-text search over buyer, platform, external ref, and sold item name / catalog number (#193). */
   search?: string;
   /** The fields `search` matches (#2243), sent only when it narrows — absent is every field. */

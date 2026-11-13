@@ -102,6 +102,7 @@ import {
   setOfferTextOperation,
 } from "./operations/offers";
 import {
+  cancelSaleOperation,
   findOrCreateBuyerOperation,
   getSaleOperation,
   listSalesOperation,
@@ -288,6 +289,7 @@ export const OPERATIONS: readonly Operation[] = [
   sellOfferSetOperation,
   moveSaleSetsOperation,
   setSaleNoteOperation,
+  cancelSaleOperation,
   listSaleAttachmentsOperation,
   addSaleAttachmentsOperation,
   listProposalsOperation,

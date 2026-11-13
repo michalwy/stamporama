@@ -121,7 +121,10 @@ Then one section for each part the contact plays:
 - **Sales** (the contact as **buyer**) — how many sales, the **revenue** (what the buyer paid: the
   prices plus any handling they paid, before commission and your own shipping), the **copies sold**,
   the **last sale**'s date, and how many sales are **not yet paid** (*Ordered*) and **not yet sent**
-  (anything before *Sent*).
+  (anything before *Sent*). A buyer with [cancelled sales](sales.md#cancelling-a-sale-the-buyer-never-paid-for)
+  shows how many in red under their number of sales — *2 cancelled*, of all time whatever the
+  period — and it opens them on the Sales list. A cancelled sale counts in none of the other figures
+  and is not in the list of sales below.
 - **Auctions** (the contact as the **seller or auction house** you track auction sales with) — how
   many **sales** and **lots** you tracked, how many lots you **won**, **lost** and saw **cancelled**,
   your **win rate**, what you **spent on won lots**, and the **buyer's premium** on the sales. Under

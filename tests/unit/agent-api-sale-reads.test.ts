@@ -124,6 +124,16 @@ describe("the sale record (#1949)", () => {
     shippingCost: "8.50",
     shippingCurrency: "PLN",
     netProceeds: "14.50",
+    cancelReason: null as string | null,
+    cancelledAt: null as Date | null,
+    cancelledLines: [] as {
+      offerId: string | null;
+      offerNo: number | null;
+      title: string;
+      numbers: string | null;
+      price: string;
+      offerOutcome: string | null;
+    }[],
     apiReview: null,
   };
 
@@ -166,6 +176,37 @@ describe("the sale record (#1949)", () => {
 
   it("states an anonymous sale's buyer as absent", () => {
     assert.equal(saleRecord({ ...detail, buyerId: null, buyerName: null }, new Map(), "/p").buyer, null);
+  });
+
+  it("states a sale that is not cancelled as not cancelled (#2500)", () => {
+    assert.equal(saleRecord(detail, new Map(), "/p").cancelled, null);
+  });
+
+  it("states a cancelled sale's when, why and what it had sold, with what became of each offer (#2500)", () => {
+    const record = saleRecord(
+      {
+        ...detail,
+        status: "cancelled",
+        lines: [],
+        cancelReason: "Not paid",
+        cancelledAt: new Date("2026-11-13T10:00:00.000Z"),
+        cancelledLines: [
+          { offerId: "o1", offerNo: 12, title: "Polska 1950", numbers: "Fi 500", price: "15.00", offerOutcome: "withdrawn" },
+          { offerId: null, offerNo: null, title: "Free extras", numbers: null, price: "0.00", offerOutcome: null },
+        ],
+      },
+      new Map(),
+      "/p"
+    );
+    assert.equal(record.status, "cancelled");
+    assert.deepEqual(record.cancelled, {
+      at: "2026-11-13T10:00:00.000Z",
+      reason: "Not paid",
+      lines: [
+        { offerId: "o1", offerNo: 12, set: "Polska 1950", numbers: "Fi 500", price: "15.00", offer: "withdrawn" },
+        { offerId: null, offerNo: null, set: "Free extras", numbers: null, price: "0.00", offer: null },
+      ],
+    });
   });
 });
 
@@ -224,7 +265,7 @@ describe("a sold set's price (#1949)", () => {
 });
 
 describe("the sale statuses (#1949)", () => {
-  it("are the lifecycle, in order", () => {
-    assert.deepEqual([...AGENT_SALE_STATUSES], ["ordered", "paid", "packed", "sent", "received"]);
+  it("are the lifecycle, in order, then cancelled (#2500)", () => {
+    assert.deepEqual([...AGENT_SALE_STATUSES], ["ordered", "paid", "packed", "sent", "received", "cancelled"]);
   });
 });

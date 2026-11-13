@@ -89,6 +89,7 @@ import {
   CONFIRMED_SALE_API_REVIEW,
   nextSaleApiReview,
   readSaleApiReviewMark,
+  saleCancelledAction,
   type SaleApiReviewMark,
   type SaleApiReviewWrite,
 } from "./sale-review";
@@ -162,7 +163,11 @@ export type SaleBlockReason =
   /** One copy taken off an offer's set (#2420): that line is the set as listed, removed whole. */
   | "on-offer"
   /** Free extras that would break a complete set (#2422): only whole sets, and copies above them. */
-  | "breaks-set";
+  | "breaks-set"
+  /** A sale that cannot be cancelled (#2500): already sent, already cancelled, or changed meanwhile. */
+  | "cannot-cancel"
+  /** A change to a cancelled sale's sold sets or status (#2500) — it is a record now. */
+  | "sale-cancelled";
 
 /** Raised when a sale action is refused by a domain guard. `message` is user-facing; the server
  * action maps it to an `{ status: "error" }` response. */
@@ -193,7 +198,21 @@ export class SaleLinesGoneError extends SaleActionBlockedError {
 // The token set / order / validator live in the pure `./sale-status` module (no `server-only`), so
 // client UI can share them; re-exported here for existing server-side importers.
 export { SALE_STATUS_ORDER, isSaleStatus, type SaleStatus } from "./sale-status";
-import { isSaleSent, isSaleStatus, UNSENT_SALE_STATUSES, type SaleStatus } from "./sale-status";
+import {
+  canCancelSale,
+  isSaleCancelled,
+  isSaleSent,
+  isSaleStatus,
+  SALE_CANCELLED,
+  UNSENT_SALE_STATUSES,
+  type SaleRecordStatus,
+  type SaleStatus,
+} from "./sale-status";
+import {
+  normalizeCancelReason,
+  resolveCancelOutcomes,
+  type CancelOfferOutcome,
+} from "./sale-cancel-rules";
 import { SALE_SEARCH_FIELD_KEYS, type SaleSearchField } from "./sale-search-fields";
 
 // ── Ownership helpers ───────────────────────────────────────────────────────
@@ -832,6 +851,8 @@ export async function setSaleStatus(
     throw new Error("Unknown sale status.");
   }
   const current = await prisma.sale.findUnique({ where: { id: saleId }, select: { status: true } });
+  // Cancelled is never left (#2500): if the buyer pays after all, that is a new sale.
+  if (current) refuseCancelledSale(current.status);
   if (current?.status === status) return;
   await prisma.$transaction([
     prisma.sale.update({ where: { id: saleId }, data: { status } }),
@@ -921,6 +942,7 @@ export async function updateSaleHeader(
   input: SaleHeaderInput
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
+  refuseCancelledSale(ref.status);
   await assertPlatform(ref.collectionId, input.platformId);
   await assertBuyer(ref.collectionId, input.buyerId);
   if (input.platformId !== ref.platformId) {
@@ -988,7 +1010,7 @@ export async function updateSaleAmount(
   field: SaleAmountField,
   value: string | null
 ): Promise<void> {
-  await assertSaleOwner(ownerId, saleId);
+  refuseCancelledSale((await assertSaleOwner(ownerId, saleId)).status);
   const data: Prisma.SaleUpdateInput = { [field]: value };
   if (field === "buyerHandling") data.buyerPaidTotal = null;
   else if (field === "buyerPaidTotal") data.buyerHandling = null;
@@ -1079,6 +1101,7 @@ export async function updateSaleShipping(
   input: SaleShippingInput
 ): Promise<void> {
   const ref = await assertSaleOwner(ownerId, saleId);
+  refuseCancelledSale(ref.status);
   const shipping = await resolveSaleShipping(ref.collectionId, ref.platformId, ref.baseCurrency, input);
   await prisma.$transaction(async (tx) => {
     const before = await readSentAs(tx, saleId);
@@ -1156,6 +1179,7 @@ function assertSaleTakesLines(
   drafts: readonly SaleLineDraft[],
   opts: { toSentSale?: boolean }
 ): void {
+  refuseCancelledSale(ref.status);
   if (drafts.length === 0) {
     throw new SaleActionBlockedError("empty", "Choose at least one set to add.");
   }
@@ -1550,6 +1574,7 @@ export async function addSaleCopySet(
 ): Promise<string> {
   const ref = await assertSaleOwner(ownerId, saleId);
   const itemIds = [...new Set(draft.itemIds)];
+  refuseCancelledSale(ref.status);
   if (itemIds.length === 0) {
     throw new SaleActionBlockedError("empty", "Choose at least one copy to sell.");
   }
@@ -2044,6 +2069,7 @@ export async function addSaleFreeExtras(
 ): Promise<string> {
   const ref = await assertSaleOwner(ownerId, saleId);
   const itemIds = [...new Set(itemIdsRaw)];
+  refuseCancelledSale(ref.status);
   if (itemIds.length === 0) {
     throw new SaleActionBlockedError("empty", "Tick at least one copy to give away.");
   }
@@ -2537,10 +2563,13 @@ export interface SaleListItem {
   externalRef: string | null;
   /** Link to the transaction on the marketplace (#292), or null. */
   transactionUrl: string | null;
-  /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
+  /** Fulfillment status (#191): ordered | paid | packed | sent | received — or `cancelled` (#2500). */
   status: string;
+  /** Why the sale was cancelled (#2500), or null. */
+  cancelReason: string | null;
   soldAt: Date;
   currency: string;
+  /** Sold sets — on a cancelled sale (#2500), the sets it had sold, kept as its record. */
   lineCount: number;
   itemCount: number;
   /** How many of this sale's lines still name a set nobody has chosen (#697). A **flag shown on a
@@ -2549,11 +2578,12 @@ export interface SaleListItem {
   pendingSetChoiceCount: number;
   /** The collection base currency — `netProceeds` is expressed in it (#206). */
   baseCurrency: string;
-  /** Sum of line sale prices (transaction currency). */
+  /** Sum of line sale prices (transaction currency) — on a cancelled sale (#2500), what the order it
+   *  recorded was worth. */
   grossProceeds: string;
   /** Base-currency net (#206): (gross + buyer handling − commission) converted to base, minus my
    * shipping (already in base). For a single-currency collection this equals the old transaction-
-   * currency net. */
+   * currency net. Zero on a cancelled sale (#2500), which counts nowhere. */
   netProceeds: string;
   /** The *to review* marker (#1948): what the agent API recorded on this sale since the collector
    * last confirmed it, or null when nothing waits. The detail's {@link SaleDetail.apiReview} is read
@@ -2591,6 +2621,8 @@ const SALE_LIST_SELECT = {
     select: { price: true, setChoicePending: true, _count: { select: { items: true } } },
   },
   supplyLines: SALE_SUPPLY_COST_SELECT,
+  cancelReason: true,
+  cancelledLines: { select: { price: true } },
 } as const;
 
 function num(v: Prisma.Decimal | null): number {
@@ -2801,6 +2833,36 @@ async function profitOfSales(
   );
 }
 
+/** A cancelled sale's row (#2500): its record of what it had sold, and no proceeds — it counts
+ *  nowhere, so its amounts are not netted into a figure that would read as money made or lost. */
+function toCancelledSaleListItem(
+  row: Parameters<typeof toSaleListItem>[0],
+  baseCurrency: string
+): SaleListItem {
+  return {
+    id: row.id,
+    saleNo: row.saleNo,
+    platformId: row.platformId,
+    platformName: row.platform.name,
+    buyerName: row.buyer?.name ?? null,
+    externalRef: row.externalRef,
+    transactionUrl: row.transactionUrl,
+    status: row.status,
+    cancelReason: row.cancelReason,
+    soldAt: row.soldAt,
+    currency: row.currency,
+    lineCount: row.cancelledLines.length,
+    itemCount: 0,
+    pendingSetChoiceCount: 0,
+    baseCurrency,
+    grossProceeds: row.cancelledLines.reduce((s, l) => s + Number(l.price), 0).toFixed(2),
+    netProceeds: "0.00",
+    apiReview: readSaleApiReviewMark(row),
+    note: row.note,
+    createdAt: row.createdAt,
+  };
+}
+
 function toSaleListItem(
   row: {
     id: string;
@@ -2827,9 +2889,12 @@ function toSaleListItem(
     buyer: { name: string } | null;
     lines: { price: Prisma.Decimal; setChoicePending: boolean; _count: { items: number } }[];
     supplyLines: SaleSupplyCostRow[];
+    cancelReason: string | null;
+    cancelledLines: { price: Prisma.Decimal }[];
   },
   baseCurrency: string
 ): SaleListItem {
+  if (isSaleCancelled(row.status)) return toCancelledSaleListItem(row, baseCurrency);
   const gross = row.lines.reduce((s, l) => s + Number(l.price), 0);
   const { handling } = resolveBuyerHandling(row.buyerHandling, row.buyerPaidTotal, gross);
   // Buyer-side net (transaction ccy) → base, then my shipping (already base). Rate defaults to 1
@@ -2846,6 +2911,7 @@ function toSaleListItem(
     externalRef: row.externalRef,
     transactionUrl: row.transactionUrl,
     status: row.status,
+    cancelReason: null,
     soldAt: row.soldAt,
     currency: row.currency,
     lineCount: row.lines.length,
@@ -2868,7 +2934,7 @@ export interface SaleListFilters {
    * empty or absent means every status. The chips became mutually exclusive again in #972
    * (reversing #475), but the filter stays a **set**: a link or a remembered value written while
    * they were multi-select still reads back whole, on #735's reasoning for the offers list. */
-  statuses?: SaleStatus[];
+  statuses?: SaleRecordStatus[];
   /** Free-text search over buyer name, platform name, external reference, and the stamp name /
    * catalog numbers of the copies sold on the sale (#193). Case-insensitive substring match. */
   search?: string;
@@ -3257,8 +3323,18 @@ export interface SaleDetail {
   profit: EstimatedProfitFigures;
   /** Every copy of the sale that {@link profit} counts at no cost (#1875), in line order. */
   copiesWithoutCost: SaleCopyRef[];
-  /** Fulfillment status (#191): ordered | paid | packed | sent | received. */
+  /** Fulfillment status (#191): ordered | paid | packed | sent | received — or `cancelled` (#2500). */
   status: string;
+  /** Why the sale was cancelled (#2500), or null — not cancelled, or cancelled without a reason. */
+  cancelReason: string | null;
+  /** When the sale was cancelled (#2500), or null. */
+  cancelledAt: Date | null;
+  /** What a cancelled sale had sold (#2500), in the sale's order — empty on any other sale, whose
+   *  sold sets are {@link lines}. */
+  cancelledLines: SaleCancelledLineData[];
+  /** The offers on this sale that it closed — left `sold` (#2500). What the cancel dialog asks about,
+   *  offer by offer; an offer the sale did not close still has sets of its own to sell. */
+  closedOfferIds: string[];
   /** True when the sale has at least one copy and every copy is packed (#192) — drives the
    * "mark sale packed?" hint. Never auto-advances the status. */
   allItemsPacked: boolean;
@@ -3281,6 +3357,21 @@ export interface SaleDetail {
    *  buyer message read this record or the sale and never draw it. */
   note: string | null;
   createdAt: Date;
+}
+
+/** One sold set of a cancelled sale (#2500), as it was named when the sale was cancelled. */
+export interface SaleCancelledLineData {
+  id: string;
+  /** The offer it came through, for a link — null on a set on no offer, or once the offer is gone. */
+  offerId: string | null;
+  offerNo: number | null;
+  title: string;
+  numbers: string | null;
+  /** In the sale's currency. */
+  price: string;
+  freeExtra: boolean;
+  /** What the cancel did to its offer: `active`, `withdrawn`, or null where it did nothing to one. */
+  offerOutcome: string | null;
 }
 
 /** A carrier service as the sale's detail reads what its parcel is sent as (#1923). */
@@ -3365,6 +3456,21 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
       ...PARCEL_IN_FORCE_SELECT,
       commission: true,
       status: true,
+      cancelReason: true,
+      cancelledAt: true,
+      cancelledLines: {
+        orderBy: { position: "asc" },
+        select: {
+          id: true,
+          offerId: true,
+          offerNo: true,
+          title: true,
+          numbers: true,
+          price: true,
+          freeExtra: true,
+          offerOutcome: true,
+        },
+      },
       apiReviewAt: true,
       apiReviewCreated: true,
       apiReviewActions: true,
@@ -3386,6 +3492,7 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
           offer: {
             select: {
               offerNo: true,
+              state: true,
               platformId: true,
               platform: { select: { name: true } },
               // The title as it reads now (#2189), and the sets it is derived from when there is
@@ -3573,10 +3680,28 @@ export async function getSaleDetail(ownerId: string, saleId: string): Promise<Sa
     trackingUrl: buildTrackingUrl(carrier?.trackingUrlTemplate, sale.trackingCode),
     commission: money(sale.commission),
     grossProceeds: gross.toFixed(2),
-    netProceeds: net.toFixed(2),
+    // A cancelled sale counts nowhere (#2500): its header amounts are not netted into a figure.
+    netProceeds: isSaleCancelled(sale.status) ? "0.00" : net.toFixed(2),
     profit: profitFigures,
     copiesWithoutCost: refsOf(profitFigures.withoutCostIds),
     status: sale.status,
+    cancelReason: sale.cancelReason,
+    cancelledAt: sale.cancelledAt,
+    cancelledLines: sale.cancelledLines.map((l) => ({
+      id: l.id,
+      offerId: l.offerId,
+      offerNo: l.offerNo,
+      title: l.title,
+      numbers: l.numbers,
+      price: Number(l.price).toFixed(2),
+      freeExtra: l.freeExtra,
+      offerOutcome: l.offerOutcome,
+    })),
+    closedOfferIds: [
+      ...new Set(
+        sale.lines.flatMap((l) => (l.offerId && l.offer?.state === "sold" ? [l.offerId] : []))
+      ),
+    ],
     allItemsPacked: allItemsPacked,
     unpackedItemCount,
     lines,
@@ -3736,6 +3861,213 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<numbe
   });
   await deleteConversationAttachmentBytes(attachments);
   return regenerateCleanedUpOfferPhotos(ownerId, offerIds);
+}
+
+// ── Cancel (#2500) ──────────────────────────────────────────────────────────
+
+/** What {@link cancelSale} is asked: why, and what becomes of each offer the sale closed. */
+export interface CancelSaleInput {
+  /** Free text, shown on the cancelled sale; blank is none. */
+  reason: string | null;
+  /** Per offer the sale closed: back on sale or withdrawn. An offer not named goes back to active. */
+  offerOutcomes: Readonly<Record<string, CancelOfferOutcome>>;
+}
+
+/** What {@link cancelSale} did, for the caller's toast and the worker nudge. */
+export interface CancelSaleResult {
+  /** Offers back on sale. */
+  activeOfferIds: string[];
+  /** Offers withdrawn. */
+  withdrawnOfferIds: string[];
+  /** Generated-image runs queued for the offers back on sale (#2317). */
+  photoRuns: number;
+}
+
+/**
+ * Cancel a sale the buyer never paid for (#2500, ADR-0082): it is **kept**, with the status
+ * *Cancelled*, the reason and the moment — and it releases exactly what {@link deleteSale} releases.
+ *
+ * - Its sold sets are **deleted** as sale lines, which frees their copies (the no-double-sale
+ *   `UNIQUE` on `sale_line_item.itemId`) and their sets; each is kept as a `SaleCancelledLine`, worded
+ *   as the sale's screen named it, so the record still says what the buyer had bought.
+ * - Its packing supplies go back to stock, to the batches they came from.
+ * - Each offer the sale **closed** (left `sold`) goes back to active — reopened, marked out of step
+ *   with its listing, its cleaned-up generated images queued again — or is withdrawn, as
+ *   `offerOutcomes` says. An offer it did not close (it still had sets to sell) only gets its set
+ *   back, and is marked out of step as well.
+ * - The buyer's link (#699) is withdrawn: there is nothing left to choose.
+ *
+ * Only a sale not yet sent can be cancelled. The sale is locked and read again inside the
+ * transaction, so what is cancelled is what was checked; a line added or moved since the screen was
+ * read is cancelled with the rest, and named on the record as the sale's screen names it now.
+ */
+export async function cancelSale(
+  ownerId: string,
+  saleId: string,
+  input: CancelSaleInput
+): Promise<CancelSaleResult> {
+  return cancelSaleIn(ownerId, null, saleId, input);
+}
+
+/**
+ * {@link cancelSale} for the agent API (#2500): the same cancel, with the sale's *to review* marker
+ * (#1948) set in the cancel's own transaction — the sale waits for the collector's *Confirm* like
+ * every other sale the API writes. `collectionId` is the token's, and a sale outside it is not found.
+ */
+export async function cancelSaleThroughApi(
+  ownerId: string,
+  collectionId: string,
+  saleId: string,
+  input: CancelSaleInput
+): Promise<CancelSaleResult> {
+  return cancelSaleIn(ownerId, collectionId, saleId, input, (tx, outcomes) =>
+    markSaleWrittenByApi(tx, saleId, { kind: "changed", actions: [saleCancelledAction(outcomes)] })
+  );
+}
+
+async function cancelSaleIn(
+  ownerId: string,
+  collectionId: string | null,
+  saleId: string,
+  input: CancelSaleInput,
+  alsoInTransaction?: (
+    tx: DbTransaction,
+    outcomes: { active: number; withdrawn: number }
+  ) => Promise<unknown>
+): Promise<CancelSaleResult> {
+  const head = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: { status: true, collectionId: true, collection: { select: { ownerId: true } } },
+  });
+  if (
+    !head ||
+    head.collection.ownerId !== ownerId ||
+    (collectionId !== null && head.collectionId !== collectionId)
+  ) {
+    throw new Error("Sale not found or access denied.");
+  }
+  assertSaleCancellable(head.status);
+  // The lines as the sale's screen names them — the words the record keeps.
+  const detail = await getSaleDetail(ownerId, saleId);
+  if (!detail) throw new Error("Sale not found or access denied.");
+  const reason = normalizeCancelReason(input.reason);
+
+  const result = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${saleId} FOR UPDATE`;
+    const sale = await tx.sale.findUniqueOrThrow({
+      where: { id: saleId },
+      select: {
+        status: true,
+        lines: { select: { id: true, offerId: true } },
+        supplyLines: { select: { supplyId: true } },
+      },
+    });
+    assertSaleCancellable(sale.status);
+    const lineIds = new Set(sale.lines.map((l) => l.id));
+    const named = detail.lines.filter((l) => lineIds.has(l.id));
+    if (named.length !== lineIds.size) {
+      throw new SaleActionBlockedError(
+        "cannot-cancel",
+        "This sale changed while it was being cancelled. Reload it and cancel again."
+      );
+    }
+    const offerIds = [...new Set(sale.lines.map((l) => l.offerId).filter((id): id is string => !!id))];
+    const closed = await tx.offer.findMany({
+      where: { id: { in: offerIds }, state: "sold" },
+      select: { id: true },
+    });
+    const outcomes = resolveCancelOutcomes(
+      closed.map((o) => o.id),
+      input.offerOutcomes
+    );
+    const activeOfferIds = [...outcomes].filter(([, o]) => o === "active").map(([id]) => id);
+    const withdrawnOfferIds = [...outcomes].filter(([, o]) => o === "withdrawn").map(([id]) => id);
+
+    if (named.length > 0) {
+      await tx.saleCancelledLine.createMany({
+        data: named.map((line, position) => ({
+          saleId,
+          offerId: line.offerId,
+          offerNo: line.name.offerNo,
+          title: line.name.title,
+          numbers: line.name.numbers,
+          price: line.price,
+          freeExtra: line.freeExtra,
+          offerOutcome: line.offerId ? (outcomes.get(line.offerId) ?? null) : null,
+          position,
+        })),
+      });
+    }
+    // Deleting the lines cascades their copies (#192's packed marks with them): every copy is free.
+    await tx.saleLine.deleteMany({ where: { saleId } });
+    await tx.saleSupplyLine.deleteMany({ where: { saleId } });
+    // The packing supplies it used go back to stock and cover any other sale short of them (#1898).
+    await settleSupplies(
+      tx,
+      sale.supplyLines.map((l) => l.supplyId)
+    );
+    await tx.saleShareToken.deleteMany({ where: { saleId } });
+    const now = new Date();
+    await tx.sale.update({
+      where: { id: saleId },
+      data: { status: SALE_CANCELLED, cancelReason: reason, cancelledAt: now },
+    });
+    await tx.saleStatusEvent.create({ data: { saleId, status: SALE_CANCELLED, changedAt: now } });
+
+    if (activeOfferIds.length > 0) {
+      await tx.offer.updateMany({
+        where: { id: { in: activeOfferIds }, state: "sold" },
+        // Open again, as on a delete: clearing `closedAt` (#512) takes it out of the photo purge.
+        data: { state: "active", stateChangedAt: now, closedAt: null, listingToCloseAt: null },
+      });
+    }
+    if (withdrawnOfferIds.length > 0) {
+      await tx.offer.updateMany({
+        where: { id: { in: withdrawnOfferIds }, state: "sold" },
+        data: { state: "withdrawn", stateChangedAt: now, closedAt: now, listingToCloseAt: null },
+      });
+    }
+    // Every set the sale held is sellable again, so a listing still up is out of step with it
+    // (#700/#542) — the offers back to active and those the sale had not closed. A withdrawn offer is
+    // not listed, so the mark passes it by.
+    await markListingContentChanged(offerIds, tx);
+    if (alsoInTransaction) {
+      await alsoInTransaction(tx, { active: activeOfferIds.length, withdrawn: withdrawnOfferIds.length });
+    }
+    return { activeOfferIds, withdrawnOfferIds };
+  });
+  const photoRuns = await regenerateCleanedUpOfferPhotos(ownerId, result.activeOfferIds);
+  return { ...result, photoRuns };
+}
+
+/** A sale already sent, or already cancelled, is not cancelled (#2500). */
+function assertSaleCancellable(status: string): void {
+  if (isSaleCancelled(status)) {
+    throw new SaleActionBlockedError("cannot-cancel", "This sale is already cancelled.");
+  }
+  if (!canCancelSale(status)) {
+    throw new SaleActionBlockedError(
+      "cannot-cancel",
+      "Only a sale not yet sent can be cancelled. A parcel already sent is a return."
+    );
+  }
+}
+
+/** A cancelled sale takes no change to what it sold, its amounts or its status (#2500). */
+function refuseCancelledSale(status: string): void {
+  if (isSaleCancelled(status)) {
+    throw new SaleActionBlockedError("sale-cancelled", "This sale is cancelled and cannot be changed.");
+  }
+}
+
+/** How many of a buyer's sales were cancelled (#2500) — the warning a new sale to them shows. */
+export async function countBuyerCancelledSales(
+  ownerId: string,
+  collectionId: string,
+  buyerId: string
+): Promise<number> {
+  await assertCollectionOwner(ownerId, collectionId);
+  return prisma.sale.count({ where: { collectionId, buyerId, status: SALE_CANCELLED } });
 }
 
 // ── Merge (#2041) ───────────────────────────────────────────────────────────
@@ -4441,7 +4773,12 @@ export async function listSaleProfitRows(
 ): Promise<SaleProfitRow[]> {
   const bounds = dateRangeBounds(range);
   const sales = await prisma.sale.findMany({
-    where: { collectionId, ...(bounds.gte || bounds.lt ? { soldAt: bounds } : {}) },
+    // A cancelled sale counts nowhere (#2500): it is no row here, so in no profit figure either.
+    where: {
+      collectionId,
+      status: { not: SALE_CANCELLED },
+      ...(bounds.gte || bounds.lt ? { soldAt: bounds } : {}),
+    },
     orderBy: [{ soldAt: "desc" }, { createdAt: "desc" }, { id: "asc" }],
     ...(page ? { skip: page.skip, take: page.take } : {}),
     select: {

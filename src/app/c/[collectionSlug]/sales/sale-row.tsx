@@ -9,6 +9,7 @@ import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-lin
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { saleStatusChipStyle, saleStatusMeta } from "./sale-status";
 import { SaleApiReviewChip } from "./sale-review-chip";
+import { isSaleCancelled } from "@/lib/sale-status";
 import { Icon } from "@/app/icons";
 
 const CHIP: React.CSSProperties = {
@@ -85,6 +86,8 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete, onConfirmRevie
   const unitWord = sale.itemCount === 1 ? "copy" : "copies";
   const lineWord = sale.lineCount === 1 ? "unit" : "units";
   const status = saleStatusMeta(sale.status);
+  // A cancelled sale (#2500) is a record: what it had sold, and no proceeds — it counts nowhere.
+  const cancelled = isSaleCancelled(sale.status);
 
   return (
     <div style={{ borderBottom: isLast ? undefined : "1px solid var(--color-border)" }}>
@@ -152,19 +155,21 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete, onConfirmRevie
               it is the number the quick-jump box takes (#431/#432) — hence the separate chip
               rather than a second `#…` in the same sentence. */}
           <EntityNoChip entity="sale" no={sale.saleNo} prefix="s" />
-          <Tooltip content="Fulfillment status">
+          <Tooltip content={cancelled ? "Cancelled — this sale counts nowhere" : "Fulfillment status"}>
             <span style={saleStatusChipStyle(status.token)}>{status.label}</span>
           </Tooltip>
-          <Tooltip content="Sold units">
+          <Tooltip content={cancelled ? "Units the buyer had bought" : "Sold units"}>
             <span style={CHIP}>
               {sale.lineCount} {lineWord}
             </span>
           </Tooltip>
-          <Tooltip content="Physical copies that left">
-            <span style={CHIP}>
-              {sale.itemCount} {unitWord}
-            </span>
-          </Tooltip>
+          {!cancelled && (
+            <Tooltip content="Physical copies that left">
+              <span style={CHIP}>
+                {sale.itemCount} {unitWord}
+              </span>
+            </Tooltip>
+          )}
           {/* Lines whose set an automatic pick took rather than a person chose (#697), off the very
               column the sale detail draws its per-line chip from — a flag shown on a list is shown
               on the thing's own screen too. It is a decision still to be made rather than something
@@ -218,23 +223,36 @@ export function SaleRow({ sale, collectionSlug, isLast, onDelete, onConfirmRevie
               </span>
             </Tooltip>
           )}
-          <Tooltip
-            content="Net proceeds (base currency): buyer-side proceeds converted to base, minus my shipping"
-            align="end"
-            style={{ marginLeft: "auto" }}
-          >
+          {cancelled ? (
             <span
               style={{
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                fontVariantNumeric: "tabular-nums",
-                color: "var(--color-text-primary)",
+                marginLeft: "auto",
+                fontSize: "0.8125rem",
+                color: "var(--color-text-muted)",
                 whiteSpace: "nowrap",
               }}
             >
-              {sale.netProceeds} {sale.baseCurrency}
+              {sale.cancelReason ?? "Cancelled"}
             </span>
-          </Tooltip>
+          ) : (
+            <Tooltip
+              content="Net proceeds (base currency): buyer-side proceeds converted to base, minus my shipping"
+              align="end"
+              style={{ marginLeft: "auto" }}
+            >
+              <span
+                style={{
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  fontVariantNumeric: "tabular-nums",
+                  color: "var(--color-text-primary)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {sale.netProceeds} {sale.baseCurrency}
+              </span>
+            </Tooltip>
+          )}
         </div>
       </div>
     </div>

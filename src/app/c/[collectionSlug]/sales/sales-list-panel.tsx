@@ -22,8 +22,8 @@ import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use
 import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
 import { SALE_SEARCH_FIELDS, SALE_SEARCH_FIELD_KEYS } from "@/lib/sale-search-fields";
-import { SALE_STATUS_ORDER, SALE_STATUS_META } from "./sale-status";
-import { isSaleStatus } from "@/lib/sale-status";
+import { saleStatusMeta } from "./sale-status";
+import { isSaleCancelled, isSaleRecordStatus, SALE_RECORD_STATUSES } from "@/lib/sale-status";
 import { SaleRow } from "./sale-row";
 import { SaleFormDialog } from "./sale-form-dialog";
 import { useToast } from "@/app/toast-provider";
@@ -82,7 +82,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
   const statusParam = searchParams.has("status")
     ? (searchParams.get("status") ?? "")
     : (storedStatus ?? "");
-  const statuses = useMemo(() => statusParam.split(",").filter(isSaleStatus), [statusParam]);
+  const statuses = useMemo(() => statusParam.split(",").filter(isSaleRecordStatus), [statusParam]);
 
   // The search is remembered too (#1055), by the same rule and in the same spelling as the auction
   // sales list' (`auction-sale-search`, #496): the URL wins where it names one, the stored value
@@ -257,7 +257,9 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
             predecessor is how the same argument gets had again in three months. The offers list made
             the same reversal first (#735) and the two controls now agree again. */}
         <div style={{ display: "flex", gap: "0.375rem", alignItems: "center", flexWrap: "wrap" }}>
-          {SALE_STATUS_ORDER.map((value) => {
+          {/* *Cancelled* (#2500) closes the row: not a place in the lifecycle, but a status a sale
+              is in all the same, and the one way to list only the sales a buyer never paid for. */}
+          {SALE_RECORD_STATUSES.map((value) => {
             // Lit for any status in force, so a link or a remembered value carrying two of them is
             // described honestly rather than showing a narrowed list with no chip on.
             const active = statuses.includes(value);
@@ -265,7 +267,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
             return (
               <FilterChip
                 key={value}
-                label={SALE_STATUS_META[value].label}
+                label={saleStatusMeta(value).label}
                 active={active}
                 onClick={() => {
                   // Clicking one of two lit chips *replaces* the pair rather than subtracting from
@@ -340,7 +342,7 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
               ? "Nothing the agent API recorded is waiting for you to confirm it."
               : statuses.length > 0
                 ? `No ${statuses
-                    .map((s) => SALE_STATUS_META[s].label.toLowerCase())
+                    .map((s) => saleStatusMeta(s).label.toLowerCase())
                     .join(" or ")} sales${platformId ? " on this platform" : ""}.`
                 : platformId
                   ? "No sales on this platform yet."
@@ -400,7 +402,11 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
       {dialog.kind === "delete" && (
         <ConfirmDialog
           title="Delete sale"
-          message="This removes the sale record. The copies it retired become available again and any offers it marked sold return to active. This cannot be undone."
+          message={
+            isSaleCancelled(dialog.sale.status)
+              ? "This removes the cancelled sale's record, and the buyer's count of cancelled sales with it. This cannot be undone."
+              : "This removes the sale record and leaves no trace of it. The copies it retired become available again and any offers it marked sold return to active. A buyer who never paid is better recorded by cancelling the sale on its own screen. This cannot be undone."
+          }
           actionLabel="Delete sale"
           pendingLabel="Deleting…"
           variant="destructive"
@@ -418,7 +424,9 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
                 // remove a row — it puts stock and listings back — and none of that is visible from
                 // the sales list. Creation gets none: it navigates to the new sale.
                 toast({
-                  message: "Sale deleted — its copies are available again and its offers are active",
+                  message: isSaleCancelled(dialog.sale.status)
+                    ? "Cancelled sale deleted"
+                    : "Sale deleted — its copies are available again and its offers are active",
                 });
               } else {
                 setActionError(result.message);

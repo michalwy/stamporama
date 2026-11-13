@@ -240,6 +240,8 @@ const GLYPHS = {
   check: Check,
   /** Rejects, beside a `check` that accepts. */
   reject: X,
+  /** Calls off something agreed and keeps the record of it — cancel a sale the buyer never paid. */
+  cancel: Ban,
   /** Re-derives something the app generated — a text, a category, a bid. */
   refresh: RotateCw,
   /** Puts a state back the way it was: reopen a lot, bring a disposed copy back. */

@@ -15,7 +15,7 @@ export function useFacebookBuyerLookup(
   enabled: boolean,
   name: string,
   profileUrl: string
-): { conflict: string | null; who: string | null } {
+): { conflict: string | null; who: string | null; contactId: string | null } {
   const [fetched, setFetched] = useState<FacebookBuyerLookup | null>(null);
   const typed = enabled && (!!name.trim() || !!profileUrl.trim());
   useEffect(() => {
@@ -42,5 +42,6 @@ export function useFacebookBuyerLookup(
     : lookup && name.trim()
       ? `A new buyer, ${name.trim()}, will be created.`
       : null;
-  return { conflict: lookup?.conflict ?? null, who };
+  // The existing contact the buyer is, for what else is said about them — their cancelled sales (#2500).
+  return { conflict: lookup?.conflict ?? null, who, contactId: lookup?.contact?.id ?? null };
 }

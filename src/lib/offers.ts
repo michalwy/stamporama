@@ -1,4 +1,5 @@
 import "server-only";
+import { claimedSaleLines } from "./sale-cancel-rules";
 import { Prisma } from "@/generated/prisma/client";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma, type DbTransaction } from "./db";
@@ -1810,11 +1811,17 @@ export async function unrecordedPlatformSales(
 
   const claims = await prisma.sale.findMany({
     where: { collectionId, externalRef: { in: [...new Set(lines.map((l) => l.allegroOrder.orderId))] } },
-    select: { externalRef: true, lines: { select: { offerId: true } } },
+    select: {
+      externalRef: true,
+      status: true,
+      lines: { select: { offerId: true } },
+      cancelledLines: { select: { offerId: true } },
+    },
   });
+  // A cancelled sale (#2500) accounts for what it had sold: its order is no unrecorded sale.
   const claimByOrder = new Map(
     claims.flatMap((sale) =>
-      sale.externalRef ? [[sale.externalRef, sale.lines.map((line) => line.offerId)] as const] : []
+      sale.externalRef ? [[sale.externalRef, claimedSaleLines(sale).map((line) => line.offerId)] as const] : []
     )
   );
 
