@@ -36,6 +36,7 @@ import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { PinToSidebarButton } from "@/app/c/[collectionSlug]/shared/pin-to-sidebar-button";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
 import {
   DETAIL_BUTTON,
@@ -185,6 +186,14 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
           </span>
         ))}
         <span style={{ marginLeft: "auto", display: "flex", gap: "0.375rem" }}>
+          {/* Kept at the top of the sidebar while it is being worked on (#2504). */}
+          <PinToSidebarButton
+            collectionId={collectionId}
+            kind="contact"
+            id={contact.id}
+            href={`/contacts/${contact.id}`}
+            label={contact.name}
+          />
           {/* Every entry of the conversation log with them, each naming its sale (#2149), in a panel
               at the side (#2153). */}
           <ConversationButton

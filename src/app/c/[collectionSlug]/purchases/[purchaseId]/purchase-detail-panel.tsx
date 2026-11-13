@@ -2,7 +2,7 @@
 
 import { conditioned } from "@/lib/piece-condition";
 import type { ScanningSetup } from "@/lib/scanning-profile";
-import { intakeDocumentRef } from "@/lib/purchase-kind";
+import { intakeDocumentName, intakeDocumentRef } from "@/lib/purchase-kind";
 import {
   useCallback,
   useEffect,
@@ -154,6 +154,8 @@ import { useInvalidatePurchases } from "../use-purchases-query";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { PinToSidebarButton } from "@/app/c/[collectionSlug]/shared/pin-to-sidebar-button";
+import { formatEntityNo } from "@/lib/quick-jump";
 import { useOverflowing } from "@/app/c/[collectionSlug]/shared/use-overflowing";
 import {
   STUCK_SHADOW,
@@ -1068,6 +1070,19 @@ export function PurchaseDetailPanel({
         <span style={CHIP}>{purchase.purchasedAt}</span>
       </Tooltip>
       <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        {/* Kept at the top of the sidebar for the weeks an opening balance is being entered (#2504). */}
+        <PinToSidebarButton
+          collectionId={collectionId}
+          kind="purchase"
+          id={purchase.id}
+          href={`/purchases/${purchase.id}`}
+          label={[
+            `${openingBalance ? "Opening balance" : "Purchase"} ${formatEntityNo(purchase.purchaseNo)}`,
+            intakeDocumentName(purchase),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        />
         {(() => {
           const s = statusOptions.find((o) => o.value === purchase.status) ?? {
             label: purchase.status,

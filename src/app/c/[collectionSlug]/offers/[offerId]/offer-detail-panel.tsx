@@ -8,6 +8,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { useToast } from "@/app/toast-provider";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { PinToSidebarButton } from "@/app/c/[collectionSlug]/shared/pin-to-sidebar-button";
 import {
   OfferStateChip,
   EmptiedListingChip,
@@ -1016,6 +1017,14 @@ export function OfferDetailPanel({
             />
           )}
           <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            {/* Kept at the top of the sidebar while it is being worked on (#2504). */}
+            <PinToSidebarButton
+              collectionId={collectionId}
+              kind="offer"
+              id={offer.id}
+              href={`/offers/${offer.id}`}
+              label={`Offer ${formatEntityNo(offer.offerNo)} · ${offer.name ?? offer.label}`}
+            />
             <OfferStateChip state={offer.state} />
             {/* Mark ready was pressed while the photos were all that stood in the way (#1893): the
                 chip stands where the button was, as it does on the offer's row. */}

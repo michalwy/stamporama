@@ -22,6 +22,7 @@ import { isAuctionListing, isTerminalState, manualTransitions, OFFER_LISTING_TYP
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { PinToSidebarButton } from "@/app/c/[collectionSlug]/shared/pin-to-sidebar-button";
 import { ConfirmDialog, DialogSecondaryButton } from "@/app/dialog-shell";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
@@ -617,6 +618,14 @@ export function FacebookPostPanel({
               onSave={rename}
             />
           </div>
+          {/* Kept at the top of the sidebar while it is being worked on (#2504). */}
+          <PinToSidebarButton
+            collectionId={collectionId}
+            kind="post"
+            id={postId}
+            href={`/offers/posts/${postNo}`}
+            label={title ? `Post #${postNo} · ${title}` : `Post #${postNo}`}
+          />
           <RowActionsMenu
             ariaLabel="Post actions"
             actions={[

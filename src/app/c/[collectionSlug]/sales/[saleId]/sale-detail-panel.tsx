@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/app/dialog-shell";
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { PinToSidebarButton } from "@/app/c/[collectionSlug]/shared/pin-to-sidebar-button";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
 import type { IssueHeader } from "@/lib/issues";
@@ -419,6 +420,16 @@ export function SaleDetailPanel({
           ))}
           {/* The header's buttons sit on the right, whichever of them are drawn. */}
           <span style={{ marginLeft: "auto" }} />
+          {/* Kept at the top of the sidebar while it is being worked on (#2504). */}
+          <PinToSidebarButton
+            collectionId={collectionId}
+            kind="sale"
+            id={sale.id}
+            href={`/sales/${sale.id}`}
+            label={[`Sale ${formatEntityNo(sale.saleNo)}`, sale.buyerName ?? sale.platformName]
+              .filter(Boolean)
+              .join(" · ")}
+          />
           {/* What was said with the buyer (#2149), in a panel at the side (#2153) — kept on the buyer,
               so a sale with none has no log. */}
           {sale.buyerId && (

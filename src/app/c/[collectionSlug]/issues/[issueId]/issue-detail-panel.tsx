@@ -50,6 +50,8 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { ROW_OPEN_STYLE, useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import { StalePriceIcon } from "@/app/c/[collectionSlug]/shared/stale-price-icon";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { formatEntityNo } from "@/lib/quick-jump";
+import { PinToSidebarButton } from "@/app/c/[collectionSlug]/shared/pin-to-sidebar-button";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import {
@@ -235,6 +237,19 @@ export function IssueDetailPanel({
           {/* What this screen can start (#751), at the end of the line that says which issue it is
               about. */}
           <span style={{ marginLeft: "auto", display: "inline-flex", gap: "0.375rem" }}>
+            {/* Kept at the top of the sidebar while it is being worked on (#2504). */}
+            <PinToSidebarButton
+              collectionId={collectionId}
+              kind="issue"
+              id={issue.id}
+              href={`/issues/${issue.id}`}
+              label={[
+                `Issue ${formatEntityNo(issue.issueNo)}`,
+                [issue.year, issue.name].filter(Boolean).join(", "),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
             <Tooltip content="Edit this issue — name, year, area, catalog numbers, checklists and tags.">
               <button type="button" style={DETAIL_BUTTON} onClick={() => setEditing(true)}>
                 <Icon name="edit" size="sm" /> Edit
