@@ -80,6 +80,21 @@ const MUTED: React.CSSProperties = { fontSize: "0.75rem", color: "var(--color-te
  * height, so the row does not grow. */
 const LEAD_FIGURE: React.CSSProperties = { fontSize: "1rem", fontWeight: 700, lineHeight: 1 };
 
+/** The offer's own condition row — the one the collector prices from — is one framed strip from its
+ * name to its figures (#2495): a frame in the highlight's colour, a little heavier than the card's
+ * ordinary lines, round the whole row, and the tint one continuous band inside it, gaps included. The
+ * row is a subgrid on the card's three columns, so its cells stay on the same tracks as every other
+ * row's and the strip's axis does not move; the frame only adds to the edge columns. Other rows stay
+ * bare cells (`display: contents`). */
+const OWN_ROW_FRAME: React.CSSProperties = {
+  display: "grid",
+  gridColumn: "1 / -1",
+  gridTemplateColumns: "subgrid",
+  border: "2px solid var(--color-accent)",
+  borderRadius: "0.375rem",
+  background: "var(--color-accent-soft)",
+};
+
 /** How high a strip is, and how big a dot, a ring of the card's background around it so neighbouring
  * dots stay apart (#2464). A dot's area follows how many offers it stands for, on the read's own scale
  * (#2473): a single offer is {@link SMALLEST_DOT}, the read's largest group {@link LARGEST_DOT} — never
@@ -583,96 +598,87 @@ export function OfferColnectMarketCard({
                 <div />
                 <Scale ticks={view.ticks} ownPrice={ownMark} placement="top" />
                 <div style={{ ...MUTED, alignSelf: "end" }}>lowest · median · offers</div>
-                {item.rows.map((row) => {
-                  const band = row.highlighted ? "var(--color-accent-soft)" : undefined;
-                  return (
-                    <div key={row.key} style={{ display: "contents" }}>
-                      <div
-                        style={{
-                          fontSize: "0.8125rem",
-                          padding: "0.25rem 0.5rem",
-                          borderRadius: "0.25rem",
-                          background: band,
-                          fontWeight: row.highlighted ? 700 : 400,
-                          color: "var(--color-text-primary)",
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: "0.375rem",
-                          alignSelf: "stretch",
-                        }}
-                      >
-                        <span>{row.name}</span>
-                        {(row.colnectGrade || row.highlighted) && (
-                          <span style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.2 }}>
-                            {row.colnectGrade && <span style={{ ...MUTED, fontWeight: 400 }}>{row.colnectGrade}</span>}
-                            {row.highlighted && (
-                              <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-accent)" }}>
-                                this offer
-                              </span>
-                            )}
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          padding: `0 ${AXIS_INSET}`,
-                          borderRadius: "0.25rem",
-                          background: band,
-                          alignSelf: "stretch",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <Strip row={row} ticks={view.ticks} largestGroup={view.largestGroup} ownPrice={ownMark} currency={currency} step={step} onApply={apply} />
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: row.receded ? "var(--color-text-muted)" : "var(--color-text-secondary)",
-                          display: "flex",
-                          gap: "0.375rem",
-                          flexWrap: "wrap",
-                          alignItems: "baseline",
-                          padding: "0.25rem 0.5rem",
-                          borderRadius: "0.25rem",
-                          background: band,
-                          alignSelf: "stretch",
-                          alignContent: "center",
-                        }}
-                      >
-                        {row.count === 0 ? (
-                          <span style={{ color: "var(--color-text-muted)", ...(row.highlighted ? LEAD_FIGURE : undefined) }}>
-                            no offers
-                          </span>
-                        ) : (
-                          <>
-                            <Figure
-                              amount={row.lowest!}
-                              currency={currency}
-                              step={step}
-                              onApply={apply}
-                              lead={row.highlighted}
-                              receded={row.receded}
-                            />
-                            {DOT_SEP}
-                            <span>
-                              med{" "}
-                              <Figure amount={row.median!} currency={currency} step={step} onApply={apply} receded={row.receded} />
+                {item.rows.map((row) => (
+                  <div key={row.key} style={row.highlighted ? OWN_ROW_FRAME : { display: "contents" }}>
+                    <div
+                      style={{
+                        fontSize: "0.8125rem",
+                        padding: "0.25rem 0.5rem",
+                        fontWeight: row.highlighted ? 700 : 400,
+                        color: "var(--color-text-primary)",
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "0.375rem",
+                        alignSelf: "stretch",
+                      }}
+                    >
+                      <span>{row.name}</span>
+                      {(row.colnectGrade || row.highlighted) && (
+                        <span style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.2 }}>
+                          {row.colnectGrade && <span style={{ ...MUTED, fontWeight: 400 }}>{row.colnectGrade}</span>}
+                          {row.highlighted && (
+                            <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-accent)" }}>
+                              this offer
                             </span>
-                            {DOT_SEP}
-                            <span style={{ fontVariantNumeric: "tabular-nums" }}>{row.count}</span>
-                          </>
-                        )}
-                        {row.ownCount > 0 && (
-                          <Tooltip content="Your own Colnect offers in this condition — left out of the strip, so this offer never undercuts itself">
-                            <span style={{ color: "var(--color-text-muted)", marginLeft: "0.375rem" }}>+{row.ownCount} yours</span>
-                          </Tooltip>
-                        )}
-                      </div>
+                          )}
+                        </span>
+                      )}
                     </div>
-                  );
-                })}
+                    <div
+                      style={{
+                        padding: `0 ${AXIS_INSET}`,
+                        alignSelf: "stretch",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Strip row={row} ticks={view.ticks} largestGroup={view.largestGroup} ownPrice={ownMark} currency={currency} step={step} onApply={apply} />
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: row.receded ? "var(--color-text-muted)" : "var(--color-text-secondary)",
+                        display: "flex",
+                        gap: "0.375rem",
+                        flexWrap: "wrap",
+                        alignItems: "baseline",
+                        padding: "0.25rem 0.5rem",
+                        alignSelf: "stretch",
+                        alignContent: "center",
+                      }}
+                    >
+                      {row.count === 0 ? (
+                        <span style={{ color: "var(--color-text-muted)", ...(row.highlighted ? LEAD_FIGURE : undefined) }}>
+                          no offers
+                        </span>
+                      ) : (
+                        <>
+                          <Figure
+                            amount={row.lowest!}
+                            currency={currency}
+                            step={step}
+                            onApply={apply}
+                            lead={row.highlighted}
+                            receded={row.receded}
+                          />
+                          {DOT_SEP}
+                          <span>
+                            med{" "}
+                            <Figure amount={row.median!} currency={currency} step={step} onApply={apply} receded={row.receded} />
+                          </span>
+                          {DOT_SEP}
+                          <span style={{ fontVariantNumeric: "tabular-nums" }}>{row.count}</span>
+                        </>
+                      )}
+                      {row.ownCount > 0 && (
+                        <Tooltip content="Your own Colnect offers in this condition — left out of the strip, so this offer never undercuts itself">
+                          <span style={{ color: "var(--color-text-muted)", marginLeft: "0.375rem" }}>+{row.ownCount} yours</span>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </div>
+                ))}
                 {/* The same scale again under the last row. */}
                 <div />
                 <Scale ticks={view.ticks} ownPrice={ownMark} placement="bottom" />

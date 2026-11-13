@@ -1572,7 +1572,8 @@ outside what Colnect asks sits at the end of the axis, its label pointing the wa
 - **The rows are your conditions.** Each is named by the condition of yours that is
   [mapped](collections.md#colnect-condition-mapping) to that Colnect grade, with Colnect's grade
   beside it; a grade none of yours is mapped to is shown under Colnect's own name. The condition the
-  offer's copies are in is the **highlighted** row, marked *this offer*, and its lowest price — the one you price against —
+  offer's copies are in is the **highlighted** row — one tinted strip in a frame of its own, from
+  its name to its figures — marked *this offer*, and its lowest price — the one you price against —
   is set larger and bold, so it is seen at once (*no offers* too, when nobody sells in it).
 - **Only that row is drawn in full.** The dots of every other condition are grey — the same sizes, and
   their lowest and median lines, counts and figures are muted, so a price is not read from the wrong
