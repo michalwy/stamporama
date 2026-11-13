@@ -87,9 +87,12 @@ function useRefreshOnAnyInvalidation(collectionId: string) {
 export function ActionItemsBell({
   collectionId,
   collectionSlug,
+  rail = false,
 }: {
   collectionId: string;
   collectionSlug: string;
+  /** On the folded sidebar's rail (#2505): its hint stands beside it, not under the next icon. */
+  rail?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -154,7 +157,7 @@ export function ActionItemsBell({
     <>
       <Tooltip
         content={total > 0 ? `Action items — ${total} waiting` : "Action items — nothing waiting"}
-        placement="bottom"
+        placement={rail ? "right" : "bottom"}
         align="end"
       >
         <button
@@ -171,8 +174,8 @@ export function ActionItemsBell({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: "1.85rem",
-            height: "1.85rem",
+            width: rail ? "2.25rem" : "1.85rem",
+            height: rail ? "2.25rem" : "1.85rem",
             padding: 0,
             border: "none",
             borderRadius: "0.375rem",

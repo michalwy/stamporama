@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
@@ -12,7 +13,13 @@ import { QuickJumpBox } from "./quick-jump-box";
 import { Icon, type IconName } from "@/app/icons";
 import { AppVersionLabel } from "./shared/app-version-label";
 import { usePersistedCollectionValue } from "./shared/use-persisted-collection-value";
+import { useEscapeLayer } from "@/app/escape-stack";
+import { useAnchoredPlacement } from "@/app/use-anchored-placement";
+import { useSidebarFold } from "./shared/use-sidebar-fold";
+import { isSidebarFoldShortcut } from "./sidebar-fold";
+import { railIconButtonStyle } from "./sidebar-rail-style";
 import {
+  SECTION_ICONS,
   SECTION_LABELS,
   SECTION_ROUTES,
   SECTION_TINTS,
@@ -521,6 +528,227 @@ function PinnedSection({
   );
 }
 
+/**
+ * One destination on the folded rail (#2505): its icon, its name in a tooltip beside it, and lit the
+ * way a sidebar row is — the plate and the bar in its section's hue, the accent outside any section.
+ * The icon rests in that hue too, as a row's icon does. It warms its screen up when reached for,
+ * never because it is on screen (#2425), like every other sidebar link.
+ */
+function RailLink({
+  href,
+  icon,
+  label,
+  tint,
+  active,
+}: {
+  href: string;
+  icon: IconName;
+  label: string;
+  tint: string | null;
+  active: boolean;
+}) {
+  const router = useRouter();
+  const [hovered, setHovered] = useState(false);
+  const warmUp = () => router.prefetch(href);
+  const activeColor = tint ? `var(--color-tag-${tint})` : "var(--color-accent)";
+
+  return (
+    <Tooltip content={label} placement="right">
+      <Link
+        href={href}
+        prefetch={false}
+        aria-label={label}
+        aria-current={active ? "page" : undefined}
+        onFocus={warmUp}
+        onMouseEnter={() => {
+          setHovered(true);
+          warmUp();
+        }}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          ...railIconButtonStyle(false),
+          color: active ? activeColor : tint ? `var(--color-tag-${tint})` : "var(--color-text-secondary)",
+          background: active
+            ? tint
+              ? `var(--color-tag-${tint}-soft)`
+              : "var(--color-bg-muted)"
+            : hovered
+              ? "var(--color-bg-subtle)"
+              : "transparent",
+          boxShadow: active ? `inset 2px 0 0 ${activeColor}` : undefined,
+        }}
+      >
+        <Icon name={icon} />
+      </Link>
+    </Tooltip>
+  );
+}
+
+/** The hairline between the rail's groups of icons — pinned, the top screens, the sections. */
+function RailDivider() {
+  return (
+    <div
+      aria-hidden
+      style={{ width: "1.5rem", height: "1px", margin: "0.25rem 0", background: "var(--color-border)" }}
+    />
+  );
+}
+
+/**
+ * A section on the folded rail (#2505): one icon, and its entries — sub-entries included — in a
+ * flyout beside the rail when it is pressed. The flyout draws the entries exactly as the expanded
+ * section does (the same rows, the same hue, the same pins), so a section reads the same folded or
+ * not; choosing one navigates and puts the flyout away.
+ *
+ * The icon says *you are here* the way a collapsed heading does: the section's plate and bar when
+ * the current screen is one of its own.
+ */
+function RailSection({
+  label,
+  icon,
+  tint,
+  holdsActive,
+  open,
+  onToggle,
+  onClose,
+  children,
+}: {
+  label: string;
+  icon: IconName;
+  tint: string;
+  holdsActive: boolean;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const color = `var(--color-tag-${tint})`;
+  return (
+    <>
+      <Tooltip content={open ? null : label} placement="right">
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={onToggle}
+          style={{
+            ...railIconButtonStyle(open),
+            color,
+            background: holdsActive ? `var(--color-tag-${tint}-soft)` : open ? "var(--color-bg-muted)" : "transparent",
+            boxShadow: holdsActive ? `inset 2px 0 0 ${color}` : undefined,
+          }}
+        >
+          <Icon name={icon} />
+        </button>
+      </Tooltip>
+      {open ? (
+        <SectionFlyout anchor={triggerRef} label={label} tint={tint} onClose={onClose}>
+          {children}
+        </SectionFlyout>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The panel a rail section opens (#2505), beside the rail and level with its icon.
+ *
+ * Portalled to `<body>` — the rail scrolls, so it clips on both axes — and placed by the shared
+ * anchored placement, so it stays inside the window and scrolls inside itself when a section is
+ * longer than the window is tall. A layer on the escape stack, and a click outside it or on any of
+ * its links puts it away; a pin pressed inside it does not, so pinning from the flyout leaves it
+ * open to pin the next.
+ */
+function SectionFlyout({
+  anchor,
+  label,
+  tint,
+  onClose,
+  children,
+}: {
+  anchor: React.RefObject<HTMLButtonElement | null>;
+  label: string;
+  tint: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const { style: placement } = useAnchoredPlacement({
+    open: true,
+    anchor,
+    floatingRef: panelRef,
+    side: "right",
+  });
+  useEscapeLayer(onClose);
+
+  const latestClose = useRef(onClose);
+  useEffect(() => {
+    latestClose.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      // The icon toggles the flyout by its own click; closing here first would reopen it at once.
+      if (panelRef.current?.contains(t) || anchor.current?.contains(t)) return;
+      latestClose.current();
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [anchor]);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-label={label}
+      onClick={(e) => {
+        if ((e.target as Element).closest("a")) latestClose.current();
+      }}
+      style={{
+        ...placement,
+        width: "15rem",
+        boxSizing: "border-box",
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+        background: "var(--color-bg-elevated)",
+        border: "1px solid var(--color-border)",
+        borderRadius: "0.5rem",
+        boxShadow: "0 8px 24px rgb(0 0 0 / 0.16)",
+        zIndex: 200,
+        padding: "0 0.5rem 0.5rem",
+      }}
+    >
+      <SectionTintContext.Provider value={tint}>
+        <div
+          style={{
+            ...sectionLabelStyle,
+            cursor: "default",
+            paddingTop: "0.75rem",
+            color: `var(--color-tag-${tint})`,
+          }}
+        >
+          {label}
+          <span
+            aria-hidden
+            style={{
+              flex: 1,
+              height: "1px",
+              marginLeft: "0.125rem",
+              background: `var(--color-tag-${tint}-border)`,
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.125rem" }}>{children}</div>
+      </SectionTintContext.Provider>
+    </div>,
+    document.body
+  );
+}
+
 export function CollectionSidebar({
   collectionSlug,
   collectionId,
@@ -566,6 +794,29 @@ export function CollectionSidebar({
   }
 
   const { pins, isPinned, pin, unpin, reorder } = useSidebarPins(collectionId);
+
+  /** Folded to the icon rail or drawn whole (#2505), and the rail's one open flyout. */
+  const { folded, toggle: toggleFold } = useSidebarFold();
+  const [flyout, setFlyout] = useState<SectionKey | null>(null);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!isSidebarFoldShortcut(e)) return;
+      e.preventDefault();
+      setFlyout(null);
+      toggleFold();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [toggleFold]);
+
+  async function signOut() {
+    await authClient.signOut();
+    // Signing out carries the screen so that signing back in returns to it (#1176). Read off the
+    // address bar inside the handler rather than from `useSearchParams`, which would put a Suspense
+    // requirement on every screen this sidebar renders beside.
+    router.push(signInPathFrom(window.location.pathname + window.location.search));
+  }
 
   /** The pin a screen's row offers: pinned by its path under the collection (#2504). */
   function screenPin(path: string): RowPin {
@@ -643,6 +894,195 @@ export function CollectionSidebar({
     ];
   });
 
+  if (folded) {
+    return (
+      <aside
+        // App chrome, never paper, folded or not (#330).
+        className="no-print"
+        aria-label="Sidebar, folded to icons"
+        style={{
+          width: "3.25rem",
+          flexShrink: 0,
+          background: "var(--color-bg-elevated)",
+          borderRight: "1px solid var(--color-border)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
+      >
+        {/* The collection's mark and the way back to the whole sidebar, where the expanded one
+            has the collection's name and the fold button. */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.25rem",
+            width: "100%",
+            padding: "0.75rem 0 0.5rem",
+            borderBottom: "1px solid var(--color-border)",
+          }}
+        >
+          <Tooltip content={collectionName} placement="right">
+            <div
+              role="img"
+              aria-label={collectionName}
+              style={{
+                width: "1.75rem",
+                height: "1.75rem",
+                borderRadius: "0.375rem",
+                background: "var(--color-bg-muted)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                color: "var(--color-accent)",
+              }}
+            >
+              {collectionName.charAt(0).toUpperCase()}
+            </div>
+          </Tooltip>
+          <Tooltip content="Unfold the sidebar (⌘\)" placement="right">
+            <button
+              type="button"
+              aria-label="Unfold the sidebar"
+              onClick={toggleFold}
+              style={railIconButtonStyle(false)}
+            >
+              <Icon name="unfoldSidebar" />
+            </button>
+          </Tooltip>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.125rem",
+            padding: "0.5rem 0 0.25rem",
+          }}
+        >
+          <QuickJumpBox collectionId={collectionId} collectionSlug={collectionSlug} rail />
+          <ActionItemsBell collectionId={collectionId} collectionSlug={collectionSlug} rail />
+        </div>
+
+        <nav
+          aria-label="Main"
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.125rem",
+            padding: "0.25rem 0 0.5rem",
+          }}
+        >
+          {/* Pinned first, as in the whole sidebar: a screen by its entry's icon, a record by its
+              kind's, each named in its tooltip. Reordering stays with the whole sidebar. */}
+          {pinnedEntries.length > 0 ? (
+            <>
+              <RailDivider />
+              {pinnedEntries.map((entry) => (
+                <RailLink
+                  key={entry.pin.id}
+                  href={`${base}${entry.pin.href}`}
+                  icon={entry.icon}
+                  label={entry.label}
+                  tint={entry.tint}
+                  active={entry.active}
+                />
+              ))}
+            </>
+          ) : null}
+          <RailDivider />
+          {/* Dashboard and Overview stay single icons: outside every section, never folded. The
+              Overview lights for its own breakdown too, which has no icon of its own here. */}
+          {NAV_TOP.map((node) => {
+            const head = node.type === "item" ? node.screen : node.head;
+            if (!head) return null;
+            const screens = node.type === "item" ? [node.screen] : [head, ...node.children];
+            return (
+              <RailLink
+                key={head.path}
+                href={`${base}${head.path}`}
+                icon={node.type === "item" ? node.screen.icon : node.icon}
+                label={head.label}
+                tint={null}
+                active={screens.some((s) => isNavScreenActive(pathname, base, s))}
+              />
+            );
+          })}
+          <RailDivider />
+          {SECTION_ORDER.map((key) => (
+            <RailSection
+              key={key}
+              label={SECTION_LABELS[key]}
+              icon={SECTION_ICONS[key]}
+              tint={SECTION_TINTS[key]}
+              holdsActive={activeSection === key}
+              open={flyout === key}
+              onToggle={() => setFlyout((current) => (current === key ? null : key))}
+              onClose={() => setFlyout((current) => (current === key ? null : current))}
+            >
+              {NAV_SECTIONS[key].map((node) => renderNode(node))}
+            </RailSection>
+          ))}
+        </nav>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.125rem",
+            width: "100%",
+            padding: "0.5rem 0",
+            borderTop: "1px solid var(--color-border)",
+          }}
+        >
+          <RailLink
+            href="/collections"
+            icon="collections"
+            label="All collections"
+            tint={null}
+            active={false}
+          />
+          <RailLink
+            href={`${base}/settings`}
+            icon="settings"
+            label="Settings"
+            tint={null}
+            active={isNavScreenActive(pathname, base, { path: "/settings" })}
+          />
+          <RailLink
+            href={phoneHomePath(collectionSlug)}
+            icon="phone"
+            label="Phone screens"
+            tint={null}
+            active={false}
+          />
+          <Tooltip content="Sign out" placement="right">
+            <button
+              type="button"
+              aria-label="Sign out"
+              onClick={() => void signOut()}
+              style={railIconButtonStyle(false)}
+            >
+              <Icon name="signOut" />
+            </button>
+          </Tooltip>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside
       // App chrome, never paper: the printable packing list (#330) prints the content alone.
@@ -709,6 +1149,17 @@ export function CollectionSidebar({
           {collectionName}
         </span>
         <ActionItemsBell collectionId={collectionId} collectionSlug={collectionSlug} />
+        {/* Folds the sidebar to its icon rail (#2505), giving the screen beside it the width. */}
+        <Tooltip content="Fold the sidebar to icons (⌘\)" placement="bottom" align="end">
+          <button
+            type="button"
+            aria-label="Fold the sidebar to icons"
+            onClick={toggleFold}
+            style={{ ...railIconButtonStyle(false), width: "1.85rem", height: "1.85rem" }}
+          >
+            <Icon name="foldSidebar" />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Directly under the collection it is scoped to (#431): the numbers it takes are per
@@ -781,13 +1232,7 @@ export function CollectionSidebar({
           <ThemeToggle />
         </div>
         <button
-          onClick={async () => {
-            await authClient.signOut();
-            // Signing out carries the screen so that signing back in returns to it (#1176). Read
-            // off the address bar inside the handler rather than from `useSearchParams`, which
-            // would put a Suspense requirement on every screen this sidebar renders beside.
-            router.push(signInPathFrom(window.location.pathname + window.location.search));
-          }}
+          onClick={() => void signOut()}
           style={{
             display: "flex",
             alignItems: "center",

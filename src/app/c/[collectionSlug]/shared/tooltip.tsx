@@ -22,8 +22,12 @@ interface TooltipProps {
    */
   content: ReactNode;
   children: ReactNode;
-  /** Tooltip placement relative to the trigger. Defaults to "top". */
-  placement?: "top" | "bottom";
+  /**
+   * Tooltip placement relative to the trigger. Defaults to "top". `"right"` is for a trigger in a
+   * column of icons — the folded sidebar's rail (#2505) — where a bubble above or below would sit
+   * over the neighbouring icon; it ignores `align` and centres on the trigger vertically.
+   */
+  placement?: TooltipPlacement;
   /**
    * Horizontal anchoring relative to the trigger. "center" (default) centres the bubble on the
    * trigger; "end" anchors its right edge to the trigger (extends left) and "start" its left edge
@@ -62,6 +66,8 @@ interface TooltipProps {
    */
   delay?: number;
 }
+
+type TooltipPlacement = "top" | "bottom" | "right";
 
 /** Gap between the trigger and the tooltip, in pixels (~0.4rem). */
 const GAP = 6;
@@ -201,7 +207,7 @@ function TooltipBubble({
   children,
 }: {
   rect: DOMRect;
-  placement: "top" | "bottom";
+  placement: TooltipPlacement;
   align: "center" | "start" | "end";
   maxWidth: string;
   children: ReactNode;
@@ -209,12 +215,27 @@ function TooltipBubble({
   const ref = useRef<HTMLSpanElement>(null);
   const [shift, setShift] = useState<{ dx: number; dy: number } | null>(null);
 
-  const top = placement === "top" ? rect.top - GAP : rect.bottom + GAP;
-  const left =
-    align === "center" ? rect.left + rect.width / 2 : align === "end" ? rect.right : rect.left;
-  const translateX =
-    align === "center" ? "translateX(-50%)" : align === "end" ? "translateX(-100%)" : "";
-  const translateY = placement === "top" ? "translateY(-100%)" : "";
+  const beside = placement === "right";
+  const top = beside
+    ? rect.top + rect.height / 2
+    : placement === "top"
+      ? rect.top - GAP
+      : rect.bottom + GAP;
+  const left = beside
+    ? rect.right + GAP
+    : align === "center"
+      ? rect.left + rect.width / 2
+      : align === "end"
+        ? rect.right
+        : rect.left;
+  const translateX = beside
+    ? ""
+    : align === "center"
+      ? "translateX(-50%)"
+      : align === "end"
+        ? "translateX(-100%)"
+        : "";
+  const translateY = beside ? "translateY(-50%)" : placement === "top" ? "translateY(-100%)" : "";
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -231,7 +252,11 @@ function TooltipBubble({
     if (r.width > maxX - VIEWPORT_MARGIN) dx = VIEWPORT_MARGIN - r.left;
 
     let dy = 0;
-    if (r.top < VIEWPORT_MARGIN) {
+    if (beside) {
+      // Beside the trigger there is no other side to flip to: it only slides back into the window.
+      if (r.top < VIEWPORT_MARGIN) dy = VIEWPORT_MARGIN - r.top;
+      else if (r.bottom > maxY) dy = maxY - r.bottom;
+    } else if (r.top < VIEWPORT_MARGIN) {
       const below = rect.bottom + GAP;
       dy = below + r.height <= maxY ? below - r.top : VIEWPORT_MARGIN - r.top;
     } else if (r.bottom > maxY) {
@@ -242,7 +267,7 @@ function TooltipBubble({
     if (dx !== 0 || dy !== 0) setShift({ dx, dy });
     // Runs once per hover: the bubble unmounts on leave, so a new position is a new mount and the
     // correction cannot compound. `shift` is deliberately not a dependency.
-  }, [rect, placement, align]);
+  }, [rect, placement, align, beside]);
 
   const transform =
     [translateX, translateY, shift ? `translate(${shift.dx}px, ${shift.dy}px)` : ""]

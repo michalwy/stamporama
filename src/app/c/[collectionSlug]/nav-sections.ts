@@ -8,6 +8,8 @@
  * a route belongs to.
  */
 
+import type { IconName } from "@/app/icons";
+
 export type SectionKey = "catalog" | "collection" | "selling" | "buying" | "partners";
 
 /**
@@ -67,6 +69,19 @@ export const SECTION_TINTS: Record<SectionKey, string> = {
   selling: "blue",
   buying: "amber",
   partners: "violet",
+};
+
+/**
+ * The one icon each section is drawn as on the folded rail (#2505), where a section is a single
+ * button opening its entries in a flyout. The expanded sidebar names a section in words and needs
+ * none.
+ */
+export const SECTION_ICONS: Record<SectionKey, IconName> = {
+  catalog: "sectionCatalog",
+  collection: "sectionCollection",
+  selling: "sectionSelling",
+  buying: "sectionIntake",
+  partners: "sectionPartners",
 };
 
 /**
