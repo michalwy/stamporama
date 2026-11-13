@@ -7,6 +7,9 @@ import {
   coverFingerprintRows,
   coverAskedItemIds,
   coverWalkPhotos,
+  averagePixelColor,
+  EYEDROPPER_RADIUS,
+  eyedropperRegion,
   DEFAULT_PHOTO_COVER_COLOR,
   NO_CARRIED_COVERS,
   normalizeCoverColor,
@@ -360,5 +363,47 @@ describe("carrying covers to the next photo (#1703)", () => {
     const proposal = proposedCovers(carried, { side: "front", checked: false })!;
     proposal[0].x = 0.9;
     assert.equal(carried.front[0].x, 0.1);
+  });
+});
+
+describe("the eyedropper (#2493)", () => {
+  it("averages a square a few pixels across around the pixel clicked", () => {
+    const side = 2 * EYEDROPPER_RADIUS + 1;
+    assert.ok(side >= 3 && side <= 9, "a few pixels across, not one");
+    assert.deepEqual(eyedropperRegion({ x: 0.5, y: 0.5 }, { width: 100, height: 80 }), {
+      x: 50 - EYEDROPPER_RADIUS,
+      y: 40 - EYEDROPPER_RADIUS,
+      width: side,
+      height: side,
+    });
+  });
+
+  it("cuts the square back at the photo's edges and never leaves it empty", () => {
+    assert.deepEqual(eyedropperRegion({ x: 0, y: 0 }, { width: 100, height: 80 }, 3), { x: 0, y: 0, width: 4, height: 4 });
+    assert.deepEqual(eyedropperRegion({ x: 1, y: 1 }, { width: 100, height: 80 }, 3), { x: 96, y: 76, width: 4, height: 4 });
+    assert.deepEqual(eyedropperRegion({ x: 0.5, y: 0.5 }, { width: 1, height: 1 }, 3), { x: 0, y: 0, width: 1, height: 1 });
+  });
+
+  it("takes the average colour, so grain and printing dots even out", () => {
+    // A cream paper speckled with a dark dot: the average, not the dot and not the paper alone.
+    const px = [
+      [240, 230, 210, 255],
+      [240, 230, 210, 255],
+      [240, 230, 210, 255],
+      [40, 30, 10, 255],
+    ].flat();
+    assert.equal(averagePixelColor(px), "#beb4a0");
+    assert.equal(averagePixelColor([1, 2, 3, 255]), "#010203");
+  });
+
+  it("leaves transparent pixels out, and has nothing to say when none is left", () => {
+    assert.equal(averagePixelColor([255, 255, 255, 255, 0, 0, 0, 0]), "#ffffff");
+    assert.equal(averagePixelColor([0, 0, 0, 0]), null);
+    assert.equal(averagePixelColor([]), null);
+  });
+
+  it("gives a colour a bar can store as it is", () => {
+    const color = averagePixelColor([18, 52, 86, 255]);
+    assert.equal(normalizeCoverColor(color), color);
   });
 });
