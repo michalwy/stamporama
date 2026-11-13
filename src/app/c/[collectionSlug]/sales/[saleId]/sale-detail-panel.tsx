@@ -495,6 +495,20 @@ export function SaleDetailPanel({
           >
             <Icon name="print" size="sm" /> Packing list
           </Link>
+          {/* The buyer's order summary (#2512) — the sets and totals, written for the buyer, to save as
+              PDF and send. */}
+          <Tooltip content="A print-friendly summary of the order for the buyer — sets and totals, to save as PDF">
+            <Link
+              href={`/c/${params.collectionSlug}/sales/${sale.id}/order-summary`}
+              style={{
+                ...SECONDARY_BTN,
+                textDecoration: "none",
+                display: "inline-block",
+              }}
+            >
+              <Icon name="print" size="sm" /> Order summary
+            </Link>
+          </Tooltip>
           <button
             type="button"
             onClick={() => {

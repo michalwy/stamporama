@@ -14,6 +14,7 @@ import { useInvalidateSales } from "../use-sales-query";
 import { saleStatusChipStyle, saleStatusMeta } from "../sale-status";
 import { SaleNoteCard } from "./sale-note-card";
 import { SaleAttachmentsCard } from "./sale-attachments-card";
+import { Icon } from "@/app/icons";
 
 const CARD: React.CSSProperties = {
   border: "1px solid var(--color-border)",
@@ -97,6 +98,13 @@ export function CancelledSaleView({ collectionId, sale, attachments }: Cancelled
             {sale.buyerName ? `to ${sale.buyerName}` : "buyer unknown"}
           </span>
           <span style={{ marginLeft: "auto" }} />
+          {/* The order summary (#2512) still prints for a cancelled sale, and says so in its status. */}
+          <Link
+            href={`/c/${params.collectionSlug}/sales/${sale.id}/order-summary`}
+            style={{ ...SECONDARY_BTN, textDecoration: "none", display: "inline-block" }}
+          >
+            <Icon name="print" size="sm" /> Order summary
+          </Link>
           {sale.buyerId && (
             <ConversationButton
               collectionId={collectionId}

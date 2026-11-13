@@ -4608,6 +4608,52 @@ export async function listSaleCopies(
   return withPacked(sale.collectionId, items);
 }
 
+/**
+ * Where each of a sale's copies sits in its sold set (#2512): the offer set's own position for the
+ * copy (#306) — null where the set was never hand-ordered, or names no offer (#2021) — and the stamp's
+ * catalogue sort key, which orders the rest. What the buyer's order summary lists a set's copies by,
+ * through `sortCopiesInSetOrder`. Ownership as {@link listSaleCopies}.
+ */
+export async function saleCopySetOrder(
+  ownerId: string,
+  saleId: string
+): Promise<Map<string, { sortOrder: number | null; catalogSortKey: string | null }>> {
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      collection: { select: { ownerId: true } },
+      lines: {
+        select: {
+          offerSetId: true,
+          items: { select: { itemId: true, item: { select: { stamp: { select: { primaryCatalogSortKey: true } } } } } },
+        },
+      },
+    },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const setIds = sale.lines.flatMap((l) => (l.offerSetId ? [l.offerSetId] : []));
+  const positions =
+    setIds.length === 0
+      ? []
+      : await prisma.offerSetItem.findMany({
+          where: { offerSetId: { in: setIds } },
+          select: { offerSetId: true, itemId: true, sortOrder: true },
+        });
+  const position = new Map(positions.map((p) => [`${p.offerSetId}|${p.itemId}`, p.sortOrder]));
+  const order = new Map<string, { sortOrder: number | null; catalogSortKey: string | null }>();
+  for (const line of sale.lines) {
+    for (const li of line.items) {
+      order.set(li.itemId, {
+        sortOrder: line.offerSetId ? (position.get(`${line.offerSetId}|${li.itemId}`) ?? null) : null,
+        catalogSortKey: li.item.stamp.primaryCatalogSortKey,
+      });
+    }
+  }
+  return order;
+}
+
 // ── Realized proceeds, per copy ───────────────────────────────────────────────
 
 /** What a set of copies has fetched, net, in the base currency (#559). */

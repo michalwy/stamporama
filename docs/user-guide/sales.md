@@ -881,6 +881,40 @@ packing list can't set for you — the screen reminds you of it above the list.
 Click **🖨 Print** for your browser's print dialog (or print/save as PDF from the browser menu).
 The sheet always prints in light colours, even if you use the dark [theme](appearance.md).
 
+## Printing an order summary for the buyer
+
+The packing list is your own working sheet — shelf codes, tick boxes, copy numbers — and none of it
+means anything to the buyer. The header's **🖨 Order summary** button, beside **Packing list**, opens a
+second printout written **for the buyer**: what they bought and what it came to. Print it, or choose
+**Save as PDF** in the print dialog and send the file.
+
+- The **header** carries the sale's number (`Order summary #12`), the platform, the date, the buyer,
+  the **shipping option** when the sale records one, and the sale's [status](#fulfillment-status).
+- The **body** lists every set the buyer bought, [named as the sale screen names it](#how-a-sold-set-is-named) —
+  the offer's number and title, the set's catalogue numbers on a muted line under it — with its
+  **price**. A set sold on no offer is named by its own name. The [free extras](#free-extras) come
+  after the sets, with their copies and no price.
+- The **totals** close it: the **items** and how many sets they are, **shipping** (what the buyer
+  paid for handling and postage), and the **total**, in the sale's currency. On a sale where you
+  recorded the buyer's total, shipping is that total less the items.
+
+The **Sets** switch, above the sheet, chooses how much of each set prints:
+
+- **Set contents** — each set is a heading with its price, and under it its copies, one row each, in
+  the set's own order (the order you gave its copies on the offer, else catalogue order). The
+  **Columns** chips choose what a copy row prints — **Photo**, **Catalog**, **Area**, **Series**,
+  **Stamp**, **Condition** and **Certificate** — and **Show: Issue format** prints the issue format
+  beside the catalogue number, as on the packing list.
+- **Titles only** — each set is one row: its title, how many copies it holds, and its price.
+
+The totals are the same in either mode. The switch starts on **Set contents**; it and the columns are
+remembered once, for every sale, as the packing list's are — separately from the packing list's own.
+
+The order summary never prints anything of yours: no locations, tick boxes, refs, copy numbers,
+packed counts, costs, profit or [note](#note). It is only a printout — nothing is sent from the app,
+and printing it changes nothing on the sale. A **cancelled** sale can still print one, from its own
+screen: its sets with their prices, and *Cancelled* as its status.
+
 ## The conversation with the buyer
 
 What you agreed with a buyer — which copies, the price, shipping, payment, their address, a

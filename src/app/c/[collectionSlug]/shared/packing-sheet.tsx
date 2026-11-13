@@ -233,7 +233,9 @@ export function defaultPackingColumns(columns: readonly PackingColumnSpec[]): st
     .join(",");
 }
 
-const TH: React.CSSProperties = {
+/** A sheet's column heading and cell — exported for a printout that draws its own table from the
+ *  same columns (the order summary, #2512), so the two read as one family on paper. */
+export const TH: React.CSSProperties = {
   textAlign: "left",
   fontSize: "0.6875rem",
   fontWeight: 600,
@@ -244,7 +246,7 @@ const TH: React.CSSProperties = {
   padding: "0.25rem 0.5rem",
 };
 
-const TD: React.CSSProperties = {
+export const TD: React.CSSProperties = {
   fontSize: "0.8125rem",
   color: "var(--color-text-primary)",
   borderBottom: "1px solid var(--color-border)",
