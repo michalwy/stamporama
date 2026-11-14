@@ -1672,7 +1672,8 @@ tile you have already dealt with has no box, having reached its end.
 
 **Work through N tiles** is the filled button at the bar's right end — the one thing a selection is
 made for, so it is the one that stands out. It opens the **same dialog a single tile opens**, with all of the pieces beside
-the answers — so a ticked run can be identified together, **set aside to check** together, or
+the answers, **in the order you ticked them** — the numbers on their tick boxes, not the order
+they lie on the card — so a ticked run can be identified together, **set aside to check** together, or
 **discarded** together, and the shortlist of what they could be is written once for all of them. The
 one thing it cannot do is *assign to a copy on this order*: a copy has one front and one back, so
 assigning is about one piece and stays on the single tile's dialog.
@@ -1685,7 +1686,10 @@ the top of the condition step, and on the confirm button.
 
 **Each copy keeps its own picture.** These are fifteen photographs of fifteen pieces of paper, not
 fifteen copies of one image — each tile's own crops go onto its own copy, exactly as they do when you
-identify one at a time. The copies are numbered in the order the pieces are laid out on the card.
+identify one at a time. The copies are created and numbered **in the order you ticked the pieces**.
+Each piece beside the form is labelled with both numbers — *#2 · tile 5* is the second piece you
+ticked, the fifth tile on the card — so the two cannot be mixed up. Ticking a whole card with its
+batch box ticks it in card order, so a run ticked that way keeps the card's order.
 
 **Ticking tiles is you saying they are the same.** The app takes your word for it: it does not check
 the assertion and it does not offer to find duplicates for you, because telling two shades or two
@@ -1696,7 +1700,7 @@ fifteen copies rather than after. Click any one of them to look at it at full re
 viewer, and use the *← All N pieces* button to come back.
 
 **Step along the run without going back to the grid.** With one piece open, the *‹* and *›* buttons —
-or the <kbd>←</kbd> and <kbd>→</kbd> keys — move to the piece before or after it on the card, with
+or the <kbd>←</kbd> and <kbd>→</kbd> keys — move to the piece ticked before or after it, with
 *n / N* between them saying where you are. That is how a run is compared: flick from one piece to the
 next at the same magnification and the odd one out shows itself. It does not wrap around, so the
 button goes dead when you reach the first or the last piece.

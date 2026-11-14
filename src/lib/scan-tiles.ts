@@ -291,7 +291,8 @@ export async function identifyTilesAsNewCopies(
   };
   // One `intakeStamps` for the whole pass while every tile takes the same answer — which keeps the
   // internal numbers one consecutive range. Tiles keeping their own marks (#1550) are created one
-  // copy each instead, still in card order, so the numbers still run the way the card reads.
+  // copy each instead, still in the order the tiles were handed in — the order they were ticked
+  // (#2526) — so the numbers still run the way the collector chose.
   const copies: ArrivingCopy[] =
     own.size === 0
       ? await intakeStamps(ownerId, target, { ...shared, copies: tiles.length })
@@ -350,8 +351,9 @@ export async function identifyTilesAsNewCopies(
     }))
   );
 
-  // One tile, one copy, in the order the pieces are laid out on the card — which is the order their
-  // internal numbers were allocated in, so the strip and the copy list read the same way round.
+  // One tile, one copy, in the order the tiles were handed in — the order they were ticked (#2526),
+  // which is the order their internal numbers were allocated in, so the numbers on the ticked
+  // squares and the copy list read the same way round.
   //
   // No role clash is possible on any of them: the copies were created a moment ago and this path
   // refuses a photo change-set, so both slots are free. That is why the check lives on the assign

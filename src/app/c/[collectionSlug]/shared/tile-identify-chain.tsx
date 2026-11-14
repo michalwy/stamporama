@@ -884,8 +884,8 @@ export function TileIdentifyChainDialogs({
                 )
               );
             }
-            // Every ticked tile, in card order — the order the copies are created and numbered in
-            // (#596). Each one is handed its own tile's images by the write; nothing here is shared
+            // Every ticked tile, in the order it was ticked (#2526) — the order the copies are created
+            // and numbered in (#596). Each one is handed its own tile's images by the write; nothing here is shared
             // between them but the answers on this form.
             const tileIds = tileIntake.map((p) => p.tileId);
             const correction = tileCorrection;

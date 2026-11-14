@@ -377,6 +377,20 @@ describe("identifying scan tiles into copies (#567)", () => {
     assert.ok(sheets.every((s) => s.batchDoneAt != null));
   });
 
+  it("creates and numbers the copies in the order the tiles were ticked, not the card's (#2526)", async () => {
+    const { tileIds } = await orderWithTiles();
+    // Tile 2 ticked first, tile 1 second — the order the dialog now hands the write.
+    const ticked = [tileIds[1], tileIds[0]];
+    const outcomes = await identifyTilesAsNewCopies(userId, ticked, { stampId, conditionId });
+
+    for (const [i, tileId] of ticked.entries()) {
+      const tile = await prisma.scanTile.findUniqueOrThrow({ where: { id: tileId } });
+      assert.equal(tile.itemId, outcomes[i].itemId, `the ${i + 1}. ticked tile became the ${i + 1}. copy`);
+    }
+    // The copy from tile 2 is created before, and numbered below, the copy from tile 1.
+    assert.equal(outcomes[1].itemNo, outcomes[0].itemNo + 1);
+  });
+
   it("refuses the whole pass before creating anything when one tile cannot be worked (#596)", async () => {
     const { purchaseId, tileIds } = await orderWithTiles();
     await discardTile(userId, tileIds[1]);
