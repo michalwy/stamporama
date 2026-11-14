@@ -15,6 +15,7 @@ import {
   priceMargin,
   priceScale,
   priceVsOwn,
+  priceZones,
   type CopyEstimateInput,
   type CopyMarketTrendInput,
   type PriceFigureSet,
@@ -604,5 +605,43 @@ describe("the price scale's zones (#2497)", () => {
     )!;
     assert.deepEqual(scale.zones, []);
     assert.equal(scale.ticks.length, 1);
+  });
+});
+
+describe("the offer's price zones in prices (#2523)", () => {
+  const figures = { minimum: "0.05", catalogue: "2.00", estimated: "1.19", market: null, cost: "0.40", own: null };
+
+  it("gives the scale's zones as prices, the last one running on past every price", () => {
+    assert.deepEqual(
+      priceZones(offerPriceRows(figures)).map((z) => [z.key, z.from, z.to]),
+      [
+        ["below", 0, 0.05],
+        ["minimumCost", 0.05, 0.4],
+        ["costEstimated", 0.4, 1.19],
+        ["estimatedCatalogue", 1.19, 2],
+        ["aboveCatalogue", 2, null],
+      ]
+    );
+  });
+
+  it("names and bounds the zones exactly as the scale draws them", () => {
+    for (const over of [{}, { estimated: null }, { cost: null }, { estimated: "2.40" }, { catalogue: null }, { minimum: null }]) {
+      const rows = offerPriceRows({ ...figures, ...over });
+      const scale = priceScale(rows)!;
+      const max = scale.ticks.at(-1)!.amount;
+      assert.deepEqual(
+        priceZones(rows).map((z) => [z.key, z.label]).filter(([key]) => scale.zones.some((s) => s.key === key)),
+        scale.zones.map((z) => [z.key, z.label]),
+        `zones with ${JSON.stringify(over)} (highest ${max})`
+      );
+    }
+  });
+
+  it("does not depend on the offer's own price, and is empty with no bounding price", () => {
+    assert.deepEqual(priceZones(offerPriceRows({ ...figures, own: "5.00" })), priceZones(offerPriceRows(figures)));
+    assert.deepEqual(
+      priceZones(offerPriceRows({ minimum: null, catalogue: null, estimated: null, market: "1.00", cost: null, own: null })),
+      []
+    );
   });
 });

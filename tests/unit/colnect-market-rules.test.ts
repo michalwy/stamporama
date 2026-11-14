@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   axisPosition,
+  axisZones,
   colnectMarketView,
   dotAreaScale,
   dotDiameter,
@@ -329,5 +330,49 @@ describe("colnectMarketView dot sizes (#2473)", () => {
     assert.deepEqual(dotLegendCounts(3), [1, 2, 3]);
     assert.deepEqual(dotLegendCounts(2), [1, 2]);
     assert.deepEqual(dotLegendCounts(0), [1]);
+  });
+});
+
+describe("the offer's price zones on the market's axis (#2523)", () => {
+  // A logarithmic axis from 0.10 to 10.00: 1.00 sits halfway.
+  const axis = { lo: 0.1, hi: 10 };
+  const round = (zones: Array<{ key: string; start: number; end: number }>) =>
+    zones.map((z) => [z.key, Number(z.start.toFixed(3)), Number(z.end.toFixed(3))]);
+
+  it("places each zone at its prices on the log axis, the first from the left end", () => {
+    const zones = axisZones(axis, [
+      { key: "below", from: 0, to: 0.4 },
+      { key: "minimumCost", from: 0.4, to: 1 },
+      { key: "costEstimated", from: 1, to: 2 },
+      { key: "aboveCatalogue", from: 2, to: null },
+    ]);
+    assert.deepEqual(round(zones), [
+      ["below", 0, 0.301],
+      ["minimumCost", 0.301, 0.5],
+      ["costEstimated", 0.5, 0.651],
+      ["aboveCatalogue", 0.651, 1],
+    ]);
+  });
+
+  it("keeps the axis's scale: a zone past either end is cut at that end, one wholly outside it dropped", () => {
+    const zones = axisZones(axis, [
+      { key: "below", from: 0, to: 0.05 },
+      { key: "minimumCost", from: 0.05, to: 0.5 },
+      { key: "estimatedCatalogue", from: 0.5, to: 40 },
+      { key: "aboveCatalogue", from: 40, to: null },
+    ]);
+    assert.deepEqual(round(zones), [
+      ["minimumCost", 0, 0.349],
+      ["estimatedCatalogue", 0.349, 1],
+    ]);
+  });
+
+  it("puts a price above Catalogue on the Above Cat. tint", () => {
+    const zones = axisZones(axis, [
+      { key: "estimatedCatalogue", from: 1.19, to: 2 },
+      { key: "aboveCatalogue", from: 2, to: null },
+    ]);
+    const dot = axisPosition(axis, "3.50")!.position;
+    assert.equal(zones.find((z) => z.start <= dot && dot <= z.end)?.key, "aboveCatalogue");
   });
 });

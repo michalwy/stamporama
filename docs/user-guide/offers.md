@@ -1597,6 +1597,15 @@ glance. Its scale is printed above and below the strips, at round figures (0.05,
 see at once where it falls in each condition. An offer with no price yet has no line. A price far
 outside what Colnect asks sits at the end of the axis, its label pointing the way it lies (→).
 
+**Every row's axis is tinted in your price zones** — the same zones and colours as the
+[*Your price* scale](#the-price-table) under the price table: below Minimum and Cost, between them,
+Cost to Estimated, Estimated to Catalogue, above Catalogue, each at this offer's own figures. So a dot
+on the blue tint is a seller asking more than the catalogue value, and one on the red tint is asking
+less than your cost and the platform's minimum. The zones are the offer's, so every condition's row
+shows the same ones; a zone whose figure is missing is drawn as the scale draws it. The axis keeps its
+scale: a zone that reaches past either end simply stops there. The legend names the zones the axis
+shows.
+
 - **The rows are your conditions.** Each is named by the condition of yours that is
   [mapped](collections.md#colnect-condition-mapping) to that Colnect grade, with Colnect's grade
   beside it; a grade none of yours is mapped to is shown under Colnect's own name. The condition the

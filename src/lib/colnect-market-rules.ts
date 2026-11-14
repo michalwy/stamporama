@@ -373,6 +373,29 @@ export function axisPosition(
   return { position, outside: null };
 }
 
+/**
+ * **The offer's price zones on the market's axis** (#2523): each zone, given in prices (`from` up to
+ * `to`, `to` null for one that runs on past every price — the offer's price zones of #2497), placed on
+ * this logarithmic axis. The axis keeps its scale: a zone reaching past either end starts or ends at
+ * that end, and a zone wholly outside it — or with no width on it — is dropped. A price of zero sits
+ * at the left end, as the axis has no zero. Generic over the zone's key, so this module stays free of
+ * the price table's.
+ */
+export function axisZones<Z extends { from: number; to: number | null }>(
+  axis: MarketAxis,
+  zones: readonly Z[]
+): Array<Z & { start: number; end: number }> {
+  const at = (value: number) =>
+    value <= 0
+      ? 0
+      : Math.min(1, Math.max(0, (Math.log(value) - Math.log(axis.lo)) / (Math.log(axis.hi) - Math.log(axis.lo))));
+  return zones.flatMap((zone) => {
+    const start = at(zone.from);
+    const end = zone.to === null ? 1 : at(zone.to);
+    return end > start ? [{ ...zone, start, end }] : [];
+  });
+}
+
 /** The 1-2-5 values next to `v`: the largest below it and the smallest above it. */
 function oneTwoFiveBelow(v: number): number {
   const e = Math.floor(Math.log10(v));

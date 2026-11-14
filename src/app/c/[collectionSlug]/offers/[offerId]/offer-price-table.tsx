@@ -15,6 +15,7 @@ import {
   PRICE_SCALE_LABEL,
   priceScale,
   priceVsOwn,
+  priceZones,
   type EstimateSource,
   type OfferPriceFigureSummary,
   type OfferPriceRow,
@@ -22,6 +23,7 @@ import {
   type PriceMargin,
   type PriceScaleKey,
   type PriceScaleZoneKey,
+  type PriceZone,
 } from "@/lib/offer-price-table";
 import { trendStatement } from "@/lib/price-trend";
 
@@ -194,6 +196,26 @@ const NAME: Record<Exclude<OfferPriceRowKey, "own">, string> = {
   cost: "Cost",
 };
 
+/** The table's rows for `offer` — its own price the saved one — so the price table and the Colnect
+ *  market's zones (#2523) read the same figures. */
+function offerTableRows(offer: OfferPriceTableOffer) {
+  return offerPriceRows({
+    minimum: offer.platformMinimumPrice,
+    catalogue: offer.catalogPrice,
+    estimated: offer.suggestedPrice,
+    market: offer.marketPrice?.amount ?? null,
+    marketTrend: offer.marketTrendPrice?.amount ?? null,
+    cost: offer.costPrice,
+    own: offer.price === "0.00" ? null : offer.price,
+  });
+}
+
+/** The offer's price zones (#2497) in prices, for the Colnect market's strips to tint their axes in
+ *  (#2523) — worked out once for the offer, the zones the price scale draws. */
+export function offerPriceZones(offer: OfferPriceTableOffer): PriceZone[] {
+  return priceZones(offerTableRows(offer));
+}
+
 /**
  * The offer's price area as a small table (#1829), made to read without its tooltips (#1839): headed
  * columns — the row's name with a short note in brackets, *Price*, *Profit over cost*, and since #2477
@@ -238,15 +260,7 @@ export function OfferPriceTable({
   disabled: boolean;
   onApply: (amount: string) => void;
 }) {
-  const rows = offerPriceRows({
-    minimum: offer.platformMinimumPrice,
-    catalogue: offer.catalogPrice,
-    estimated: offer.suggestedPrice,
-    market: offer.marketPrice?.amount ?? null,
-    marketTrend: offer.marketTrendPrice?.amount ?? null,
-    cost: offer.costPrice,
-    own: offer.price === "0.00" ? null : offer.price,
-  });
+  const rows = offerTableRows(offer);
   const ownAmount = rows.find((row) => row.key === "own")?.amount ?? null;
   const scale = priceScale(rows);
   return (
@@ -370,8 +384,9 @@ export function OfferPriceTable({
   );
 }
 
-/** Each zone of the price scale in its own token (#2497). */
-const PRICE_ZONE_COLOR: Record<PriceScaleZoneKey, string> = {
+/** Each zone of the price scale in its own token (#2497) — the Colnect market's strips tint their
+ *  axes in the same ones (#2523). */
+export const PRICE_ZONE_COLOR: Record<PriceScaleZoneKey, string> = {
   below: "var(--color-price-zone-below)",
   minimumCost: "var(--color-price-zone-minimum-cost)",
   costEstimated: "var(--color-price-zone-cost-estimated)",
