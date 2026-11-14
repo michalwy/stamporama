@@ -150,8 +150,8 @@ there before working against one.
 - Use the shared list-screen components and filter controls (`FilterChip`, `MultiSelectFilter`,
   `FILTER_CONTROL_STYLE`).
 - A **filter never unticks anything, and a bulk action never reaches a row the collector cannot
-  see** — hidden ticks survive the filter. Two named exceptions: a picker dialog, and purchase
-  intake.
+  see** — hidden ticks survive the filter. Three named exceptions: a picker dialog, purchase
+  intake, and the Copies list's select-all extended to every copy matching the filters.
 - A thumbnail **fits, never crops** — `objectFit` comes from `THUMB_OBJECT_FIT`.
 - Prefer in-place editing (`InlineText`) where practical.
 - A **detail page reads; it does not become a second editor**.

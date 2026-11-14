@@ -183,6 +183,7 @@ import {
   type CatalogBasisCopy,
   type LotCatalogBasis,
 } from "./cost-to-catalog";
+import { selectableMatchingIds, type SelectableCandidate } from "./select-all";
 
 // Server-side CRUD for physical copies (`Item`), collection-scoped. See ADR-0007
 // and #98. One Item row per physical copy owned; `stampId` links to a stamp at any
@@ -2735,6 +2736,46 @@ export async function filterItemIds(
     select: { id: true },
   });
   return rows.map((r) => r.id);
+}
+
+/**
+ * **Every copy matching the filters that the Copies list's select-all would tick** (#2538), as ids
+ * in list order — what the selection bar counts when it offers *Select all N copies matching the
+ * filters*, and what taking the offer selects.
+ *
+ * The rule for which copies is pure, in `select-all.ts`; this reads what it needs. A copy still
+ * held is one a box is offered for (#682). Under duplicate grouping (`axes` set) the stacks and the
+ * pieces are read apart through {@link NOT_PIECE} / {@link PIECE}, exactly as the groups and their
+ * bucket are counted, so an outlier the group's own box leaves out stays out here too (#398). Read
+ * light — the grouping fields only — because the bar asks before anything is taken; the rows
+ * themselves are read once the collector takes the offer.
+ */
+export async function listSelectableItemIds(
+  ownerId: string,
+  collectionId: string,
+  filters: ItemListFiltersPaginated = {},
+  axes: CopyGroupAxes | null = null
+): Promise<string[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const where = await buildItemFilterWhere(collectionId, filters);
+  const read = (narrow: Prisma.ItemWhereInput | null) =>
+    prisma.item.findMany({
+      where: narrow ? { AND: [where, narrow] } : where,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        stampId: true,
+        conditionId: true,
+        formatId: true,
+        certificateStatusId: true,
+        disposedAt: true,
+      },
+    });
+  const candidates = (rows: Awaited<ReturnType<typeof read>>): SelectableCandidate[] =>
+    rows.map(({ disposedAt, ...row }) => ({ ...row, held: disposedAt == null }));
+  if (!axes) return selectableMatchingIds(candidates(await read(null)), [], null);
+  const [stacks, pieces] = await Promise.all([read(NOT_PIECE), read(PIECE)]);
+  return selectableMatchingIds(candidates(stacks), candidates(pieces), axes);
 }
 
 /** The fields of a copy's list row that a picker searches, facets and sorts by (#2179) — read

@@ -92,17 +92,24 @@ import {
   useItemAreaFacets,
   useInvalidateInventory,
   useCopyByNumber,
+  useSelectableItemIds,
   type InventoryItemFilters,
   type InventoryYearFacetFilters,
   type InventoryAreaFacetFilters,
 } from "./use-inventory-query";
 import { useRowsInView } from "./use-rows-in-view";
+import { useGroupSelectStates } from "./use-select-all";
+import {
+  flatHeaderBoxState,
+  groupedHeaderBoxState,
+  selectAllOffer,
+} from "@/lib/select-all";
 import { rowsInView, selectionInView } from "@/lib/rows-in-view";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { useGroupExpansion } from "@/app/c/[collectionSlug]/shared/use-group-expansion";
 import { usePersistentString } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { HoldingsSummaryBar } from "@/app/c/[collectionSlug]/shared/holdings-summary-bar";
-import { InventoryCopyList, type CopyRowActions } from "./inventory-copy-list";
+import { InventoryCopyList, SELECT_STRIP, type CopyRowActions } from "./inventory-copy-list";
 import {
   buildSelectionActions,
   selectionMenuActions,
@@ -113,6 +120,7 @@ import { LocationGroupList } from "./location-group-list";
 import { IssueGroupList } from "./issue-group-list";
 import { InventoryItemFormDialog } from "./inventory-item-form-dialog";
 import { useToast } from "@/app/toast-provider";
+import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 import { DisposeCopyDialog } from "./dispose-copy-dialog";
 import { RecordReplacementDialog } from "./replacements/record-replacement-dialog";
 import { IdentifyVariantDialog } from "./identify-variant-dialog";
@@ -185,7 +193,6 @@ type DialogState =
       input: OfferGeneratorInput;
     };
 
-
 /** Can this copy go into an offer? For sale, in hand and still held — the offer composition
  * picker's own eligibility (#164/#188/#394), asked of the selection rather than of the checkbox
  * since #682 widened who gets one. */
@@ -197,6 +204,9 @@ function isListableCopy(item: ItemListItem): boolean {
  * one `<select>` value space, so the review options are prefixed rather than given a second control
  * nobody would connect to the first. */
 const EXCLUDED_OPTION_PREFIX = "excluded:";
+
+/** How many copies one read fetches when a select-all is extended to every matching copy (#2538). */
+const EXTEND_SLICE = 500;
 
 /**
  * The listing buttons while the selection **collides** with a live offer (#660).
@@ -899,10 +909,25 @@ export function InventoryListPanel({
       return items;
     });
   }, []);
+  /**
+   * **Every copy matching the filters, taken from the bar** (#2538) — the copies the collector
+   * extended a select-all to, and the filter set they matched under.
+   *
+   * This is the one place a bulk action reaches rows that are not drawn, and it is the collector's
+   * own explicit act: the bar named the count before it was taken and names it after. They count as
+   * *in view* below **while the filters are the ones they were taken under**; a change of filters
+   * does to them what it does to any selection (#1021), hiding the ones the new filters do not
+   * show, and nothing grows or shrinks the set by itself. It is the copies that matched **when it
+   * was taken**.
+   */
+  const [matched, setMatched] = useState<{ sig: string; ids: readonly string[] } | null>(null);
   /** Clearing is the collector's own act and clears **everything**, rows the filter is hiding
    * included — unticking only what is on screen would empty the bar and leave ticks standing that
    * nothing on screen could then reach. The bar's hint says so while any are hidden. */
-  const clearSelection = useCallback(() => setSelection(new Map()), []);
+  const clearSelection = useCallback(() => {
+    setSelection(new Map());
+    setMatched(null);
+  }, []);
 
   /**
    * The ticked copies **in view** — what the bar counts, labels and acts on (#1021).
@@ -917,9 +942,15 @@ export function InventoryListPanel({
   const { inView: reportedRows, register: registerRowsInView } = useRowsInView(filterSignature);
   const copiesInView = useMemo(
     // The flat list needs no reporter — its pages are right here. In a grouped mode the flat query
-    // is disabled and this is empty, so the two halves never double-count.
-    () => rowsInView([allCopies.map((c) => c.id), [...reportedRows]]),
-    [allCopies, reportedRows]
+    // is disabled and this is empty, so the two halves never double-count. The copies a select-all
+    // was extended to (#2538) join them under the filters they were taken under.
+    () =>
+      rowsInView([
+        allCopies.map((c) => c.id),
+        [...reportedRows],
+        matched && matched.sig === filterSignature ? matched.ids : [],
+      ]),
+    [allCopies, reportedRows, matched, filterSignature]
   );
   const selectedInView = useMemo(
     () => selectionInView(selectedCopies, copiesInView),
@@ -927,6 +958,80 @@ export function InventoryListPanel({
   );
   /** Ticked, and hidden by the filter. The figure the bar's second line is about. */
   const hiddenSelectedCount = selectedCopies.length - selectedInView.length;
+
+  /*
+   * **Select all** (#2538), two steps as in Gmail. The header box over the rows ticks what is
+   * **loaded on screen** — the flat list's pages, or every loaded group by the rule its own box
+   * follows (#398), outliers left out. Then, while it is ticked and more copies match than are
+   * ticked, the bar offers to extend to **every copy matching the filters**, naming the count; the
+   * pure half is `lib/select-all.ts`.
+   */
+  const groupSelect = useGroupSelectStates(
+    `${filterSignature}|${groupMode}|${groupDuplicates ? JSON.stringify(axes) : ""}`
+  );
+  const [selectAllRequest, setSelectAllRequest] = useState({ nonce: 0, select: true });
+  const loadedSelectableCopies = useMemo(
+    () => allCopies.filter((c) => c.disposedAt == null),
+    [allCopies]
+  );
+  const headerBox = flatList
+    ? flatHeaderBoxState(
+        loadedSelectableCopies.map((c) => c.id),
+        selectedIds
+      )
+    : groupedHeaderBoxState(groupSelect.states);
+  const setHeaderBox = (next: boolean) => {
+    if (!next) {
+      // Unticking it clears the selection — all of it, as *Clear* does, and every group still
+      // walking its pages for an earlier request is told to stop.
+      clearSelection();
+      if (!flatList) setSelectAllRequest((r) => ({ nonce: r.nonce + 1, select: false }));
+      return;
+    }
+    if (flatList) setManySelected(loadedSelectableCopies, true);
+    else setSelectAllRequest((r) => ({ nonce: r.nonce + 1, select: true }));
+  };
+  const { data: selectableIds } = useSelectableItemIds(
+    collectionId,
+    filters,
+    groupDuplicates ? axes : null,
+    headerBox.checked
+  );
+  const extendOffer = selectAllOffer({
+    headerChecked: headerBox.checked,
+    matchingIds: selectableIds?.ids,
+    selected: selectedIds,
+  });
+  const [extending, setExtending] = useState(false);
+  const [extendError, setExtendError] = useState<string | undefined>();
+  async function extendSelection() {
+    if (extendOffer.kind !== "extend") return;
+    const matchingIds = selectableIds?.ids ?? [];
+    setExtending(true);
+    setExtendError(undefined);
+    try {
+      // The rows themselves, read only now that the offer is taken — the count needed none of
+      // them. In slices, so a selection of thousands is not one request.
+      const { getItemListItemsAction } = await import("@/app/actions/items");
+      const items: ItemListItem[] = [];
+      for (let i = 0; i < extendOffer.missing.length; i += EXTEND_SLICE) {
+        items.push(
+          ...(await getItemListItemsAction(
+            collectionId,
+            extendOffer.missing.slice(i, i + EXTEND_SLICE)
+          ))
+        );
+      }
+      setManySelected(items, true);
+      setMatched({ sig: filterSignature, ids: matchingIds });
+    } catch {
+      setExtendError("The copies could not be read. Nothing more was selected.");
+    } finally {
+      setExtending(false);
+    }
+  }
+  /** Every copy the filters match is ticked, and none the filters hide — the bar says *All N*. */
+  const allMatchingSelected = extendOffer.kind === "all" && hiddenSelectedCount === 0;
 
   // The part of the selection an **offer** can be made of — for sale, in hand, still held (the
   // composition picker's own eligibility, #164/#188/#394). Since #682 the checkbox no longer asks
@@ -1233,8 +1338,19 @@ export function InventoryListPanel({
       onRowsInView: registerRowsInView,
       // The gutter shortcut to the bar (#991), on the same prop for the same reason.
       menu: selectionMenu,
+      // The header box speaking to every loaded group, and the groups answering it (#2538).
+      selectAllRequest,
+      onGroupSelectState: groupSelect.report,
     }),
-    [selectedIds, toggleSelected, setManySelected, registerRowsInView, selectionMenu]
+    [
+      selectedIds,
+      toggleSelected,
+      setManySelected,
+      registerRowsInView,
+      selectionMenu,
+      selectAllRequest,
+      groupSelect.report,
+    ]
   );
 
   // The row `⋮` menu (#125), built once and given to **every** branch below — the flat list and all
@@ -1552,8 +1668,43 @@ export function InventoryListPanel({
                           `${selectedInView.length} of ${selectedCopies.length} ticked cop${
                             selectedCopies.length === 1 ? "y" : "ies"
                           } in view`
-                        : `${selectedCopies.length} cop${selectedCopies.length === 1 ? "y" : "ies"} selected`}
+                        : allMatchingSelected && extendOffer.kind === "all"
+                          ? // Every copy the filters match (#2538): the count is always named, so an
+                            // action over hundreds of copies is never taken unknowingly.
+                            `All ${extendOffer.total} cop${extendOffer.total === 1 ? "y" : "ies"} selected`
+                          : `${selectedCopies.length} cop${selectedCopies.length === 1 ? "y" : "ies"} selected`}
                     </span>
+                    {/* The second step of select all (#2538): the header box ticked what is loaded,
+                        and more copies match than that. Offered only while the box is ticked, so it
+                        follows the act it extends. */}
+                    {extendOffer.kind === "extend" && (
+                      <Tooltip content="Ticks every copy the filters match, including the ones not scrolled to yet. Actions on the bar then reach all of them.">
+                        <button
+                          type="button"
+                          onClick={() => void extendSelection()}
+                          disabled={extending}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            padding: 0,
+                            cursor: extending ? "wait" : "pointer",
+                            fontSize: "0.8125rem",
+                            fontWeight: 600,
+                            color: "var(--color-accent)",
+                            textDecoration: "underline",
+                          }}
+                        >
+                          {extending
+                            ? "Selecting…"
+                            : `Select all ${extendOffer.total} cop${extendOffer.total === 1 ? "y" : "ies"} matching the filters`}
+                        </button>
+                      </Tooltip>
+                    )}
+                    {extendError && (
+                      <span role="alert" style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>
+                        {extendError}
+                      </span>
+                    )}
                     {/* What became of the rest, in the two terms that stop the number reading as a
                         lost selection — still ticked, and back when the filter is released. Drawn
                         only while any are hidden, so a resting bar reads exactly as it always
@@ -1590,7 +1741,7 @@ export function InventoryListPanel({
                           textDecoration: "underline",
                         }}
                       >
-                        Clear
+                        {allMatchingSelected ? "Clear selection" : "Clear"}
                       </button>
                     </Tooltip>
                     {/* The conflict this selection would create on the platform in scope (#513,
@@ -2040,44 +2191,81 @@ export function InventoryListPanel({
             </div>
           )}
 
-          {/* Expand all / Collapse all (#538), mirroring the control the detail screens' lot and
-              set cards carry (#202/#382) — and placed as they place it: on its own line directly
-              above the rows it operates, right-aligned. It is not a filter and does not belong among
-              them; in the toolbar it read as one more way of narrowing the list. Absent without
-              grouping, the flat list having nothing to open. Opening a group fetches its copies, so
-              this is a real request rather than a display toggle, and the label says which way it
-              goes next. */}
-          {!flatList && groupKeys.length > 0 && (
+          {/* The list's header line (#2538): the **select-all box** at its left, in the same
+              gutter as the rows' boxes so it reads as the column's own, and — grouped — Expand all
+              at its right. Select all ticks what is loaded on screen; the bar then offers the rest
+              of what the filters match. */}
+          {!listLoading && !listEmpty && (
             <div
               style={{
                 display: "flex",
-                justifyContent: "flex-end",
-                padding: "0.5rem 1.25rem 0.25rem",
+                alignItems: "center",
+                padding: "0.25rem 1.25rem 0.25rem 0",
+                borderBottom: "1px solid var(--color-border)",
               }}
             >
               <Tooltip
                 content={
-                  groupExpansion.allExpanded
-                    ? "Close every group, back to one line each."
-                    : "Open every group and load the copies under it."
+                  headerBox.checked
+                    ? "Untick everything selected"
+                    : flatList
+                      ? "Select every copy loaded on screen"
+                      : "Select the copies of every group loaded on screen, as each group's own box would"
                 }
+                style={SELECT_STRIP}
               >
-                <button
-                  type="button"
-                  onClick={groupExpansion.toggleAll}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    fontSize: "0.8125rem",
-                    fontWeight: 600,
-                    color: "var(--color-text-secondary)",
-                  }}
+                <CheckCell
+                  disabled={flatList && loadedSelectableCopies.length === 0}
+                  bleed={{ top: "0.25rem", bottom: "0.25rem" }}
+                  style={{ flex: 1 }}
                 >
-                  {groupExpansion.allExpanded ? "Collapse all" : "Expand all"}
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={headerBox.checked}
+                    disabled={flatList && loadedSelectableCopies.length === 0}
+                    ref={(el) => {
+                      // "Some of them" is a third state the DOM only exposes as a property.
+                      if (el) el.indeterminate = headerBox.partial;
+                    }}
+                    onChange={(e) => setHeaderBox(e.target.checked)}
+                    aria-label="Select all"
+                    style={{ cursor: "pointer" }}
+                  />
+                </CheckCell>
               </Tooltip>
+              {/* Expand all / Collapse all (#538), mirroring the control the detail screens' lot
+                  and set cards carry (#202/#382) — on the line directly above the rows it
+                  operates, right-aligned. It is not a filter and does not belong among them; in the
+                  toolbar it read as one more way of narrowing the list. Absent without grouping,
+                  the flat list having nothing to open. Opening a group fetches its copies, so this
+                  is a real request rather than a display toggle, and the label says which way it
+                  goes next. */}
+              {!flatList && groupKeys.length > 0 && (
+                <Tooltip
+                  content={
+                    groupExpansion.allExpanded
+                      ? "Close every group, back to one line each."
+                      : "Open every group and load the copies under it."
+                  }
+                  style={{ marginLeft: "auto" }}
+                >
+                  <button
+                    type="button"
+                    onClick={groupExpansion.toggleAll}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      cursor: "pointer",
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    {groupExpansion.allExpanded ? "Collapse all" : "Expand all"}
+                  </button>
+                </Tooltip>
+              )}
             </div>
           )}
 

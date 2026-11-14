@@ -11,6 +11,7 @@ import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/
 import { InventoryItemRow } from "./inventory-item-row";
 import type { RowsInView } from "./use-rows-in-view";
 import { CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import type { GroupSelectState } from "@/lib/select-all";
 
 const EMPTY_LOCATIONS: LocationData[] = [];
 
@@ -153,6 +154,16 @@ export interface CopySelection {
    * on surfaces with no selection bar to shortcut — the pickers and purchase intake.
    */
   menu?: { label: string; actions: RowAction[] };
+  /**
+   * The list's **header box** speaking to every loaded group (#2538): each change of `nonce` asks
+   * each group mounted at that moment to tick (`select`) or untick its copies by the rule its own
+   * box follows — an outlier stays out (#398). A group loaded afterwards is not asked, as a copy
+   * scrolled to after a select-all is not ticked. On this prop for `onRowsInView`'s reason.
+   */
+  selectAllRequest?: { nonce: number; select: boolean };
+  /** Each group reports how ticked its copies are, so the header box can say *all*, *some* or
+   * none of the loaded groups (#2538, `use-select-all.ts`). */
+  onGroupSelectState?: (token: string, state: GroupSelectState | null) => void;
 }
 
 /** Where the selection menu's trigger sits: centred in the gutter, just under the checkbox. */
