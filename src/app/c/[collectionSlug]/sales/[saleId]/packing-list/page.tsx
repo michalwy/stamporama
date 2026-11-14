@@ -6,7 +6,6 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
 import { getSaleDetail, listSaleCopies } from "@/lib/sales";
-import { getAppVersionLabel } from "@/lib/version";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { buildAreaVendorMaps } from "@/lib/area-vendor";
@@ -22,8 +21,8 @@ import { formatEntityNo } from "@/lib/quick-jump";
 import { saleLineHeading } from "@/lib/sale-line-name";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
-import { GeneratedAt } from "@/app/c/[collectionSlug]/shared/generated-at";
 import { SalePackingSheet } from "./sale-packing-sheet";
+import { SalePrintFooter } from "../sale-print-footer";
 import { Icon } from "@/app/icons";
 import { Screen } from "@/app/screen";
 
@@ -204,35 +203,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         by hand as you pack.
       </footer>
 
-      {/* Pinned to the foot of every printed page (`.print-footer`). It carries enough to identify
-          the sale on its own — a page that gets separated from the stack has to be matchable back
-          to its order without the header — plus the provenance of the printout itself. */}
-      <div
-        className="print-footer"
-        style={{
-          marginTop: "0.5rem",
-          fontSize: "0.6875rem",
-          color: "var(--color-text-muted)",
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: "0.75rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <span>
-          <strong style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>
-            {formatEntityNo(sale.saleNo)} · {sale.platformName}
-            {sale.buyerName ? ` — ${sale.buyerName}` : ""}
-          </strong>
-          {sale.externalRef ? ` · #${sale.externalRef}` : ""} · sold {formatDate(sale.soldAt)} ·{" "}
-          {list.totalCopies} {list.totalCopies === 1 ? "copy" : "copies"} · {status.label}
-        </span>
-        <span>
-          Stamporama {getAppVersionLabel()} · {collection.name} · generated{" "}
-          <GeneratedAt iso={new Date().toISOString()} />
-        </span>
-      </div>
+      <SalePrintFooter sale={sale} copyCount={list.totalCopies} collectionName={collection.name} />
     </Screen>
   );
 }
