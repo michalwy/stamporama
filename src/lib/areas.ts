@@ -726,3 +726,21 @@ export async function syncAreaVendors(
     }),
   ]);
 }
+
+/**
+ * The catalogues a catalogue-number search can be narrowed to (#2529): every vendor one of the
+ * collection's areas uses, by name. Read once by the collection layout for the shared choice beside
+ * every search box and picker; the caller has already authorized the collection.
+ */
+export async function listSearchableCatalogVendors(
+  collectionId: string
+): Promise<{ id: string; name: string; abbreviation: string }[]> {
+  return prisma.catalogVendor.findMany({
+    where: {
+      collectionId,
+      catalogNames: { some: { collectionAreaCatalogs: { some: {} } } },
+    },
+    select: { id: true, name: true, abbreviation: true },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  });
+}

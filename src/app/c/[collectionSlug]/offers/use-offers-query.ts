@@ -52,6 +52,8 @@ import type { LotBuilderPresetData } from "@/lib/lot-builder-presets";
 import type { SeriesRecombinationResult } from "@/lib/series-recombination";
 import type { OfferGeneratorPreview } from "@/lib/offer-generator";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { CATALOG_SCOPE_PARAM } from "@/lib/catalog-search-scope";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import {
   fieldSaveRereads,
   fieldSaveTouchesActionItems,
@@ -94,6 +96,8 @@ export interface OfferFilters {
   /** The fields the search box matches, when the collector narrowed it beside the box (#2242);
    * absent is every field. */
   searchFields?: OfferSearchField[];
+  /** The catalogues a number is searched in (#2529); absent is every one. */
+  catalogScope?: string[];
   /** Only the lots of one multi-lot Facebook post, by its number (#1842) — what a lot's *Post #N*
    * chip narrows the list to. */
   post?: number;
@@ -161,6 +165,7 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
       if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
+      if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
       if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(`/api/collections/${collectionId}/offers?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch offers");
@@ -422,8 +427,12 @@ export function useOfferNeighbours(
   offerId: string,
   context: OfferListContext | null
 ) {
+  // The catalogues a number is searched in (#2529) — the shared choice, which the list's address
+  // does not carry, read here so the walk reads a search as the list did.
+  const { scope } = useCatalogSearchScope();
+  const catalogScope = context?.search ? scope : undefined;
   return useQuery<OfferListNeighbours>({
-    queryKey: ["offer-neighbours", collectionId, offerId, context] as const,
+    queryKey: ["offer-neighbours", collectionId, offerId, context, catalogScope] as const,
     queryFn: async () => {
       const params = new URLSearchParams({ offerId });
       if (context?.platformId) params.set("platformId", context.platformId);
@@ -437,6 +446,7 @@ export function useOfferNeighbours(
       else if (context?.includeClosed) params.set("includeClosed", "1");
       if (context?.search) params.set("search", context.search);
       if (context?.searchFields) params.set(SEARCH_FIELDS_PARAM, context.searchFields.join(","));
+      if (catalogScope) params.set(CATALOG_SCOPE_PARAM, catalogScope.join(","));
       if (context?.post) params.set("post", String(context.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/neighbours?${params.toString()}`
@@ -468,6 +478,7 @@ export function useOfferFilterCounts(collectionId: string, filters: OfferFilters
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
       if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
+      if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
       if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/counts?${params.toString()}`
@@ -497,6 +508,7 @@ export function useOffersSummary(collectionId: string, filters: OfferFilters) {
       else if (filters.includeClosed) params.set("includeClosed", "1");
       if (filters.search) params.set("search", filters.search);
       if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
+      if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
       if (filters.post) params.set("post", String(filters.post));
       const res = await fetch(
         `/api/collections/${collectionId}/offers/summary?${params.toString()}`

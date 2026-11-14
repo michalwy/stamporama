@@ -178,6 +178,10 @@ right, from *which copies* to *how they are shown*.
   collection, and **Reset filters** leaves it as it is: it is how the box reads what you type, not a
   filter on the copies. Other ways into the same search — the copy pickers and quick-jump — keep
   searching every field.
+
+  While *Catalogue number* is ticked, a second control after it picks **which catalogues** a
+  number is searched in — one choice for the whole collection, shared by every list and picker
+  ([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)). The copy pickers read it too.
 - **Issue** — a copy's row has **Show this issue's copies** (the issue icon beside the offer
   icons, and in its **⋮** menu) to list every copy of the same issue — the way to gather the rest
   of a set once a search has found one of its stamps. The search is cleared and the issue takes its

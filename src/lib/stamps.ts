@@ -24,6 +24,7 @@ import {
   catalogMatchKey,
   catalogNumberRuns,
   formatCatalogNumber,
+  stripCatalogVendor,
 } from "./catalog-number";
 import {
   type MoneyDisplay,
@@ -93,6 +94,7 @@ import { parseStampNoSearch } from "./quick-jump";
 import type { StampSearchField } from "./stamp-search-fields";
 import type { Prisma } from "@/generated/prisma/client";
 import { issueFormatStampWhere } from "./issue-format-filter";
+import { catalogVendorSearched, catalogVendorWhere } from "./catalog-search-scope";
 
 /** The stamp's translatable fields (#296). Kept beside the domain module so the action parsing the
  * submitted `<field>:<lang>` inputs and the form rendering them cannot drift apart. */
@@ -763,8 +765,12 @@ export interface StampListFilterOpts {
   /** The fields {@link search} matches, when the collector has narrowed it (#2240); absent is every
    * field. Only the Stamps list's box sends it. */
   searchFields?: StampSearchField[];
+  /** The vendor a typed prefix named (`Mi 200`, #146) — it wins over {@link catalogScope}. */
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** The catalogues a catalogue number is searched in (#2529) — the collector's one shared choice,
+   *  for both the catalogue box and the search box's *Catalogue number* field. Absent is every one. */
+  catalogScope?: string[];
   issueId?: string;
   /** Restrict to a single year. A number matches `stamp.issuedYear`; `"none"`
    *  matches stamps with no issued year. Omitted means no year filter. */
@@ -829,7 +835,14 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
     if (on("issueName"))
       or.push({ issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } });
     if (on("catalogNumber"))
-      or.push({ catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } });
+      or.push({
+        catalogNumbers: {
+          some: {
+            number: { contains: s, mode: "insensitive" },
+            ...catalogVendorWhere(null, opts.catalogScope),
+          },
+        },
+      });
     // The two free-text attributes (#71 §6, #737): they get no filter control of their own, so
     // the search box is how `11½` or `10 gr` is asked for.
     if (on("denomination")) or.push({ denomination: { contains: s, mode: "insensitive" } });
@@ -853,15 +866,14 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
   const issueFormats = issueFormatStampWhere(opts.issueFormatIds);
   if (issueFormats) conditions.push(issueFormats);
 
-  // Catalog filter (#146): a number narrows to a vendor when one is set, else it
-  // matches that number across every vendor. A vendor without a number does not
-  // filter on its own.
+  // Catalog filter (#146): a number is matched in the vendor its typed prefix named, else in the
+  // ticked catalogues (#2529), else in every one. A vendor without a number does not filter.
   if (opts.catalogNumber) {
     conditions.push({
       catalogNumbers: {
         some: {
           number: opts.catalogNumber,
-          ...(opts.catalogVendorId ? { catalogVendorId: opts.catalogVendorId } : {}),
+          ...catalogVendorWhere(opts.catalogVendorId, opts.catalogScope),
         },
       },
     });
@@ -1334,13 +1346,30 @@ function catalogRecallToken(text: string): { values: string[]; insensitive: bool
 export async function searchStampsForPicker(
   ownerId: string,
   collectionId: string,
-  query: string
+  query: string,
+  opts: {
+    /** The catalogues a number is searched in (#2529) — the collector's shared choice, which the
+     *  pickers send; absent is every one (the phone's search, #2004, sends none). */
+    catalogScope?: string[];
+  } = {}
 ): Promise<StampSearchItem[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const text = query.trim();
   if (!text) return [];
   const catalogToken = catalogRecallToken(text);
   const stampNo = parseStampNoSearch(text);
+  // A typed vendor prefix wins over the ticked catalogues (#146), so it is resolved before the net
+  // is cast — and only when there is a choice to win over.
+  const scope = opts.catalogScope;
+  const prefixVendorId = scope
+    ? stripCatalogVendor(
+        text,
+        await prisma.catalogVendor.findMany({
+          where: { collectionId },
+          select: { id: true, abbreviation: true },
+        })
+      ).vendorId
+    : null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const or: any[] = [
@@ -1350,8 +1379,10 @@ export async function searchStampsForPicker(
   if (catalogToken) {
     or.push({
       catalogNumbers: {
-        // Every run has to be inside the *same* stored number, so they are ANDed on one `some`.
+        // Every run has to be inside the *same* stored number, so they are ANDed on one `some` —
+        // a number in a catalogue the search reads (#2529).
         some: {
+          ...catalogVendorWhere(prefixVendorId, scope),
           AND: catalogToken.values.map((value) => ({
             number: catalogToken.insensitive
               ? { contains: value, mode: "insensitive" }
@@ -1453,7 +1484,10 @@ export async function searchStampsForPicker(
         issuePrefixes
       );
       labels.push(formatCatalogNumber(abbr, prefix, cn.number));
-      keys.push(catalogMatchKey(abbr, prefix, cn.number));
+      // Every number is drawn; only one in a catalogue the search reads can match (#2529).
+      if (catalogVendorSearched(cn.catalogVendorId, prefixVendorId, scope)) {
+        keys.push(catalogMatchKey(abbr, prefix, cn.number));
+      }
     }
 
     const membership = s.issueMemberships[0];

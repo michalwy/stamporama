@@ -1,4 +1,5 @@
 import "server-only";
+import { catalogVendorWhere } from "./catalog-search-scope";
 import { SERIES_FLAG_SELECT, stampCountsTowardsSeries } from "./issue-format-series";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
@@ -366,6 +367,9 @@ export interface WantListFilters {
    *  `search`, which they widen and never replace. */
   searchCatalogNumber?: string;
   searchCatalogVendorId?: string;
+  /** The catalogues a catalogue number is searched in (#2529) — the collector's one shared choice;
+   *  the typed prefix ({@link searchCatalogVendorId}) wins over it. Absent is every one. */
+  searchCatalogScope?: string[];
   /** The fields {@link search} matches, when the collector has narrowed it beside the Want list's
    *  box (#2241); absent is every field. Only that box sends it. */
   searchFields?: WantSearchField[];
@@ -444,7 +448,14 @@ function buildWantListWhere(
     if (on("note")) or.push({ notes: contains });
     if (on("stampName")) or.push({ stamp: { name: contains } });
     if (on("catalogNumber")) {
-      or.push({ stamp: { catalogNumbers: { some: { number: contains } } } });
+      // In the ticked catalogues only (#2529); a prefix typed with the number is read below.
+      or.push({
+        stamp: {
+          catalogNumbers: {
+            some: { number: contains, ...catalogVendorWhere(null, filters.searchCatalogScope) },
+          },
+        },
+      });
       // Prefixed catalog numbers (#1261), on the Issues list's quick-search rule (#289): the raw text
       // of `Mi SU 3637` is never a substring of a stored `3637`, so the number parsed out of it — and
       // the vendor, when its abbreviation led — is matched as well. `contains`, like the rest of the
@@ -455,9 +466,7 @@ function buildWantListWhere(
             catalogNumbers: {
               some: {
                 number: { contains: filters.searchCatalogNumber, mode: "insensitive" },
-                ...(filters.searchCatalogVendorId
-                  ? { catalogVendorId: filters.searchCatalogVendorId }
-                  : {}),
+                ...catalogVendorWhere(filters.searchCatalogVendorId, filters.searchCatalogScope),
               },
             },
           },

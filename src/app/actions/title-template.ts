@@ -46,10 +46,12 @@ export async function randomTitleSamplesAction(
 export async function searchTitleSamplesAction(
   collectionId: string,
   search: string,
-  language: string | null = null
+  language: string | null = null,
+  /** The catalogues a number is searched in (#2529); absent is every one. */
+  catalogScope?: string[]
 ): Promise<TitleSampleCopy[]> {
   const session = await getSession();
-  return listTitleSampleCopies(session.user.id, collectionId, { search, language });
+  return listTitleSampleCopies(session.user.id, collectionId, { search, language, catalogScope });
 }
 
 /** The same copies again, re-resolved — after a translation was entered from the preview's warning

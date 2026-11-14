@@ -64,6 +64,7 @@ import { NO_AREA, decadeValue, parseDecade } from "@/lib/list-area-year-filter";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { COPY_SEARCH_FIELDS, COPY_SEARCH_FIELD_KEYS } from "@/lib/copy-search-fields";
 import { formatItemNo, parseItemNoOnlySearch } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
@@ -596,20 +597,11 @@ export function InventoryListPanel({
   // vendor abbreviation ("Mi PL 200") against the collection's vendors and pass the
   // bare number + resolved vendor alongside the raw text, so the query matches
   // catalog numbers even when the typed prefix isn't a substring of the stored value.
-  const catalogVendors = useMemo(() => {
-    const seen = new Map<string, { id: string; abbreviation: string }>();
-    for (const area of areas) {
-      for (const entry of area.catalogEntries) {
-        if (!seen.has(entry.catalogVendorId)) {
-          seen.set(entry.catalogVendorId, {
-            id: entry.catalogVendorId,
-            abbreviation: entry.vendorAbbreviation,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values());
-  }, [areas]);
+  // The catalogues a number is searched in (#2529) — the one remembered choice every list and
+  // picker shares, ticked beside the box while *Catalogue number* is one of its fields. Sent only
+  // with a search, so an empty box asks the request it always did; a typed prefix still wins.
+  const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
+  const sentCatalogScope = search ? catalogScope : undefined;
   const parsedCatalog = useMemo(
     () => parseCatalogSearch(search, catalogVendors),
     [search, catalogVendors]
@@ -622,6 +614,7 @@ export function InventoryListPanel({
       search: search || undefined,
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
+      catalogScope: sentCatalogScope,
       searchFields: narrowedSearchFields,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       certificateStatusIds:
@@ -657,7 +650,7 @@ export function InventoryListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, issueId, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, withPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
+    [filterAreaIds, issueId, search, parsedCatalog, sentCatalogScope, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, year, activeDispositions, noPhotos, withPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes, sortBy, sortDir]
   );
 
   const yearFacetFilters: InventoryYearFacetFilters = useMemo(
@@ -666,6 +659,7 @@ export function InventoryListPanel({
       search: search || undefined,
       catalogVendorId: parsedCatalog.vendorId ?? undefined,
       catalogNumber: parsedCatalog.number || undefined,
+      catalogScope: sentCatalogScope,
       searchFields: narrowedSearchFields,
       conditionIds: conditionIds.length > 0 ? conditionIds : undefined,
       certificateStatusIds:
@@ -696,7 +690,7 @@ export function InventoryListPanel({
       held,
       heldAxes,
     }),
-    [filterAreaIds, search, parsedCatalog, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, withPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
+    [filterAreaIds, search, parsedCatalog, sentCatalogScope, narrowedSearchFields, conditionIds, certificateStatusIds, formatIds, subtypeIds, issueFormatIds, tagIds, tagMode, faultIds, locationId, includeSubLocations, activeDispositions, noPhotos, withPhotos, missingCatalogValue, variantToSettle, notOnOpenOffer, notOfferedPlatformId, excludedPlatformId, deliveryStates, includeGone, includeDisposed, multiStamp, complete, held, heldAxes]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useItemYears(
@@ -1423,6 +1417,8 @@ export function InventoryListPanel({
                 onChange={searchFields.setTicked}
               />
             }
+            /* The catalogues a number is searched in (#2529), while that is one of the fields. */
+            searchCatalogScope={searchFields.ticked.includes("catalogNumber")}
             /* The screen's actions, trailing the filters as they do on Offers (#847) — the
                arrangement is followed rather than re-invented, and the primary one is filled for
                the same reason it is there. They are what the screen *does*, so they are one group

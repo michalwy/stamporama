@@ -32,6 +32,8 @@ import {
   copiesListQueryParams,
   copiesListRailYear,
 } from "@/lib/copies-list-url";
+import { CATALOG_SCOPE_PARAM, writeCatalogScope } from "@/lib/catalog-search-scope";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { NO_AREA } from "@/lib/list-area-year-filter";
 import { asMultiStampFilter } from "@/lib/multi-stamp";
 import { asCompletenessFilter } from "@/lib/completeness-filter";
@@ -307,20 +309,9 @@ export function StructurePanel({
   );
 
   // ── Reads ──
-  const catalogVendors = useMemo(() => {
-    const seen = new Map<string, { id: string; abbreviation: string }>();
-    for (const area of areas) {
-      for (const entry of area.catalogEntries) {
-        if (!seen.has(entry.catalogVendorId)) {
-          seen.set(entry.catalogVendorId, {
-            id: entry.catalogVendorId,
-            abbreviation: entry.vendorAbbreviation,
-          });
-        }
-      }
-    }
-    return [...seen.values()];
-  }, [areas]);
+  // The catalogues a number is searched in (#2529) — the Copies list's shared choice, which no
+  // address carries, so this screen reads the same copies the list it describes shows.
+  const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
 
   const structureQuery = useMemo(() => {
     const query = new URLSearchParams();
@@ -332,9 +323,11 @@ export function StructurePanel({
     if (columns) query.set("cols", columns);
     query.set("includeSubAreas", String(includeSubAreas));
     query.set("includeSubLocations", String(includeSubLocations));
+    const scope = query.get("search") ? writeCatalogScope(catalogScope) : undefined;
+    if (scope) query.set(CATALOG_SCOPE_PARAM, scope);
     query.sort();
     return query.toString();
-  }, [searchParams, rows, columns, includeSubAreas, includeSubLocations]);
+  }, [searchParams, rows, columns, includeSubAreas, includeSubLocations, catalogScope]);
   const { data, isError } = useCollectionStructure(collectionId, structureQuery);
 
   // The rail's counts, from the Copies list's own facet routes under this screen's filters — the
@@ -350,6 +343,7 @@ export function StructurePanel({
       includeSubAreas,
       includeSubLocations,
       catalogVendors,
+      catalogScope,
     });
     const years = new URLSearchParams(listQuery);
     years.delete("year");
@@ -358,7 +352,7 @@ export function StructurePanel({
     years.sort();
     areasOnly.sort();
     return { yearQuery: years.toString(), areaQuery: areasOnly.toString() };
-  }, [searchParams, areas, includeSubAreas, includeSubLocations, catalogVendors]);
+  }, [searchParams, areas, includeSubAreas, includeSubLocations, catalogVendors, catalogScope]);
   const { data: yearFacets, isLoading: yearsLoading } = useStructureYearFacets(
     collectionId,
     yearQuery

@@ -227,6 +227,10 @@ names the one field ticked, or how many are (*2 fields*). A catalogue number typ
 abbreviation is still narrowed to that catalog within *Catalogue number*. The choice is remembered
 for this list in each collection, apart from the filters, which are not.
 
+While *Catalogue number* is ticked, a second control after it picks **which catalogues** a number
+is searched in — one choice for the whole collection, shared by every list and picker
+([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)).
+
 Open wants come first, High priority before the rest.
 
 **Click a row** to open the stamp's page — for its catalogue numbers, the prices the range came

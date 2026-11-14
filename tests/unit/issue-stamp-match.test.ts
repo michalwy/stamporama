@@ -206,3 +206,31 @@ describe("narrowed to the ticked fields", () => {
     assert.deepEqual([...matched!], ["s-birds"]);
   });
 });
+
+// #2529: the row reads a search under the catalogues the server read it in.
+describe("the catalogues a number is searched in", () => {
+  it("drops a stamp matched only by a number in an unticked catalogue", () => {
+    const query = { search: "BL31", catalogScope: [MI] };
+    assert.equal(matchedStampsInIssue(ISSUE, TREE, query, VENDORS), null);
+    assert.deepEqual(
+      [...(matchedStampsInIssue(ISSUE, TREE, { search: "BL31" }, VENDORS) ?? [])],
+      ["s-310"]
+    );
+  });
+
+  it("lets a typed prefix win over the ticks", () => {
+    const query = { search: "Fi BL31", searchCatalogVendorId: FI, catalogScope: [MI] };
+    assert.deepEqual([...(matchedStampsInIssue(ISSUE, TREE, query, VENDORS) ?? [])], ["s-310"]);
+  });
+
+  it("reads the catalogue box's number only in the ticked catalogues", () => {
+    assert.equal(
+      issueHeaderMatchesCatalogFilter(ISSUE, { catalogNumber: "309", catalogScope: [FI] }),
+      false
+    );
+    assert.equal(
+      issueHeaderMatchesCatalogFilter(ISSUE, { catalogNumber: "309", catalogScope: [MI] }),
+      true
+    );
+  });
+});

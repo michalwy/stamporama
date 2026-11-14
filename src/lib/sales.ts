@@ -1,4 +1,5 @@
 import "server-only";
+import { catalogVendorWhere } from "./catalog-search-scope";
 import { lotCostInputs } from "./cost-basis";
 import { loadCostEstimates } from "./cost-estimates";
 import type { CostEstimate } from "./purchase-allocation";
@@ -2941,6 +2942,9 @@ export interface SaleListFilters {
   /** The fields `search` matches (#2243) — absent is every field. Only the Sales list's own box sends
    * it; the agent API's `list_sales` keeps searching them all. */
   searchFields?: readonly SaleSearchField[];
+  /** The catalogues a catalogue number is searched in (#2529) — the collector's one shared choice.
+   *  Absent is every one. */
+  catalogScope?: readonly string[];
   /** Narrow to sales holding at least one line whose set nobody has chosen yet (#697). A **boolean
    * rather than a chip among the statuses**: it is not a place in the fulfilment lifecycle but a
    * decision outstanding *inside* a sale, and a sale can be waiting on it in any status. Absent is
@@ -2970,14 +2974,18 @@ export interface PaginatedSalesResult {
  * `fields` narrows it to the branches ticked beside the box (#2243); absent is every one. */
 function saleSearchWhere(
   search: string,
-  fields: readonly SaleSearchField[] = SALE_SEARCH_FIELD_KEYS
+  fields: readonly SaleSearchField[] = SALE_SEARCH_FIELD_KEYS,
+  catalogScope?: readonly string[]
 ): Prisma.SaleWhereInput {
   const s = search.trim();
   const ticked = new Set(fields);
   const contains = { contains: s, mode: "insensitive" as const };
   const stampMatch: Prisma.StampWhereInput[] = [
     ...(ticked.has("stampName") ? [{ name: contains }] : []),
-    ...(ticked.has("catalogNumber") ? [{ catalogNumbers: { some: { number: contains } } }] : []),
+    // In the ticked catalogues only (#2529).
+    ...(ticked.has("catalogNumber")
+      ? [{ catalogNumbers: { some: { number: contains, ...catalogVendorWhere(null, catalogScope) } } }]
+      : []),
   ];
   return {
     OR: [
@@ -2999,7 +3007,7 @@ function saleListWhere(collectionId: string, filters: SaleListFilters): Prisma.S
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
     ...(filters.buyerId ? { buyerId: filters.buyerId } : {}),
     ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
-    ...(filters.search ? saleSearchWhere(filters.search, filters.searchFields) : {}),
+    ...(filters.search ? saleSearchWhere(filters.search, filters.searchFields, filters.catalogScope) : {}),
     // One line is enough to put the sale on the list (#697): the collector is looking for parcels
     // that cannot be packed yet, and one undecided line stops the parcel.
     ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),

@@ -15,6 +15,7 @@
  */
 
 import { parseCatalogSearch } from "./catalog-number";
+import { CATALOG_SCOPE_PARAM, writeCatalogScope } from "./catalog-search-scope";
 import {
   ALL_SENTINEL,
   AREA_FILTER_PARAM,
@@ -46,6 +47,9 @@ export interface CopiesListUrlContext {
   includeSubLocations: boolean;
   /** The catalogue vendors the search box recognises as a prefix (#146). */
   catalogVendors: readonly { id: string; abbreviation: string }[];
+  /** The catalogues a number is searched in (#2529) — the collector's shared choice, which is in no
+   *  address; absent is every one. */
+  catalogScope?: readonly string[];
 }
 
 /** The area and every area under it — the subtree a picked area means with *+ sub-areas* on. */
@@ -119,6 +123,8 @@ export function copiesListQueryParams(
     const parsed = parseCatalogSearch(search, ctx.catalogVendors);
     if (parsed.vendorId) query.set("catalogVendorId", parsed.vendorId);
     if (parsed.number) query.set("catalogNumber", parsed.number);
+    const scope = writeCatalogScope(ctx.catalogScope ? [...ctx.catalogScope] : undefined);
+    if (scope) query.set(CATALOG_SCOPE_PARAM, scope);
   }
   return query;
 }

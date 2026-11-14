@@ -20,6 +20,7 @@ import {
 import { FilterChip, FILTER_CONTROL_STYLE } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
 import { SALE_SEARCH_FIELDS, SALE_SEARCH_FIELD_KEYS } from "@/lib/sale-search-fields";
 import { saleStatusMeta } from "./sale-status";
@@ -126,6 +127,10 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
     SALE_SEARCH_FIELD_KEYS
   );
   const narrowedSearchFields = search ? searchFields.narrowed : undefined;
+  // The catalogues a number is searched in (#2529) — the one remembered choice every list and
+  // picker shares, sent only with a search.
+  const { scope: catalogScope } = useCatalogSearchScope();
+  const sentCatalogScope = search ? catalogScope : undefined;
 
   const filters: SaleFilters = useMemo(
     () => ({
@@ -134,10 +139,11 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
       statuses,
       search: search || undefined,
       searchFields: narrowedSearchFields,
+      catalogScope: sentCatalogScope,
       setChoicePending,
       toReview,
     }),
-    [platformId, buyerId, statuses, search, narrowedSearchFields, setChoicePending, toReview]
+    [platformId, buyerId, statuses, search, narrowedSearchFields, sentCatalogScope, setChoicePending, toReview]
   );
 
   // Seed the Record a Sale dialog's platform from the list's own filter (#464): a sale being
@@ -220,6 +226,8 @@ export function SalesListPanel({ collectionId, collectionSlug, baseCurrency, tod
               onChange={searchFields.setTicked}
             />
           }
+          /* The catalogues a number is searched in (#2529), while that is one of the fields. */
+          catalogScope={searchFields.ticked.includes("catalogNumber")}
         />
         <ListPresetsControl collectionId={collectionId} spec={SALES_VIEW} />
         <select

@@ -6,6 +6,7 @@ import {
   useDebouncedValue,
 } from "@/app/c/[collectionSlug]/shared/autocomplete";
 import type { StampSearchItem } from "@/lib/stamps";
+import { CatalogScopeControl } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { useStampPickerSearch } from "./use-inventory-query";
 import { issueLabel } from "./stamp-picker-shared";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
@@ -87,21 +88,27 @@ export function StampPickerAutocomplete({
   const debouncedQuery = useDebouncedValue(value);
   const { data: suggestions = [] } = useStampPickerSearch(collectionId, debouncedQuery);
 
+  // The field and the catalogues a number is searched in (#2529) are one unit on the row.
   return (
-    <Autocomplete
-      value={value}
-      onValueChange={setValue}
-      items={suggestions}
-      getItemKey={(s) => s.stampId}
-      renderItem={(s) => <SuggestionRow collectionId={collectionId} item={s} />}
-      onSelect={(s) => {
-        setValue("");
-        onPick(s);
-      }}
-      placeholder="Search by catalog no. (e.g. Mi PL200), name, issue, or location ref…"
-      inputStyle={INPUT_STYLE}
-      inputId={inputId}
-      disabled={disabled}
-    />
+    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Autocomplete
+          value={value}
+          onValueChange={setValue}
+          items={suggestions}
+          getItemKey={(s) => s.stampId}
+          renderItem={(s) => <SuggestionRow collectionId={collectionId} item={s} />}
+          onSelect={(s) => {
+            setValue("");
+            onPick(s);
+          }}
+          placeholder="Search by catalog no. (e.g. Mi PL200), name, issue, or location ref…"
+          inputStyle={INPUT_STYLE}
+          inputId={inputId}
+          disabled={disabled}
+        />
+      </div>
+      <CatalogScopeControl />
+    </div>
   );
 }

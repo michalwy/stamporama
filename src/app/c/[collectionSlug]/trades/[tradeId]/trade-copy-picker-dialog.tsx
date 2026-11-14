@@ -17,6 +17,10 @@ import { copyMatchesSearch } from "@/lib/copy-search";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import {
+  CatalogScopeControl,
+  useCatalogNumberScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
@@ -112,6 +116,8 @@ export function TradeCopyPickerDialog({
 
   const [forTradeOnly, setForTradeOnly] = useState(true);
   const [search, setSearch] = usePersistedSearch(`${collectionId}:trade-copies`);
+  // The catalogues a number is searched in (#2529) — the one choice every list and picker shares.
+  const { searched } = useCatalogNumberScope(search.trim());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
@@ -154,13 +160,14 @@ export function TradeCopyPickerDialog({
       // stamp, issue, location ref, catalogue number or — bare — its own number.
       return copyMatchesSearch(c, raw, () => {
         const vm = vendorMapFor(c.areaId, c.issueId);
-        return c.catalogNumbers.map((cn) => {
+        // Only numbers in the catalogues the search reads (#2529).
+        return c.catalogNumbers.filter((cn) => searched(cn.catalogVendorId)).map((cn) => {
           const v = vm.get(cn.catalogVendorId);
           return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
         });
       });
     });
-  }, [copies, year, search, vendorMapFor]);
+  }, [copies, year, search, vendorMapFor, searched]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -274,6 +281,8 @@ export function TradeCopyPickerDialog({
               style={{ ...SEARCH_STYLE, flex: 1 }}
               aria-label="Filter copies"
             />
+            {/* The catalogues a number is searched in (#2529) — the lists' shared choice. */}
+            <CatalogScopeControl />
             {/* The widening switch. Ticking it changes what the *server* sends, not what is hidden
                 client-side: a collection with thousands of copies would otherwise ship all of them
                 to filter most away. */}

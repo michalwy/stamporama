@@ -1,4 +1,5 @@
 import { isWantPriority, type WantListFilters, type WantPriority } from "@/lib/wants";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { readSearchParam } from "@/lib/text-input";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { WANT_SEARCH_FIELD_KEYS } from "@/lib/want-search-fields";
@@ -35,6 +36,7 @@ export function parseWantListFilters(params: URLSearchParams): WantListFilters {
     search: readSearchParam(params),
     searchCatalogNumber: params.get("searchCatalogNumber") ?? undefined,
     searchCatalogVendorId: params.get("searchCatalogVendorId") ?? undefined,
+    searchCatalogScope: parseCatalogScope(params.get(CATALOG_SCOPE_PARAM)),
     // The fields the search box was narrowed to beside it (#2241); absent is every field.
     searchFields: parseSearchFields(params.get(SEARCH_FIELDS_PARAM), WANT_SEARCH_FIELD_KEYS),
     // A junk offset is page one, not an error: the parameter is ours, and a 400 here would break
