@@ -44,6 +44,11 @@ its own way.
    (`notNarrowing`, beyond the sort) and the stored values that do (`narrows`). Only the return
    detaches: a preset whose own view narrows nothing stays attached when applied, and so does one
    whose exact view the list comes back to.
+   **Amended by #2534 (2026-11-15):** a list's *Reset filters* (*Clear filters* on some lists)
+   **always** detaches the applied preset, whatever the preset held — a sort, a grouping, or a value
+   the button leaves alone no longer keeps the name on the chip marked *modified*. The button clears
+   what it always cleared; the detach rides beside it (`useDetachListPreset`). Clearing the filters
+   one by one keeps the rule above.
 6. **A record deleted since is dropped, and named.** The list declares which parameters reference
    which kind of record; the server stores the names those records had at each save, and when
    listing presets drops the ids that no longer exist (a switched-off platform for the filters that

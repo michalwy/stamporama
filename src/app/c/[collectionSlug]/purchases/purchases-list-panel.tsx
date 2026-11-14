@@ -1,6 +1,6 @@
 "use client";
 
-import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { ListPresetsControl, useDetachListPreset } from "@/app/c/[collectionSlug]/shared/list-presets-control";
 import { PURCHASES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -91,6 +91,8 @@ export function PurchasesListPanel({
     `/c/${collectionSlug}/purchases`,
     knownParties
   );
+  // *Clear filters* lets go of the applied preset as well (#2534).
+  const detachPreset = useDetachListPreset(collectionId, PURCHASES_VIEW.list);
   const { type, statuses, platforms, suppliers, sortBy, sortDir } = view;
   // A delivery status is a purchase's own (#1323): under *Opening balances* there is none to filter
   // by, so only *Completed* is drawn (#1461) — and no other is in force (`resolveIntakeView`).
@@ -327,7 +329,10 @@ export function PurchasesListPanel({
             </span>
             <button
               type="button"
-              onClick={clearFilters}
+              onClick={() => {
+                detachPreset();
+                clearFilters();
+              }}
               style={{
                 ...FILTER_CONTROL_STYLE,
                 marginLeft: "auto",

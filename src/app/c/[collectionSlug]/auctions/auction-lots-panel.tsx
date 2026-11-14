@@ -1,6 +1,6 @@
 "use client";
 
-import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { ListPresetsControl, useDetachListPreset } from "@/app/c/[collectionSlug]/shared/list-presets-control";
 import { AUCTION_LOTS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -555,8 +555,12 @@ export function AuctionLotsPanel({
    * the screen, and the Copies list resets its two *Include* switches for the same reason.
    * `groupBySale` is left alone — a grouping is how the rows are read, not what the list holds,
    * which is the line the Copies list draws around its own grouping.
+   *
+   * The applied filter preset goes with them (#2534), whatever it held.
    */
+  const detachPreset = useDetachListPreset(collectionId, AUCTION_LOTS_VIEW.list);
   const resetFilters = useCallback(() => {
+    detachPreset();
     rememberOutcome("");
     rememberSeller("");
     rememberPlatform("");
@@ -607,6 +611,7 @@ export function AuctionLotsPanel({
     rememberIncludeClosed,
     setLocalSearch,
     updateParams,
+    detachPreset,
   ]);
 
   /** The ticked lots in view that actually carry the marker, read off the rows as they are now
