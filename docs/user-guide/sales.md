@@ -897,6 +897,10 @@ second printout written **for the buyer**: what they bought and what it came to.
 - The **totals** close it: the **items** and how many sets they are, **shipping** (what the buyer
   paid for handling and postage), and the **total**, in the sale's currency. On a sale where you
   recorded the buyer's total, shipping is that total less the items.
+- The **page footer** is the packing list's own, on every page: the sale number, platform, buyer,
+  order number, sale date, copy count and status, and on the right Stamporama and its version, the
+  collection and when the sheet was generated. The two printouts of one sale carry the same footer,
+  differing only in when each was generated.
 
 The **Sets** switch, above the sheet, chooses how much of each set prints:
 
@@ -910,9 +914,9 @@ The **Sets** switch, above the sheet, chooses how much of each set prints:
 The totals are the same in either mode. The switch starts on **Set contents**; it and the columns are
 remembered once, for every sale, as the packing list's are — separately from the packing list's own.
 
-The order summary never prints anything of yours: no locations, tick boxes, refs, copy numbers,
-packed counts, costs, profit or [note](#note). It is only a printout — nothing is sent from the app,
-and printing it changes nothing on the sale. A **cancelled** sale can still print one, from its own
+Apart from the collection's name in the footer, the order summary never prints anything of yours:
+no locations, tick boxes, refs, copy numbers, packed counts, costs, profit or [note](#note). It is
+only a printout — nothing is sent from the app, and printing it changes nothing on the sale. A **cancelled** sale can still print one, from its own
 screen: its sets with their prices, and *Cancelled* as its status.
 
 ## The conversation with the buyer

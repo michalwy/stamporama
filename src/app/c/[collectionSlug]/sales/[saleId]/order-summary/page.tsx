@@ -19,6 +19,7 @@ import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { Screen } from "@/app/screen";
 import { OrderSummarySheet, type OrderSummarySet } from "./order-summary-sheet";
+import { SalePrintFooter } from "../sale-print-footer";
 
 interface OrderSummaryPageProps {
   params: Promise<{ collectionSlug: string; saleId: string }>;
@@ -45,6 +46,8 @@ function formatDate(d: Date): string {
  * PDF and send. Built like the packing list (#330) — a server-rendered sheet, the screen-only
  * controls dropping out on paper — but written for the buyer: **nothing on it is the collector's**.
  * No locations, tick boxes, refs, copy numbers, packed counts, costs or profit, and no note (#2379).
+ * The one exception is the page footer, which is the packing list's own (#2519) and so names the
+ * collection.
  *
  * Every set prints with its copies or by its title only (the sheet's switch). A cancelled sale
  * (#2500) still prints — its sets as the sale kept them, its status *Cancelled*. Printing it changes
@@ -67,6 +70,8 @@ export default async function OrderSummaryPage({ params }: OrderSummaryPageProps
 
   let sets: OrderSummarySet[];
   let setPrices: string[];
+  // The copies the sale holds, as the packing list counts them — none once it is cancelled.
+  let copyCount = 0;
   if (cancelled) {
     // A cancelled sale's copies went back to stock; what it keeps is each set's name and price.
     sets = sale.cancelledLines.map((l) => ({
@@ -111,6 +116,7 @@ export default async function OrderSummaryPage({ params }: OrderSummaryPageProps
       buildAreaVendorMaps(areas, issuePrefixes),
       { grouping: "set", rowOrder: "given", merge: false }
     );
+    copyCount = list.totalCopies;
     const rowsBySet = new Map(list.groups.map((g) => [g.set?.id ?? "", g.rows]));
     sets = [...sale.lines]
       .sort((a, b) => (positions.get(a.id) ?? 0) - (positions.get(b.id) ?? 0))
@@ -200,15 +206,8 @@ export default async function OrderSummaryPage({ params }: OrderSummaryPageProps
         </tbody>
       </table>
 
-      {/* Pinned to the foot of every printed page, so a page apart from the first still says which
-          order it belongs to. */}
-      <div
-        className="print-footer"
-        style={{ marginTop: "0.5rem", fontSize: "0.6875rem", color: "var(--color-text-muted)" }}
-      >
-        Order summary {formatEntityNo(sale.saleNo)} · {sale.platformName}
-        {sale.buyerName ? ` — ${sale.buyerName}` : ""} · {formatDate(sale.soldAt)} · {status.label}
-      </div>
+      {/* The packing list's page footer (#2519), so a sale's two printouts carry the same one. */}
+      <SalePrintFooter sale={sale} copyCount={copyCount} collectionName={collection.name} />
     </Screen>
   );
 }
