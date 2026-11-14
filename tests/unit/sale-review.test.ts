@@ -5,6 +5,7 @@ import {
   describeSaleApiReview,
   nextSaleApiReview,
   readSaleApiReviewMark,
+  saleCopiesAddedAction,
   saleLineAddedAction,
 } from "../../src/lib/sale-review";
 
@@ -96,5 +97,15 @@ describe("describeSaleApiReview", () => {
       describeSaleApiReview({ at: iso, created: false, actions: ["added offer #9 at 3 PLN"] }, at),
       "Changed through the agent API: added offer #9 at 3 PLN — last on 12:30."
     );
+  });
+});
+
+describe("what adding copies on no offer says (#2531)", () => {
+  it("names the copies, one set where there are several", () => {
+    assert.equal(
+      saleCopiesAddedAction({ copyNos: ["#12", "#13"], price: "20.00", currency: "PLN" }),
+      "added copies #12, #13 as one set at 20.00 PLN"
+    );
+    assert.equal(saleCopiesAddedAction({ copyNos: ["#7"], price: "5.00", currency: "EUR" }), "added copy #7 at 5.00 EUR");
   });
 });

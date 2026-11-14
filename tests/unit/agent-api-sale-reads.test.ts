@@ -5,6 +5,7 @@ import { resolveSeller } from "../../src/lib/agent-api/purchase-reads";
 import {
   AGENT_SALE_STATUSES,
   buyer,
+  parseCopyRefs,
   parseSalePrice,
   saleRecord,
   saleRow,
@@ -267,5 +268,19 @@ describe("a sold set's price (#1949)", () => {
 describe("the sale statuses (#1949)", () => {
   it("are the lifecycle, in order, then cancelled (#2500)", () => {
     assert.deepEqual([...AGENT_SALE_STATUSES], ["ordered", "paid", "packed", "sent", "received", "cancelled"]);
+  });
+});
+
+describe("the copies sell_copies names (#2531)", () => {
+  it("splits ids from copy numbers, written with the # or without, each once", () => {
+    assert.deepEqual(parseCopyRefs(["cmabc123", "#12", "12", " 0013 ", "cmabc123"], "copies"), {
+      ids: ["cmabc123"],
+      numbers: [12, 13],
+    });
+  });
+
+  it("refuses a blank entry and a # that is no number, rather than skipping them", () => {
+    assert.match(refusal(() => parseCopyRefs(["#12", "  "], "copies")), /empty entry/);
+    assert.match(refusal(() => parseCopyRefs(["#twelve"], "copies")), /is not a copy number/);
   });
 });

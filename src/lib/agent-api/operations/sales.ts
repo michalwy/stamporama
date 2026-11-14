@@ -3,6 +3,7 @@ import { prisma } from "../../db";
 import { normalizeFacebookProfileUrl } from "../../facebook-profile-rules";
 import {
   SaleActionBlockedError,
+  addSaleCopySetThroughApi,
   countSales,
   getSaleDetail,
   listSalesPaginated,
@@ -16,7 +17,8 @@ import {
 import type { SaleRecordStatus } from "../../sale-status";
 import type { CancelOfferOutcome } from "../../sale-cancel-rules";
 import { SELLABLE_OFFER_STATES } from "../../sale-rules";
-import { saleLineAddedAction } from "../../sale-review";
+import { saleCopiesAddedAction, saleLineAddedAction } from "../../sale-review";
+import { formatItemNo } from "../../item-number";
 import {
   FACEBOOK_PROFILES_SELECT,
   facebookOfferSaleCurrency,
@@ -42,6 +44,7 @@ import {
 import {
   AGENT_SALE_STATUSES,
   buyer as buyerProjection,
+  parseCopyRefs,
   parseSalePrice,
   saleRecord,
   saleRow,
@@ -82,13 +85,21 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // transaction. It is the one status change the agent may make: a buyer who did not pay is something
 // an agent reading the conversation learns first.
 //
+// **A sixth, since #2531**: `sell_copies` sells copies on no offer as one set at one price — the
+// sale's *Add copies* (#2021) — into a sale already there or a new one, through
+// `addSaleCopySetThroughApi`, which runs *Add copies*' guards and writes the line and the *to review*
+// marker in one transaction. No offer is touched: one holding a copy sold this way is flagged by the
+// derivation, as for any copy sold elsewhere (ADR-0013).
+//
 // **No deleting, and no moving a sale.** No operation removes a sale or a line, moves a sale through
 // its fulfilment statuses, changes its header, a line's price or set, or its packing, shipping or share link — those stay in
 // the app, where the collector has the parcel in view. `tests/unit/agent-api-operation-boundary.test.ts`
 // holds it as a fact about what this module imports.
 //
-// **Narrower than the dialog in one place**: a sale already *Sent* is never added to. The dialog does
-// it behind *Show sent sales too*, as a correction (#1950); a correction is the collector's.
+// **Narrower than the dialog in one place**: `sell_offer` never adds to a sale already *Sent*. The
+// dialog does it behind *Show sent sales too*, as a correction (#1950); a correction is the
+// collector's. `sell_copies` is the exception #2531 decided: it adds to a sent sale when the call says
+// so with `to_sent_sale`, as the sale's own *Add copies* does on a sent sale.
 //
 // ## Contacts
 //
@@ -592,6 +603,194 @@ export const sellOfferSetOperation: Operation = {
   parameters: [OFFER_ID_PARAMETER, SET_ID_PARAMETER, ...SELL_PARAMETERS],
   result: SELL_RESULT,
   handler: async (context, params) => sell(context, params, requiredString(params, "setId")),
+};
+
+// ── sell_copies (#2531) ──────────────────────────────────────────────────────
+
+const SELL_COPIES_PARAMETERS: readonly ParameterSpec[] = [
+  {
+    name: "copies",
+    in: "body",
+    type: "string[]",
+    required: true,
+    description:
+      "The copies sold together, each by its id — from `find_unlisted_copies` or `search_collection` — or its copy number, `#123`. Every one must be in stock: in hand and not already sold, given away or traded.",
+  },
+  {
+    name: "price",
+    in: "body",
+    type: "string",
+    required: true,
+    description:
+      "What the copies sold for **together**, with at most two decimal places, in the sale's currency — the one set they become is recorded at it.",
+  },
+  {
+    name: "sale",
+    in: "body",
+    type: "string",
+    required: false,
+    description:
+      "The id of a sale already recorded to add the set to, from `list_sales` — the buyer's sale, on any marketplace. Left out, a new sale is started from `platform`, `buyer` and `sold_at`. A cancelled sale is refused, and a sale already sent is refused unless `to_sent_sale` is true.",
+  },
+  {
+    name: "platform",
+    in: "body",
+    type: "string",
+    required: false,
+    description:
+      "The marketplace a new sale is recorded on — its name from `get_collection_vocabulary`, or its id. Required when a new sale is started, and refused with `sale`.",
+  },
+  {
+    name: "buyer",
+    in: "body",
+    type: "string",
+    required: false,
+    description:
+      "Who bought them: a buyer's name or id, from `find_or_create_buyer`. A name that matches no buyer is refused with the close ones — nothing is created from here. With `sale`, it must be that sale's buyer.",
+  },
+  {
+    name: "sold_at",
+    in: "body",
+    type: "string",
+    required: false,
+    description:
+      "The day they sold, yyyy-mm-dd — required when a new sale is started, and refused with `sale`, which keeps its own date.",
+  },
+  {
+    name: "to_sent_sale",
+    in: "body",
+    type: "boolean",
+    required: false,
+    description:
+      "Send true to add the set to a sale already sent — a correction, such as a stamp that went in the parcel but was not recorded. Never send it otherwise.",
+  },
+];
+
+/** The copies a call names, found in this collection: ids and their copy numbers, in the order named
+ *  by number after id. A name that finds no copy refuses the call, naming it. */
+async function resolveCopies(
+  context: OperationContext,
+  values: readonly string[]
+): Promise<{ ids: string[]; copyNos: string[] }> {
+  const refs = parseCopyRefs(values, "copies");
+  const scope = { collectionId: context.collectionId, collection: { ownerId: context.ownerId } };
+  const [byId, byNo] = await Promise.all([
+    refs.ids.length > 0
+      ? prisma.item.findMany({ where: { ...scope, id: { in: [...refs.ids] } }, select: { id: true, itemNo: true } })
+      : [],
+    refs.numbers.length > 0
+      ? prisma.item.findMany({ where: { ...scope, itemNo: { in: [...refs.numbers] } }, select: { id: true, itemNo: true } })
+      : [],
+  ]);
+  const missing = [
+    ...refs.ids.filter((id) => !byId.some((copy) => copy.id === id)).map((id) => `"${id}"`),
+    ...refs.numbers.filter((no) => !byNo.some((copy) => copy.itemNo === no)).map(formatItemNo),
+  ];
+  if (missing.length > 0) {
+    throw notFound(
+      `No copy ${missing.join(", ")} is in this token's collection. \`search_collection\` or \`find_unlisted_copies\` finds the right ones. Nothing was sold.`
+    );
+  }
+  const copies = new Map<string, number>();
+  for (const copy of [...byId, ...byNo]) copies.set(copy.id, copy.itemNo);
+  return {
+    ids: [...copies.keys()],
+    copyNos: [...copies.values()].sort((a, b) => a - b).map(formatItemNo),
+  };
+}
+
+export async function sellCopies(context: OperationContext, params: ParsedParams): Promise<AgentSale> {
+  const values = stringList(params, "copies");
+  if (values.length === 0) {
+    throw invalidRequest('Send the copies sold as "copies" — their ids or copy numbers. Nothing was sold.');
+  }
+  const price = parseSalePrice(requiredString(params, "price"), "price");
+  const copies = await resolveCopies(context, values);
+
+  const saleId = optionalString(params, "sale");
+  const platformValue = optionalString(params, "platform");
+  const buyerValue = optionalString(params, "buyer");
+  const soldAtValue = optionalString(params, "sold_at");
+  const buyerId = buyerValue !== null ? await resolveBuyerParam(context, buyerValue) : null;
+
+  let target: ApiSaleTarget;
+  let currency: string;
+  if (saleId !== null) {
+    const sale = await assertSale(context, saleId);
+    if (soldAtValue !== null) {
+      throw invalidRequest('"sold_at" is refused with "sale": the sale keeps its own date. Drop it, or leave out "sale" to start a new sale.');
+    }
+    if (platformValue !== null) {
+      throw invalidRequest('"platform" is refused with "sale": the sale keeps its own marketplace. Drop it, or leave out "sale" to start a new sale.');
+    }
+    if (buyerId !== null && sale.buyerId !== buyerId) {
+      throw invalidRequest(
+        `That sale is ${sale.buyerId === null ? "to no named buyer" : "to a different buyer"}. Add to the buyer's own sale — \`list_sales\` with "buyer" finds it — or leave out "sale" to start a new one.`
+      );
+    }
+    target = { saleId };
+    currency = sale.currency;
+  } else {
+    if (platformValue === null || soldAtValue === null) {
+      throw invalidRequest(
+        'A new sale needs "platform" — the marketplace it was made on — and "sold_at" — the day, yyyy-mm-dd. To add to a sale already recorded, send its id as "sale". Nothing was sold.'
+      );
+    }
+    const platformId = resolveVocabularyValue(platformValue, (await readCollectionVocabulary(context)).platforms, {
+      vocabulary: "platform",
+      parameter: "platform",
+    });
+    const [platform, header] = await Promise.all([
+      prisma.platform.findFirstOrThrow({
+        where: { id: platformId, collectionId: context.collectionId },
+        select: { platformCurrency: true },
+      }),
+      loadCollectionHeader(context),
+    ]);
+    // A marketplace with no currency yet takes the collection's own, as the sale form's default does.
+    currency = platform.platformCurrency ?? header.baseCurrency;
+    target = {
+      header: {
+        platformId,
+        buyerId,
+        externalRef: null,
+        transactionUrl: null,
+        soldAt: new Date(`${parseIsoDate(soldAtValue, "sold_at")}T00:00:00.000Z`),
+        currency,
+        buyerHandling: null,
+        buyerPaidTotal: null,
+        commission: null,
+      },
+    };
+  }
+
+  const recorded = await refusingDomainGuards(() =>
+    addSaleCopySetThroughApi(
+      context.ownerId,
+      context.collectionId,
+      target,
+      { itemIds: copies.ids, price },
+      { toSentSale: optionalBoolean(params, "to_sent_sale") === true },
+      [saleCopiesAddedAction({ copyNos: copies.copyNos, price, currency })]
+    )
+  );
+  return readSaleById(context, recorded.saleId);
+}
+
+export const sellCopiesOperation: Operation = {
+  name: "sell_copies",
+  method: "POST",
+  path: "/copies/sale",
+  description:
+    "Record copies sold without an offer — a stamp a buyer asked for in a message, sold at a fair or to a friend — as the app's Add copies does: the copies named become **one set** on a sale, at one `price` for all of them, and no offer is made or changed (an offer that also holds one of them is flagged, as for any copy sold elsewhere). Into the buyer's sale named by `sale`, or a new one started with `platform`, `buyer` and `sold_at`. A copy not in stock, a cancelled sale, and a sale already sent (unless `to_sent_sale`) are refused. The sale waits for the collector's review. For a listing that sold, use `sell_offer`.",
+  writes: true,
+  parameters: SELL_COPIES_PARAMETERS,
+  result: {
+    kind: "object",
+    description:
+      "The sale as it now stands, in `get_sale`'s shape, marked `toReview` with what was added. The set is the line with no `offerNo`, carrying the copies and the price.",
+  },
+  handler: async (context, params) => sellCopies(context, params),
 };
 
 // ── move_sale_sets ───────────────────────────────────────────────────────────

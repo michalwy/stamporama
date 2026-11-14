@@ -166,11 +166,11 @@ describe("the sale operations (#1949)", () => {
     return { id, offerNo: offer.offerNo, setIds: offer.sets.map((set) => set.id) };
   }
 
-  it("carries the eight operations, six of them writes", () => {
-    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "move_sale_sets", "set_sale_note", "cancel_sale"];
+  it("carries the nine operations, seven of them writes", () => {
+    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "sell_copies", "move_sale_sets", "set_sale_note", "cancel_sale"];
     for (const name of names) assert.ok(OPERATIONS.some((operation) => operation.name === name), name);
     const writing = OPERATIONS.filter((operation) => names.includes(operation.name) && operation.writes).map((o) => o.name);
-    assert.deepEqual(writing.sort(), ["cancel_sale", "find_or_create_buyer", "move_sale_sets", "sell_offer", "sell_offer_set", "set_sale_note"]);
+    assert.deepEqual(writing.sort(), ["cancel_sale", "find_or_create_buyer", "move_sale_sets", "sell_copies", "sell_offer", "sell_offer_set", "set_sale_note"]);
   });
 
   it("deletes no sale and moves none — no such operation exists", () => {
@@ -554,6 +554,112 @@ describe("the sale operations (#1949)", () => {
       await prisma.sale.update({ where: { id: sent.id }, data: { status: "sent" } });
       assert.match((await refused(token, "POST", `/sales/${sent.id}/cancel`, {})).message, /not yet sent/);
       assert.equal((await refused(readOnlyToken, "POST", `/sales/${sent.id}/cancel`, {})).status, 403);
+    });
+  });
+
+  describe("sell_copies (#2531)", () => {
+    async function itemNo(id: string): Promise<string> {
+      return `#${(await prisma.item.findUniqueOrThrow({ where: { id }, select: { itemNo: true } })).itemNo}`;
+    }
+
+    it("starts a sale with two copies as one set at one price, then adds another set — marked, no offer touched", async () => {
+      await prisma.contact.create({ data: { collectionId, name: "Marek Pytający", buyer: true } });
+      const [first, second, third] = [await newItem(), await newItem(), await newItem()];
+      const [firstNo, secondNo] = [await itemNo(first), await itemNo(second)];
+      // A copy also held by an offer: the offer is left as it is, flagged by the derivation alone.
+      const offer = await facebookOffer(1);
+      const listed = (
+        await prisma.offerSetItem.findFirstOrThrow({ where: { offerSet: { offerId: offer.id } }, select: { itemId: true } })
+      ).itemId;
+
+      const sale = await ok<AgentSale>(token, "POST", "/copies/sale", {
+        copies: [first, secondNo],
+        price: "20",
+        platform: "Facebook",
+        buyer: "Marek Pytający",
+        sold_at: "2026-11-14",
+      });
+      assert.equal(sale.platform, "Facebook");
+      assert.equal(sale.currency, "PLN", "a new sale takes the marketplace's currency");
+      assert.equal(sale.soldAt, "2026-11-14");
+      assert.equal(sale.buyer?.name, "Marek Pytający");
+      assert.equal(sale.lines.length, 1);
+      assert.equal(sale.lines[0].offerNo, null);
+      assert.equal(sale.lines[0].setId, null);
+      assert.equal(sale.lines[0].price, "20.00");
+      assert.equal(sale.lines[0].copies.length, 2);
+      assert.equal(sale.toReview?.created, true);
+      assert.deepEqual(sale.toReview?.actions, [`added copies ${firstNo}, ${secondNo} as one set at 20.00 PLN`]);
+
+      const added = await ok<AgentSale>(token, "POST", "/copies/sale", { copies: [third, listed], price: "7.5", sale: sale.id });
+      assert.equal(added.id, sale.id);
+      assert.deepEqual(added.lines.map((line) => line.price).sort(), ["20.00", "7.50"]);
+      assert.equal(added.toReview?.actions.length, 2, "a second write adds to the marker");
+      assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: offer.id } })).state, "active", "no offer is touched");
+
+      // What the sale screen reads is what the agent was told.
+      const detail = await getSaleDetail(userId, sale.id);
+      assert.equal(detail?.grossProceeds, "27.50");
+      assert.equal(detail?.lines.filter((line) => line.offerId === null).length, 2);
+    });
+
+    it("refuses what Add copies refuses, writing nothing", async () => {
+      await prisma.contact.create({ data: { collectionId, name: "Halina Odmowna", buyer: true } });
+      const copy = await newItem();
+      const sale = await ok<AgentSale>(token, "POST", "/copies/sale", {
+        copies: [copy],
+        price: "5",
+        platform: "Facebook",
+        buyer: "Halina Odmowna",
+        sold_at: "2026-11-14",
+      });
+      const before = await prisma.sale.count({ where: { collectionId } });
+      const fresh = await newItem();
+
+      // Already sold — into a new sale, which is then not left behind empty.
+      assert.match(
+        (await refused(token, "POST", "/copies/sale", { copies: [copy], price: "5", platform: "Facebook", sold_at: "2026-11-14" })).message,
+        /no longer in stock/
+      );
+      assert.equal(await prisma.sale.count({ where: { collectionId } }), before, "no empty sale left behind");
+      // Nothing named, a copy not in the collection, a new sale without its marketplace or day.
+      assert.equal((await refused(token, "POST", "/copies/sale", { copies: [], price: "5", sale: sale.id })).status, 400);
+      assert.equal((await refused(token, "POST", "/copies/sale", { copies: ["no-such-copy"], price: "5", sale: sale.id })).status, 404);
+      assert.equal((await refused(token, "POST", "/copies/sale", { copies: ["#99999999"], price: "5", sale: sale.id })).status, 404);
+      assert.match(
+        (await refused(token, "POST", "/copies/sale", { copies: [fresh], price: "5", sold_at: "2026-11-14" })).message,
+        /"platform"/
+      );
+      assert.match(
+        (await refused(token, "POST", "/copies/sale", { copies: [fresh], price: "5", sale: sale.id, platform: "Facebook" })).message,
+        /"platform" is refused with "sale"/
+      );
+      assert.equal((await refused(readOnlyToken, "POST", "/copies/sale", { copies: [fresh], price: "5", sale: sale.id })).status, 403);
+
+      // A sale already sent: refused unless the call says so.
+      await prisma.sale.update({ where: { id: sale.id }, data: { status: "sent" } });
+      assert.match(
+        (await refused(token, "POST", "/copies/sale", { copies: [fresh], price: "5", sale: sale.id })).message,
+        /already been sent/
+      );
+      assert.equal((await getSaleDetail(userId, sale.id))!.lines.length, 1, "no refusal wrote anything");
+      const corrected = await ok<AgentSale>(token, "POST", "/copies/sale", { copies: [fresh], price: "5", sale: sale.id, to_sent_sale: true });
+      assert.equal(corrected.lines.length, 2);
+
+      // A cancelled sale takes nothing.
+      const other = await newItem();
+      const unpaid = await ok<AgentSale>(token, "POST", "/copies/sale", {
+        copies: [await newItem()],
+        price: "3",
+        platform: "Facebook",
+        buyer: "Halina Odmowna",
+        sold_at: "2026-11-15",
+      });
+      await ok<AgentSale>(token, "POST", `/sales/${unpaid.id}/cancel`, { reason: "Not paid" });
+      assert.match(
+        (await refused(token, "POST", "/copies/sale", { copies: [other], price: "5", sale: unpaid.id })).message,
+        /cancelled/
+      );
     });
   });
 

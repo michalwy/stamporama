@@ -17,6 +17,7 @@
 //  - **The *to review* marker travels with the sale** (#1948), on the list and on the record, so an
 //    agent reading back what it recorded sees that it is still waiting for the collector.
 
+import { parseItemNoSearch } from "../item-number";
 import { SALE_RECORD_STATUSES } from "../sale-status";
 import { invalidRequest } from "./errors";
 
@@ -313,4 +314,33 @@ export function parseSalePrice(value: string, parameter: string): string {
     );
   }
   return Number(text).toFixed(2);
+}
+
+/** Copies as `sell_copies` names them (#2531): by id, or by copy number — `#123`, or the bare `123`. */
+export interface AgentCopyRefs {
+  readonly ids: readonly string[];
+  readonly numbers: readonly number[];
+}
+
+/**
+ * Split the copies a call names into ids and copy numbers, each once. A copy number is all digits,
+ * with or without the `#` the app writes it with (`parseItemNoSearch`); an id never is, so the two
+ * cannot be mistaken for each other. A blank entry is refused rather than skipped, so a list built
+ * wrongly is not half-sold.
+ */
+export function parseCopyRefs(values: readonly string[], parameter: string): AgentCopyRefs {
+  const ids = new Set<string>();
+  const numbers = new Set<number>();
+  for (const raw of values) {
+    const value = raw.trim();
+    if (value === "") {
+      throw invalidRequest(`"${parameter}" holds an empty entry. Name each copy by its id or its copy number, such as #123.`);
+    }
+    const no = parseItemNoSearch(value);
+    if (no !== null) numbers.add(no);
+    else if (value.startsWith("#")) {
+      throw invalidRequest(`"${value}" in "${parameter}" is not a copy number. A copy number is written #123.`);
+    } else ids.add(value);
+  }
+  return { ids: [...ids], numbers: [...numbers] };
 }
