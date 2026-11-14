@@ -5,6 +5,7 @@ import { listSalesPaginated } from "@/lib/sales";
 import { isSaleRecordStatus } from "@/lib/sale-status";
 import { readSearchParam } from "@/lib/text-input";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { SALE_SEARCH_FIELD_KEYS } from "@/lib/sale-search-fields";
 
 // Paginated sales list for the Sales screen (ADR-0012, #166). Filters by platform, buyer (#1708),
@@ -34,6 +35,8 @@ export async function GET(
   const search = readSearchParam(sp);
   // The fields that search matches, ticked beside the box (#2243) — absent is every field.
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), SALE_SEARCH_FIELD_KEYS);
+  // The catalogues a number is searched in (#2529) — absent is every one.
+  const catalogScope = parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM));
   // "Only the sales still waiting on which set went" (#697). Present-and-`1` rather than any truthy
   // value, so a link carrying `setChoice=0` reads as off rather than as on.
   const setChoicePending = sp.get("setChoice") === "1";
@@ -48,6 +51,7 @@ export async function GET(
       statuses,
       search,
       searchFields,
+      catalogScope,
       setChoicePending,
       toReview,
       pageSize: 50,

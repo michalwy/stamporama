@@ -15,6 +15,10 @@ import type { ItemListItem } from "@/lib/items";
 import type { ComposeTargetOffer, ComposeTargetSet } from "@/lib/offers";
 // The picker's search is one behaviour with two ends: the server builds each set's keys, this
 // matches against them (#867). Both live in the pure module, unit-tested as a pair.
+import {
+  CatalogScopeControl,
+  useCatalogNumberScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { composeSetMatches } from "@/lib/offer-compose-search";
 import type { OfferState } from "@/lib/offer-rules";
 import { OFFER_STATE_LABEL, isOfferState } from "@/lib/offer-rules";
@@ -398,6 +402,8 @@ export function AddToOfferDialog({
 
   const raw = search.trim();
   const q = raw.toLowerCase();
+  // The catalogues a number is searched in (#2529) — the one choice every list and picker shares.
+  const { keysInScope } = useCatalogNumberScope(raw);
 
   // Text filter: an offer survives if its title / derived label / platform matches (keep all its
   // sets) or any set matches (keep just those). Each surviving offer carries its visible sets.
@@ -416,11 +422,11 @@ export function AddToOfferDialog({
         out.push({ offer: o, sets: o.sets });
         continue;
       }
-      const matching = o.sets.filter((s) => composeSetMatches(s, raw));
+      const matching = o.sets.filter((s) => composeSetMatches(s, raw, keysInScope));
       if (matching.length > 0) out.push({ offer: o, sets: matching });
     }
     return out;
-  }, [offers, raw, q]);
+  }, [offers, raw, q, keysInScope]);
 
   const stateCounts = useMemo(() => {
     const counts: Record<string, number> = { preparing: 0, ready: 0, active: 0, paused: 0 };
@@ -625,14 +631,18 @@ export function AddToOfferDialog({
               Add <strong>{copyName}</strong> to an offer — as {multi ? "new sets" : "a new set"}, or
               into an existing one.
             </p>
-            <TextInput
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by title, contents, platform, set, catalog number, or location ref…"
-              style={SEARCH_STYLE}
-              aria-label="Filter offers"
-              autoFocus
-            />
+            {/* The box and the catalogues a number is searched in (#2529) are one unit. */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <TextInput
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filter by title, contents, platform, set, catalog number, or location ref…"
+                style={{ ...SEARCH_STYLE, flex: 1, minWidth: 0 }}
+                aria-label="Filter offers"
+                autoFocus
+              />
+              <CatalogScopeControl />
+            </div>
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>

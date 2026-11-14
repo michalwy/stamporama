@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listIssueYearFacets } from "@/lib/issues";
@@ -27,6 +28,7 @@ export async function GET(
   // The fields the search box was narrowed to beside it (#2239); absent is every field.
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), ISSUE_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
+  const catalogScope = parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM));
   const catalogNumber = sp.get("catalogNumber") || undefined;
 
   try {
@@ -37,6 +39,7 @@ export async function GET(
       searchCatalogNumber,
       searchFields,
       catalogVendorId,
+      catalogScope,
       catalogNumber,
       // The collector's own labels (#1182) — a filter like any other, so the list and both
       // facet rails narrow by it and their counts answer for it.

@@ -31,6 +31,7 @@
 import { isAttachSortKey, type AttachSortDir, type AttachSortKey } from "./attach-picker-sort";
 import { readYearSelection } from "./list-area-year-filter";
 import { NO_LOCATION } from "./location-groups";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope, writeCatalogScope } from "./catalog-search-scope";
 
 /** Where a copy stands: still held, gone on a sale or a closed trade, or written off (#394).
  *  *Gone* is one value for a sale and a trade because the Copies list asks it as one question
@@ -191,6 +192,9 @@ export interface AttachReadQuery {
   sortDir: AttachSortDir;
   year: AttachYear;
   search: string;
+  /** The catalogues the search reads a number in (#2529) — the collector's shared choice; absent
+   *  is every one. */
+  catalogScope?: string[];
 }
 
 /** The year as the facet stores it (`"1950"`, `"none"`, `"1945-1960"`, or null) read as a filter
@@ -207,7 +211,8 @@ export function writeAttachQuery(
   filters: AttachPickerFilters,
   year: string | null,
   search: string,
-  includeSubLocations = true
+  includeSubLocations = true,
+  catalogScope?: readonly string[]
 ): void {
   for (const d of filters.dispositions) params.append("disposition", d);
   for (const id of filters.conditionIds) params.append("condition", id);
@@ -225,7 +230,11 @@ export function writeAttachQuery(
   params.set("dir", filters.sortDir);
   const y = parseAttachYear(year);
   if (y !== null) params.set("year", y);
-  if (search.trim()) params.set("search", search);
+  if (search.trim()) {
+    params.set("search", search);
+    const scope = writeCatalogScope(catalogScope);
+    if (scope) params.set(CATALOG_SCOPE_PARAM, scope);
+  }
 }
 
 /** {@link writeAttachQuery} read back. An unrecognised sort is catalogue order, ascending; the
@@ -247,7 +256,13 @@ export function readAttachQuery(sp: URLSearchParams, search: string | undefined)
     sortDir: sp.get("dir") === "desc" ? "desc" : "asc",
     year: parseAttachYear(sp.get("year")),
     search: search ?? "",
+    // Present only when the search was narrowed to some catalogues (#2529).
+    ...optionalScope(parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM))),
   };
+}
+
+function optionalScope(scope: string[] | undefined): { catalogScope?: string[] } {
+  return scope ? { catalogScope: scope } : {};
 }
 
 /** The purchase chips as a narrowing: true for the copies on a purchase, false for those on none,

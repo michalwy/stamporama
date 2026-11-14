@@ -9,7 +9,8 @@ import type { StampListItem, StampSortBy } from "@/lib/stamps";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
-import { ListToolbar, type SortOption, type CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { ListToolbar, type SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { IssueFilterAutocomplete } from "./issue-filter-autocomplete";
 import { ConditionPriceSwitcher } from "@/app/c/[collectionSlug]/shared/condition-price-switcher";
@@ -20,7 +21,6 @@ import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpe
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
 import { parseCatalogSearch } from "@/lib/catalog-number";
 import { useAreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
-import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
 import { STAMP_SEARCH_FIELDS, STAMP_SEARCH_FIELD_KEYS } from "@/lib/stamp-search-fields";
@@ -112,16 +112,9 @@ export function StampsListPanel({
     searchParams.get("sortDir"),
     ["issueDate", "catalogNumber", "name", "issueName"]
   );
-  // Catalog vendor filter, remembered per collection (#115): the URL param wins when present
-  // (shareable), else fall back to the last-selected vendor on a fresh visit. Shared across the
-  // stamp and issue lists so a chosen catalog carries between them.
-  const [storedCatalogVendor, rememberCatalogVendor] = usePersistedCollectionValue(
-    "list-catalog-vendor",
-    collectionId
-  );
-  const catalogVendorId = searchParams.has("catalogVendorId")
-    ? (searchParams.get("catalogVendorId") ?? "")
-    : (storedCatalogVendor ?? "");
+  // The catalogues a number is searched in (#2529) — one remembered choice every list and picker
+  // shares, ticked beside the catalogue box; it replaced the single remembered vendor (#115).
+  const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
   const issueId = searchParams.get("issueId") ?? "";
 
@@ -141,31 +134,19 @@ export function StampsListPanel({
     useDisplayCondition(collectionId);
   const { formats, displayFormatId, setDisplayFormatId } = useDisplayFormat(collectionId);
 
-  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
-    const seen = new Map<string, CatalogVendorOption>();
-    for (const area of areas) {
-      for (const entry of area.catalogEntries) {
-        if (!seen.has(entry.catalogVendorId)) {
-          seen.set(entry.catalogVendorId, {
-            id: entry.catalogVendorId,
-            name: entry.vendorName,
-            abbreviation: entry.vendorAbbreviation,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values());
-  }, [areas]);
 
   // Prefixed catalog search (#146): a vendor abbreviation typed into the number box
-  // ("Mi PL 200") resolves and overrides the dropdown; a bare number falls back to
-  // the dropdown vendor, or searches across all vendors when none is selected.
+  // ("Mi PL 200") resolves and wins over the ticked catalogues; a bare number is matched in the
+  // ticked ones (#2529), or in every one while all are ticked.
   const parsedCatalog = useMemo(
     () => parseCatalogSearch(catalogNumber, catalogVendors),
     [catalogNumber, catalogVendors]
   );
-  const effectiveCatalogVendorId = parsedCatalog.vendorId ?? catalogVendorId;
+  const effectiveCatalogVendorId = parsedCatalog.vendorId ?? "";
   const effectiveCatalogNumber = parsedCatalog.number;
+  // Sent only when there is a number to read — the box's or the search's — so an empty search asks
+  // the request it always did.
+  const sentCatalogScope = effectiveCatalogNumber || search ? catalogScope : undefined;
 
   const filters: StampListFilters = useMemo(
     () => ({
@@ -174,6 +155,7 @@ export function StampsListPanel({
       searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      catalogScope: sentCatalogScope,
       issueId: issueId || undefined,
       ...attributeFilters,
       ...tagFilter,
@@ -183,7 +165,7 @@ export function StampsListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, sentCatalogScope, issueId, attributeFilters, tagFilter, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   const yearFacetFilters: StampYearFacetFilters = useMemo(
@@ -193,11 +175,12 @@ export function StampsListPanel({
       searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      catalogScope: sentCatalogScope,
       issueId: issueId || undefined,
       ...attributeFilters,
       ...tagFilter,
     }),
-    [filterAreaIds, search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, attributeFilters, tagFilter]
+    [filterAreaIds, search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, sentCatalogScope, issueId, attributeFilters, tagFilter]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useStampYears(
@@ -213,12 +196,13 @@ export function StampsListPanel({
       searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      catalogScope: sentCatalogScope,
       issueId: issueId || undefined,
       year: year || undefined,
       ...attributeFilters,
       ...tagFilter,
     }),
-    [search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, issueId, year, attributeFilters, tagFilter]
+    [search, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, sentCatalogScope, issueId, year, attributeFilters, tagFilter]
   );
 
   const { data: areaFacets } = useStampAreaFacets(collectionId, areaFacetFilters);
@@ -338,13 +322,8 @@ export function StampsListPanel({
           sortDir={sortDir}
           onSortChange={(sb, sd) => { persistSort(sb as StampSortBy, sd); updateParams({ sortBy: sb, sortDir: sd }); }}
           sortOptions={STAMP_SORT_OPTIONS}
-          catalogVendors={catalogVendors}
-          catalogVendorId={catalogVendorId}
           catalogNumber={catalogNumber}
-          onCatalogSearchChange={(vid, num) => {
-            rememberCatalogVendor(vid);
-            updateParams({ catalogVendorId: vid, catalogNumber: num });
-          }}
+          onCatalogNumberChange={(num) => updateParams({ catalogVendorId: "", catalogNumber: num })}
         >
           {/* The toolbar wraps: the four attribute filters below join controls that already fill
               a line on their own. */}

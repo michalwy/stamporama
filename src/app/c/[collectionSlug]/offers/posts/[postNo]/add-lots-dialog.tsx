@@ -3,6 +3,10 @@
 import { useMemo, useState } from "react";
 import { DialogShell, DialogBody, DialogActions, PICKER_DIALOG_HEIGHT } from "@/app/dialog-shell";
 import { formControl } from "@/app/control-style";
+import {
+  CatalogScopeControl,
+  useCatalogNumberScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { offerPickerMatches } from "@/lib/offer-picker-contents-rules";
 import { OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { EntityNoChip } from "@/app/c/[collectionSlug]/shared/entity-no-chip";
@@ -68,10 +72,12 @@ export function AddLotsDialog({
   const [picked, setPicked] = useState<string[]>([]);
   const [localError, setLocalError] = useState<string | undefined>();
 
+  // The catalogues a number is searched in (#2529) — the one choice every list and picker shares.
+  const { keysInScope } = useCatalogNumberScope(search);
   const visible = useMemo(() => {
     if (!search.trim()) return offers;
-    return offers.filter((o) => offerPickerMatches(o, search));
-  }, [offers, search]);
+    return offers.filter((o) => offerPickerMatches(o, search, keysInScope));
+  }, [offers, search, keysInScope]);
 
   function toggle(offerId: string) {
     setLocalError(undefined);
@@ -110,15 +116,19 @@ export function AddLotsDialog({
             </p>
           ) : (
             <>
-              <TextInput
-                type="search"
-                aria-label="Find an offer"
-                placeholder="Find by catalogue number, issue, title or offer number"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ ...SEARCH_STYLE, marginBottom: "0.5rem" }}
-                {...NO_AUTOFILL}
-              />
+              {/* The box and the catalogues a number is searched in (#2529) are one unit. */}
+              <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginBottom: "0.5rem" }}>
+                <TextInput
+                  type="search"
+                  aria-label="Find an offer"
+                  placeholder="Find by catalogue number, issue, title or offer number"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{ ...SEARCH_STYLE, flex: 1, minWidth: 0 }}
+                  {...NO_AUTOFILL}
+                />
+                <CatalogScopeControl />
+              </div>
               {visible.length === 0 ? (
                 <p style={MUTED}>No offer matches.</p>
               ) : (

@@ -1,4 +1,5 @@
 import "server-only";
+import { catalogVendorWhere } from "./catalog-search-scope";
 import { prisma } from "./db";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper } from "./title-copy";
 import type { TitleTemplateCopy } from "./offer-title-template";
@@ -139,7 +140,13 @@ export async function titleSampleCopiesByIds(
 export async function listTitleSampleCopies(
   ownerId: string,
   collectionId: string,
-  opts: { search?: string; limit?: number; language?: string | null } = {}
+  opts: {
+    search?: string;
+    limit?: number;
+    language?: string | null;
+    /** The catalogues a number is searched in (#2529); absent is every one. */
+    catalogScope?: string[];
+  } = {}
 ): Promise<TitleSampleCopy[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const search = opts.search?.trim();
@@ -151,7 +158,16 @@ export async function listTitleSampleCopies(
           ? {
               OR: [
                 { stamp: { name: { contains: search, mode: "insensitive" } } },
-                { stamp: { catalogNumbers: { some: { number: { contains: search, mode: "insensitive" } } } } },
+                {
+                  stamp: {
+                    catalogNumbers: {
+                      some: {
+                        number: { contains: search, mode: "insensitive" },
+                        ...catalogVendorWhere(null, opts.catalogScope),
+                      },
+                    },
+                  },
+                },
               ],
             }
           : {}),

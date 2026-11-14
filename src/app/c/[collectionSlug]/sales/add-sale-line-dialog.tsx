@@ -25,6 +25,10 @@ import { useSaleSellableOffers, useSellableCopies } from "./use-sales-query";
 import { Icon } from "@/app/icons";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { CaretCell } from "@/app/c/[collectionSlug]/shared/cell-target";
+import {
+  CatalogScopeControl,
+  useCatalogNumberScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 
 
 /** Maps + lookups the expandable copy rows need, bundled so they pass through one prop. */
@@ -198,7 +202,13 @@ function buildGroups(offers: SellableOffer[], salePlatformId: string, saleCurren
  * area prefix + number), so "Mi PL 200", "MiPL200", "PL200", or bare "200" all hit (mirrors
  * the compose picker). Falls
  * back to the plain labels while the copies are still loading. */
-function setMatches(s: SetRow, raw: string, q: string, ctx: RowCtx): boolean {
+function setMatches(
+  s: SetRow,
+  raw: string,
+  q: string,
+  ctx: RowCtx,
+  searched: (vendorId: string) => boolean
+): boolean {
   if (s.label.toLowerCase().includes(q)) return true;
   if (s.itemLabels.join(" ").toLowerCase().includes(q)) return true;
   for (const id of s.itemIds) {
@@ -208,7 +218,8 @@ function setMatches(s: SetRow, raw: string, q: string, ctx: RowCtx): boolean {
     if ((c.issueName ?? "").toLowerCase().includes(q)) return true;
     if ((c.locationRef ?? "").toLowerCase().includes(q)) return true;
     const vm = ctx.vendorMapFor(c.areaId, c.issueId);
-    const keys = c.catalogNumbers.map((cn) => {
+    // Only numbers in the catalogues the search reads (#2529).
+    const keys = c.catalogNumbers.filter((cn) => searched(cn.catalogVendorId)).map((cn) => {
       const v = vm.get(cn.catalogVendorId);
       return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
     });
@@ -300,6 +311,8 @@ export function AddSaleLineDialog({
 
   const raw = search.trim();
   const q = raw.toLowerCase();
+  // The catalogues a number is searched in (#2529) — the one choice every list and picker shares.
+  const { searched } = useCatalogNumberScope(raw);
 
   // Text filter: a group survives if its title / derived label matches (keep all its sets) or any
   // set matches (keep just the matching ones). Each surviving group carries its visible sets.
@@ -315,11 +328,11 @@ export function AddSaleLineDialog({
         out.push({ group: g, sets: g.sets });
         continue;
       }
-      const matching = g.sets.filter((s) => setMatches(s, raw, q, ctx));
+      const matching = g.sets.filter((s) => setMatches(s, raw, q, ctx, searched));
       if (matching.length > 0) out.push({ group: g, sets: matching });
     }
     return out;
-  }, [groups, raw, q, ctx]);
+  }, [groups, raw, q, ctx, searched]);
 
   const pickedList = useMemo(() => Object.values(picked), [picked]);
 
@@ -517,14 +530,18 @@ export function AddSaleLineDialog({
           }}
         >
           <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--color-border)" }}>
-            <TextInput
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter by title, contents, set, catalog number, or location ref…"
-              style={SEARCH_STYLE}
-              aria-label="Filter sets"
-              autoFocus
-            />
+            {/* The box and the catalogues a number is searched in (#2529) are one unit. */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <TextInput
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filter by title, contents, set, catalog number, or location ref…"
+                style={{ ...SEARCH_STYLE, flex: 1, minWidth: 0 }}
+                aria-label="Filter sets"
+                autoFocus
+              />
+              <CatalogScopeControl />
+            </div>
           </div>
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>

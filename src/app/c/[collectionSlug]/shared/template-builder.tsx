@@ -27,6 +27,7 @@ import type { TitleSampleCopy } from "@/lib/title-samples";
 import { Icon } from "@/app/icons";
 import { TextArea, TextInput } from "./text-input";
 import { formControl, multiLineFormControl } from "@/app/control-style";
+import { CatalogScopeControl, useCatalogSearchScope } from "./catalog-search-scope";
 
 // The template editor (#210, #266, #267): a `{token}` template edited against a **live preview** of
 // real inventory — a random copy by default, shuffled, or searched out. Extracted from the old
@@ -141,20 +142,22 @@ export function useTemplateSamples(
     // remounts the dialog — so there is no state to reset here.
   }, [load]);
 
-  // Debounced copy search for the "pick a specific copy" list.
+  // Debounced copy search for the "pick a specific copy" list, its catalogue numbers read in the
+  // catalogues the collector's one shared choice ticks (#2529).
+  const { scope: catalogScope } = useCatalogSearchScope();
   useEffect(() => {
     if (!picking) return;
     let alive = true;
     const handle = setTimeout(async () => {
       const { searchTitleSamplesAction } = await import("@/app/actions/title-template");
-      const rows = await searchTitleSamplesAction(collectionId, search, language);
+      const rows = await searchTitleSamplesAction(collectionId, search, language, catalogScope);
       if (alive) setCandidates(rows);
     }, 200);
     return () => {
       alive = false;
       clearTimeout(handle);
     };
-  }, [collectionId, search, picking, language]);
+  }, [collectionId, search, picking, language, catalogScope]);
 
   return {
     copies,
@@ -249,13 +252,17 @@ export function TemplateSamplePicker({ samples }: { samples: TemplateSamples }) 
 
       {samples.picking && (
         <div style={{ marginTop: "0.625rem" }}>
-          <TextInput
-            value={samples.search}
-            onChange={(e) => samples.setSearch(e.target.value)}
-            placeholder="Search by stamp name or catalog number…"
-            style={{ ...INPUT_STYLE, fontFamily: "inherit" }}
-            aria-label="Search copies"
-          />
+          {/* The box and the catalogues a number is searched in (#2529) are one unit. */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+            <TextInput
+              value={samples.search}
+              onChange={(e) => samples.setSearch(e.target.value)}
+              placeholder="Search by stamp name or catalog number…"
+              style={{ ...INPUT_STYLE, fontFamily: "inherit", flex: 1, minWidth: 0 }}
+              aria-label="Search copies"
+            />
+            <CatalogScopeControl />
+          </div>
           <div style={{ maxHeight: "9rem", overflowY: "auto", marginTop: "0.5rem" }}>
             {samples.candidates.length === 0 ? (
               <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "0.5rem 0" }}>

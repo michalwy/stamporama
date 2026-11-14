@@ -1,4 +1,5 @@
 import type { ItemListFiltersPaginated } from "@/lib/items";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { isDeliveryState } from "@/lib/delivery-state";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { faultFilterFromParams } from "@/lib/fault-filter";
@@ -70,6 +71,7 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     search: readSearchParam(sp),
     catalogVendorId: sp.get("catalogVendorId") || undefined,
     catalogNumber: sp.get("catalogNumber") || undefined,
+    catalogScope: parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM)),
     // The fields the search box was narrowed to beside it (#2238); absent is every field.
     searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), COPY_SEARCH_FIELD_KEYS),
     stampId: sp.get("stampId") || undefined,

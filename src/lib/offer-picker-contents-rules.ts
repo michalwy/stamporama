@@ -108,11 +108,13 @@ export function offerPickerContents(
  */
 export function offerPickerMatches(
   offer: { offerNo: number; contents: Pick<OfferPickerContents, "searchText" | "catalogKeys"> },
-  query: string
+  query: string,
+  /** Narrows the catalogue keys to the catalogues the search reads (#2529); every key without it. */
+  keysInScope: (keys: readonly string[]) => readonly string[] = (keys) => keys
 ): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   if (String(offer.offerNo) === q.replace(/^#/, "")) return true;
   if (offer.contents.searchText.includes(q)) return true;
-  return catalogKeyMatches(q, offer.contents.catalogKeys);
+  return catalogKeyMatches(q, keysInScope(offer.contents.catalogKeys));
 }

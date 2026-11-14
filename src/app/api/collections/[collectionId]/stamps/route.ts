@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { readYearFilter } from "@/lib/list-area-year-filter";
@@ -32,6 +33,7 @@ export async function GET(
   // The fields the search box was narrowed to beside it (#2240); absent is every field.
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), STAMP_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
+  const catalogScope = parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM));
   const catalogNumber = sp.get("catalogNumber") || undefined;
   const issueId = sp.get("issueId") || undefined;
   const attributeFilters = stampAttributeFiltersFromParams(sp);
@@ -50,6 +52,7 @@ export async function GET(
       search,
       searchFields,
       catalogVendorId,
+      catalogScope,
       catalogNumber,
       issueId,
       ...attributeFilters,
