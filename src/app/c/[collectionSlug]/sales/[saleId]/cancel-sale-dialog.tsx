@@ -9,6 +9,8 @@ import { saleLineHeading } from "@/lib/sale-line-name";
 import {
   DEFAULT_CANCEL_OFFER_OUTCOME,
   DEFAULT_CANCEL_REASON,
+  setAllCancelOutcomes,
+  sharedCancelOutcome,
   type CancelOfferOutcome,
 } from "@/lib/sale-cancel-rules";
 
@@ -26,14 +28,38 @@ const NOTE: React.CSSProperties = {
   color: "var(--color-text-secondary)",
 };
 
+/** The offers and their choices share three columns — name, *Back to active*, *Withdrawn* — so the
+ * all-offers choice in the heading row (#2515) sits on the same tracks as every row's own. */
+const OFFERS_GRID: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+  columnGap: "1rem",
+  marginBottom: "1rem",
+};
+
 const ROW: React.CSSProperties = {
-  display: "flex",
+  display: "grid",
+  gridColumn: "1 / -1",
+  gridTemplateColumns: "subgrid",
   alignItems: "center",
-  gap: "1rem",
   padding: "0.5rem 0",
   borderTop: "1px solid var(--color-border)",
   fontSize: "0.8125rem",
 };
+
+const HEADING_ROW: React.CSSProperties = {
+  display: "grid",
+  gridColumn: "1 / -1",
+  gridTemplateColumns: "subgrid",
+  alignItems: "center",
+  marginBottom: "0.375rem",
+  fontSize: "0.8125rem",
+};
+
+const OUTCOME_CHOICES = [
+  ["active", "Back to active", "All back to active"],
+  ["withdrawn", "Withdrawn", "All withdrawn"],
+] as const;
 
 const CHOICE: React.CSSProperties = {
   display: "inline-flex",
@@ -59,7 +85,8 @@ interface CancelSaleDialogProps {
  * **Cancel sale** (#2500): the buyer never paid. Asks, for each offer the sale closed, whether it goes
  * back to active or is withdrawn — *back to active* preselected, since the listing is usually still
  * up — and for an optional reason, prefilled *Not paid*. The sets on no offer, and on an offer the
- * sale did not close, are only released, so they are counted rather than asked about.
+ * sale did not close, are only released, so they are counted rather than asked about. With more than
+ * one offer, the heading row sets every offer at once (#2515) — selected only while all rows agree.
  */
 export function CancelSaleDialog({
   saleNo,
@@ -79,6 +106,8 @@ export function CancelSaleDialog({
     const line = lines.find((l) => l.offerId === offerId);
     return line ? [{ offerId, heading: saleLineHeading(line.name) }] : [];
   });
+  const listedIds = closed.map((c) => c.offerId);
+  const shared = sharedCancelOutcome(listedIds, outcomes);
   const closedSet = new Set(closedOfferIds);
   const releasedOnly = lines.filter((l) => !l.offerId || !closedSet.has(l.offerId)).length;
 
@@ -90,17 +119,32 @@ export function CancelSaleDialog({
           packing supplies go back to stock.
         </p>
         {closed.length > 0 && (
-          <div style={{ marginBottom: "1rem" }}>
-            <span style={LABEL}>Offers this sale closed</span>
+          <div style={OFFERS_GRID}>
+            {closed.length > 1 ? (
+              <div role="radiogroup" aria-label="All offers" style={HEADING_ROW}>
+                <span style={{ ...LABEL, marginBottom: 0 }}>Offers this sale closed</span>
+                {OUTCOME_CHOICES.map(([value, , allLabel]) => (
+                  <label key={value} style={CHOICE}>
+                    <input
+                      type="radio"
+                      name="cancel-outcome-all"
+                      checked={shared === value}
+                      onChange={() =>
+                        setOutcomes((prev) => ({ ...prev, ...setAllCancelOutcomes(listedIds, value) }))
+                      }
+                      disabled={isPending}
+                    />
+                    {allLabel}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <span style={{ ...LABEL, gridColumn: "1 / -1" }}>Offers this sale closed</span>
+            )}
             {closed.map(({ offerId, heading }) => (
               <div key={offerId} role="radiogroup" aria-label={heading} style={ROW}>
-                <span style={{ flex: 1, minWidth: 0, color: "var(--color-text-primary)" }}>{heading}</span>
-                {(
-                  [
-                    ["active", "Back to active"],
-                    ["withdrawn", "Withdrawn"],
-                  ] as const
-                ).map(([value, label]) => (
+                <span style={{ minWidth: 0, color: "var(--color-text-primary)" }}>{heading}</span>
+                {OUTCOME_CHOICES.map(([value, label]) => (
                   <label key={value} style={CHOICE}>
                     <input
                       type="radio"
