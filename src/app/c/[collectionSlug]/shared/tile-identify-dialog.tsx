@@ -215,8 +215,8 @@ interface Props {
   /** The intake document the card belongs to — the scope of the assign list, which narrows to the
    * parcel's copies. */
   purchaseId: string;
-  /** The tiles this dialog is about, in card order: one opened from the strip, or the run ticked on
-   * it. Never empty. A run holds only tiles that are still to be identified, since those are the
+  /** The tiles this dialog is about: one opened from the strip, or the run ticked on it **in the
+   * order it was ticked** (#2526) — the order the pieces are shown, stepped through and created in. Never empty. A run holds only tiles that are still to be identified, since those are the
    * only ones that get a tick box (`scan-tile-selection.ts`). */
   tiles: SelectedTile[];
   /** Whether **any** lot of this order is still open (#586). A closed lot takes no new copies (its

@@ -500,6 +500,9 @@ export function IdentifiedPieceAside({
     <IdentifiedPieceGrid
       collectionId={collectionId}
       pieces={shown}
+      // Each piece's turn among **all** the ticked ones, so a piece left out for having no picture
+      // does not shift the numbers of those after it off the ones on their tick boxes.
+      turns={new Map(pieces.map((p, i) => [p.tileId, i + 1]))}
       runOrder={runOrder}
       onOpen={setOpenId}
     />
@@ -509,18 +512,22 @@ export function IdentifiedPieceAside({
 /**
  * Every ticked piece at once (#596).
  *
- * The **front** of each, at the size that lets a run be compared rather than merely counted, in the
- * order the card is laid out in and labelled with the tile's own position — the strip is a map of
- * the card on the desk, and the panel beside the form has to be readable against it.
+ * The **front** of each, at the size that lets a run be compared rather than merely counted, **in the
+ * order the pieces were ticked** (#2526) — the order the collector chose, and the order the copies
+ * are created in. Each is labelled with **both** numbers, its turn and its tile (*#1 · tile 7*): the
+ * turn is the number its tick box showed, the tile is its place on the card on the desk, and a bare
+ * number would leave the two to be confused.
  */
 function IdentifiedPieceGrid({
   collectionId,
   pieces,
+  turns,
   runOrder,
   onOpen,
 }: {
   collectionId: string;
   pieces: IdentifiedPiece[];
+  turns: ReadonlyMap<string, number>;
   runOrder?: boolean;
   onOpen: (tileId: string) => void;
 }) {
@@ -540,8 +547,9 @@ function IdentifiedPieceGrid({
           </>
         ) : (
           <>
-            <strong>{pieces.length} pieces</strong>, being identified as one stamp. Check them
-            against each other before you confirm — click one to look at it closely.
+            <strong>{pieces.length} pieces</strong>, in the order you ticked them, being identified as
+            one stamp. Check them against each other before you confirm — click one to look at it
+            closely.
           </>
         )}
       </p>
@@ -556,7 +564,7 @@ function IdentifiedPieceGrid({
           alignContent: "start",
         }}
       >
-        {pieces.map((piece, turn) => {
+        {pieces.map((piece) => {
           const shownSide =
             piece.sides.find((s) => s.side === (piece.side ?? "front")) ?? piece.sides[0];
           return (
@@ -599,7 +607,7 @@ function IdentifiedPieceGrid({
                 }}
               />
               <span style={{ fontSize: "0.6875rem" }}>
-                {runOrder ? `#${turn + 1} · tile ${piece.position + 1}` : piece.position + 1}
+                {`#${turns.get(piece.tileId)} · tile ${piece.position + 1}`}
               </span>
             </button>
             </ThumbPreview>

@@ -229,8 +229,8 @@ interface Props {
    * computed where the batch's sheets are in hand.
    *
    * **A list of pieces** since #596: several tiles ticked on the strip are answered in one pass, and
-   * one tile is a list of one. The pieces travel in card order, which is the order the copies are
-   * created and numbered in.
+   * one tile is a list of one. The pieces travel in the order they were ticked (#2526), which is the
+   * order the copies are created and numbered in.
    *
    * **The stamp may already be known** (#607): a candidate pressed on a parked tile's shortlist, or
    * the parent offered in place of one — in which case `pick` rides along and the panel enters the
@@ -718,7 +718,10 @@ export function ScansCard({
    * anything.
    */
   const dialogTiles: SelectedTile[] = selectionOpen
-    ? selectedTiles.map(withSides)
+    ? // In the order they were ticked (#2526) — the numbers on the squares — not the card's: the
+      // collector set that order by clicking, and the dialog, its loupe and the copies it creates
+      // all follow it. A batch box ticks in card order, so a run ticked that way stays in it.
+      inTickOrder(live, selectedTiles).map(withSides)
     : openTile
       ? [withSides(openTile)]
       : [];
@@ -1794,16 +1797,11 @@ export function ScansCard({
             closeDialog();
             onReidentifyTile(piece, copy);
           }}
-          // A set, not a run of duplicates (#1220): the pieces go up **in the order they were
-          // ticked**, since that is the order they take the checklist's stamps in — the dialog is handed
-          // them in card order, which is #596's numbering and not this sequence.
+          // A set, not a run of duplicates (#1220): the pieces take the checklist's stamps in the
+          // order they were ticked, which is already the order the dialog holds them in (#2526).
           onIdentifyIssueRun={(pieces) => {
             closeDialog();
-            onIdentifyIssueRun(
-              [...pieces].sort(
-                (a, b) => (tickOrdinals.get(a.tileId) ?? 0) - (tickOrdinals.get(b.tileId) ?? 0)
-              )
-            );
+            onIdentifyIssueRun(pieces);
           }}
           // What has already been identified on this screen (#757) — derived here, where the batches
           // are, rather than fetched by the dialog: a consumed tile carries the whole of what it
