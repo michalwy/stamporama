@@ -237,7 +237,8 @@ the same way when any of them is.
 
 The price has a panel of its own, **Pricing**, directly under the offer's header: the price table on
 the left, and on the right, in tabs, what you weigh it against — on a Colnect offer, the
-[Colnect market](#checking-the-colnect-market). The tab you pick is remembered in this browser, for
+[Colnect market](#checking-the-colnect-market), and on any offer whose stamps were offered before,
+[Earlier offers](#earlier-offers-of-the-same-stamps). The tab you pick is remembered in this browser, for
 every offer. A tab that has nothing to show yet (a Colnect market never read) is opened only when no
 other tab has anything; on an offer with no tab at all, the price table runs across the whole panel.
 On a narrow window the two columns stack, the price table first.
@@ -281,6 +282,13 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
   range when your copies trend differently. Its hover says each trend and how many results it rests
   on. A copy with results but no trend counts at its median. It is **not** a suggestion — Estimated
   is — and Market itself is unchanged: it stays the median, on this table and everywhere else.
+- **Last sale · this platform** and **Last sale · any platform** — what exactly these stamps, in the
+  same condition, last **sold** for: on this offer's platform, and on any platform. It is what the
+  sale recorded, not the price the earlier offer was listed at. The note gives the earlier offer's
+  number and the day it sold — *#412, 2026-10-03* — and on the *any platform* row the platform too,
+  since prices differ a lot between platforms. Both rows are **always there**: with no such sale a row
+  reads *—* and its hover says why. Like Market, they are figures, not suggestions. Every earlier offer
+  of the stamps, sold or not, is on the [Earlier offers](#earlier-offers-of-the-same-stamps) tab.
 - **Cost** — what the copies cost you, marked **(estimate)** while their purchase lot is still open and
   **(incl. opening value)** when copies from an opening balance count at their opening value. The row
   is **always there**: with no cost known it reads *—*, and its note always says why — *3 copies with
@@ -297,7 +305,7 @@ in brackets after their name — Estimated and Cost; hover any name for the rest
 
 **Profit over cost** is one figure with its percentage — *−0.02 (−29%)* — green when it is a profit
 and in the warning colour when it is a loss. A figure that does not exist is left out rather than
-shown as 0.00 (Minimum, Market and Cost excepted), and so is every profit when the cost is unknown. Cost
+shown as 0.00 (Minimum, Market, the two Last sale rows and Cost excepted), and so is every profit when the cost is unknown. Cost
 has no profit of its own — over itself it is always nothing.
 
 **Your price vs** compares your price with every other row, in the same form: *+0.14 (+280%)* when
@@ -309,7 +317,7 @@ Until the offer has a price the column is empty.
 
 **The price scale** under the table draws the same figures along one line, from 0 on the left to the
 highest of them on the right: a labelled tick for each price that is known — **Min**, **Cost**,
-**Est.**, **Cat.**, **Market**, **Market trend** — and a marker for your price, so you see at a glance
+**Est.**, **Cat.**, **Market**, **Market trend**, **Last sale**, **Last sale (any)** — and a marker for your price, so you see at a glance
 where it sits among them. Where ticks sit close together their labels alternate above and below the
 line; hover a label for its figure.
 
@@ -323,13 +331,13 @@ The line is **coloured in zones**, so you see at a glance which one your price f
 
 A zone whose price is not known is left out and its neighbour runs on to the next price: with no
 Estimated, pale teal runs from Cost to Catalogue; with no Cost, red ends at Minimum. Where Estimated is
-above Catalogue there is no green. Market and Market trend are ticks only. When Catalogue is the
+above Catalogue there is no green. Market, Market trend and the Last sale rows are ticks only. When Catalogue is the
 highest price, the line runs a little past it so the blue zone shows. A short legend under the line
 names the zones drawn on it.
 With no price yet the scale shows the ticks without the marker. The column and the scale follow your
 price as soon as you leave its field.
 
-**Click a price to use it.** Minimum, Catalogue, Estimated, Market, Market trend and Cost are drawn as links, and
+**Click a price to use it.** Minimum, Catalogue, Estimated, Market, Market trend, the Last sale rows and Cost are drawn as links, and
 hovering
 one says *Use as the offer's price*: clicking sets the asking price on a quick buy, and the
 **starting** price on an auction (*Use as the offer's starting price*), since that is the figure you
@@ -1567,6 +1575,38 @@ those links are the work you are doing, and **collapsed** from **Ready** onward,
 reference you consult rarely. Click its heading either way — the heading counts the stamps, so a
 listing you are only skimming does not pay for the list. The two states are remembered separately, so
 collapsing it on a live listing does not shut it on the one you are building next.
+
+## Earlier offers of the same stamps
+
+You list the same stamps again and again, and to price a new offer it helps to know what you asked for
+them before and what they actually sold for. The **Earlier offers** tab, beside the price table in the
+[Pricing panel](#the-price-table), answers that without leaving the offer; its name carries how many
+there are — *Earlier offers (4)*. An offer whose stamps were never offered before has no such tab.
+
+**The same stamps** means an earlier offer whose set holds exactly the stamps this offer's set holds:
+a series matches the same series, a single stamp that stamp. An offer holding only some of them, or
+more, is not listed. Every earlier offer is listed — sold, withdrawn or still up — but not this offer
+itself and not one still being prepared. Where this offer has several different sets, each is matched
+on its own and the table says which set a row is for.
+
+**The axes come first**: one line per platform for the offers in the **same condition** — this
+offer's platform first — and one **greyed** line for offers of these stamps in **another condition**.
+Each line is tinted in your [price zones](#the-price-table), as the *Your price* scale and the Colnect
+market's lines are. Each earlier offer is a dot at its price: **filled** where it sold, at what it
+actually sold for; **hollow** where it was listed and did not sell, at the price it was listed at.
+Your price, once set, is an amber line through every axis. The lines run from 0 to a little past the
+dearest price on them. Hover a dot for the offer, its platform and date.
+
+**Then a table**, newest first: the offer's number (a link to it, with *set 2 of 3* where that offer
+had several sets), its date, platform and condition, the price it was listed at, and its outcome —
+**Sold** with the amount and the day, **Withdrawn**, **Not sold** (its offer closed as sold, but not
+this set), or its state while it is still up. Rows in another condition are greyed out and marked
+*(other)*. A set whose sale was cancelled counts as not sold.
+
+**Click a price to use it** — a dot, a listed price or a sold amount sets your price (the starting
+price on an auction), as the price table's figures do. Every amount is per set and in the offer's
+currency, converted as the price table's figures are: a sale at the rate frozen on it, a listed price
+at today's.
 
 ## Checking the Colnect market
 

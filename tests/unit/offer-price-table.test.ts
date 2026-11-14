@@ -271,6 +271,58 @@ describe("the table's rows", () => {
   });
 });
 
+describe("the Last sale rows (#2521)", () => {
+  it("sit under Market and above Cost, each a price with its margin, and bound no zone", () => {
+    const rows = offerPriceRows({
+      minimum: "2.00",
+      catalogue: "40.00",
+      estimated: "12.00",
+      market: "10.00",
+      lastSalePlatform: "9.00",
+      lastSaleAny: "14.00",
+      cost: "8.00",
+      own: null,
+    });
+    assert.deepEqual(
+      rows.map((r) => [r.key, r.amount, r.margin && formatPriceMargin(r.margin)]),
+      [
+        ["minimum", "2.00", "−6.00 (−75%)"],
+        ["catalogue", "40.00", "+32.00 (+400%)"],
+        ["estimated", "12.00", "+4.00 (+50%)"],
+        ["market", "10.00", "+2.00 (+25%)"],
+        ["lastSalePlatform", "9.00", "+1.00 (+13%)"],
+        ["lastSaleAny", "14.00", "+6.00 (+75%)"],
+        ["cost", "8.00", null],
+        ["own", null, null],
+      ]
+    );
+    const without = offerPriceRows({ minimum: "2.00", catalogue: "40.00", estimated: "12.00", market: "10.00", cost: "8.00", own: null });
+    assert.deepEqual(priceZones(rows), priceZones(without));
+  });
+
+  it("are drawn empty with no such sale, and not at all where the surface gives none", () => {
+    const empty = offerPriceRows({
+      minimum: null,
+      catalogue: null,
+      estimated: null,
+      market: null,
+      lastSalePlatform: null,
+      lastSaleAny: null,
+      cost: null,
+      own: null,
+    });
+    assert.deepEqual(
+      empty.filter((r) => r.key.startsWith("lastSale")).map((r) => [r.key, r.amount]),
+      [
+        ["lastSalePlatform", null],
+        ["lastSaleAny", null],
+      ]
+    );
+    const absent = offerPriceRows({ minimum: null, catalogue: null, estimated: null, market: null, cost: null, own: null });
+    assert.equal(absent.some((r) => r.key.startsWith("lastSale")), false);
+  });
+});
+
 // The figures themselves, over an offer's sets (#1894): one function for the offer's own screen and
 // the Prepare screen, so the two cannot disagree.
 describe("the price table's figures over an offer's sets", () => {

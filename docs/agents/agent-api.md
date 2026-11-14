@@ -901,6 +901,16 @@ wrongly**, which is the same argument `offers.md` makes for drawing the figures 
 of a table above the price on the offer's screen. And `suggested` never travels without `suggestedValuedSets` and
 `suggestedUnpricedSets`, which partition the listing — `valuation.md`'s standing rule.
 
+**#2521 added `pricing.lastSale` and a top-level `earlierOffers`**, the offer screen's two *Last sale*
+rows and its *Earlier offers* tab. `lastSale.platform` and `lastSale.anyPlatform` are what exactly
+these stamps in the same condition last **sold** for — the sale's recorded amount, never the listed
+price — per set in the listing's currency, each with the listing it sold through, its marketplace and
+`soldOn`; absent where there was no such sale. `earlierOffers` is every earlier listing of exactly
+these stamps, newest first, in any condition (`sameCondition` false for another): `listedAt`, an
+`outcome` (`sold`, `withdrawn`, `not_sold`, or the open state) and, where it sold, `soldFor` and
+`soldOn`. Both are projected from `OfferDetail.earlierOffers` (`earlier-offers-rules.ts`), so the
+screen and the agent read one computation.
+
 **`get_offer` is the verb #711 does not name and `list_offers` is the other one**, and both are here
 because *adjust an offer's price* and *edit an offer's text* are unreachable without them:
 `search_collection` (#710) searches stamps, issues and copies, and nothing on this surface reaches an
