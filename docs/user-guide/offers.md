@@ -169,7 +169,7 @@ the same way when any of them is.
    - **One set holding all of them** — a series sold together.
 3. Repeat **Add set** to build up a quantity, or to add different sets to the same listing.
 4. Once you know them, set the **asking price** and paste the **listing URL** **in place** on the
-   offer's header — click the value to edit it (Enter or click away saves, Escape reverts). The
+   offer's screen — the price in the **Pricing** panel, the URL on the header — click the value to edit it (Enter or click away saves, Escape reverts). The
    asking price accepts either a comma or a period as the decimal separator (`12,50` or `12.50`) — or
    a small sum such as `12,50*3`, worked out when you leave the field and shown with two decimal
    places, like every amount (`12,5` becomes `12.50`) — and
@@ -234,6 +234,13 @@ the same way when any of them is.
    [A post with several lots](facebook.md#a-post-with-several-lots).
 
 ### The price table
+
+The price has a panel of its own, **Pricing**, directly under the offer's header: the price table on
+the left, and on the right, in tabs, what you weigh it against — on a Colnect offer, the
+[Colnect market](#checking-the-colnect-market). The tab you pick is remembered in this browser, for
+every offer. A tab that has nothing to show yet (a Colnect market never read) is opened only when no
+other tab has anything; on an offer with no tab at all, the price table runs across the whole panel.
+On a narrow window the two columns stack, the price table first.
 
 An offer's price sits in a small table with the figures you weigh it against. It has three columns —
 the row's name, **Price** and **Profit over cost** — and every figure is **per set** (an offer's price
@@ -1564,7 +1571,8 @@ collapsing it on a live listing does not shut it on the one you are building nex
 ## Checking the Colnect market
 
 The Items card's **Market** link opens one condition of one stamp at a time. An offer on **Colnect**
-also carries a **Colnect market** card, under the description, which reads them all for you: press
+also carries a **Colnect market** tab, beside the price table in the [Pricing panel](#the-price-table),
+which reads them all for you: press
 **Check Colnect market** and the [Assistant](assistant.md#reading-the-colnect-market) reads every
 condition's listings of the offer's stamps on Colnect, in your own Colnect session, and the card shows
 where they sit. Nothing is read on its own — only when you press the button.

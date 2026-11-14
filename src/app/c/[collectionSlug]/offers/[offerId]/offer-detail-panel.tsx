@@ -60,6 +60,7 @@ import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { OfferPriceTable } from "./offer-price-table";
 import { OfferColnectMarketCard } from "./offer-colnect-market-card";
+import { OfferPricingPanel } from "./offer-pricing-panel";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
 import { CopyButton } from "@/app/c/[collectionSlug]/shared/copy-button";
@@ -959,13 +960,14 @@ export function OfferDetailPanel({
         </div>
       )}
 
-      {/* Header summary card */}
+      {/* Header summary card — compact since #2522: the number, title, platform, currency, listing URL
+          and the actions. The price is in the Pricing panel under it. */}
       <div
         style={{
           border: "1px solid var(--color-border)",
           borderRadius: "0.75rem",
           background: "var(--color-bg-elevated)",
-          padding: "1.25rem 1.5rem",
+          padding: "1rem 1.25rem",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -1349,149 +1351,6 @@ export function OfferDetailPanel({
               </Tooltip>
             );
           })}
-
-          {/* The price and the figures it is weighed against, stacked on the right so they read as
-              one unit. What the figure is *called* follows the listing type (#449) — an auction's is
-              where the bidding stands, not something the seller asked for — but it is one field
-              either way, and editing it in place is how a bid is refreshed (#351's pattern:
-              committing stamps the check date shown below it). */}
-          <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.15rem" }}>
-            {/* The price and the figures it is weighed against, as a small table (#1829) made to
-                read without its tooltips (#1839): the platform's floor (#731), the catalogue value
-                (#230), Estimated value — the suggestion — the market and the cost, each per set with
-                its profit over the cost, and the offer's own price as the last row. Clicking a price
-                writes the figure the seller **states** (`askingPriceField`), never an auction's
-                current price, which would be recording a bid nobody placed. The offer's own price
-                reads as text and becomes its field on click, as it always has. */}
-            <OfferPriceTable
-              offer={offer}
-              askingPrice={askingPrice}
-              target={askingPriceNoun}
-              ownLabel={isAuctionListing(offer.listingType) ? priceLabel(offer.listingType) : "Your price"}
-              editable={editable}
-              disabled={isPending}
-              onApply={(amount) => patch(askingPriceField, amount)}
-              priceEditor={
-                <InlineText
-                  value={offer.price === "0.00" ? "" : offer.price}
-                  placeholder={isAuctionListing(offer.listingType) ? "Record a bid" : "Set price"}
-                  display={
-                    offer.price === "0.00" ? (
-                      <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", cursor: "text" }}>
-                        {/* An unbid auction is not *unpriced* — it is up at its opening figure with
-                            nobody having bid, which is a different and perfectly normal thing (#449). */}
-                        {isAuctionListing(offer.listingType) ? "no bids yet" : "no price yet"}
-                      </span>
-                    ) : (
-                      <span style={{ cursor: "text" }}>{offer.price}</span>
-                    )
-                  }
-                  editable={editable}
-                  isPending={isPending}
-                  inputType="amount"
-                  suffix={offer.currency}
-                  // A price is retyped whole, never amended in the middle (#329).
-                  selectOnEdit
-                  onSave={(v) => patch("price", v)}
-                />
-              }
-            />
-            {/* An auction's two extra facts (#449), both muted under the live figure: what it opened
-                at — a record, nothing is computed from it — and when the figure was last confirmed
-                against the listing. Refreshing a bid is manual by decision (ADR-0021 §8), so an
-                undated one says nothing about how current it is. Auction-only: a quick buy's price
-                is the seller's own and nothing moves it behind their back. */}
-            {isAuctionListing(offer.listingType) && (
-              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", fontVariantNumeric: "tabular-nums" }}>
-                <Tooltip content="What this auction opened at" align="end">
-                  <span>
-                    <InlineText
-                      value={offer.startingPrice ?? ""}
-                      placeholder="Add starting price"
-                      display={
-                        <span style={{ cursor: "text" }}>
-                          {offer.startingPrice
-                            ? `from ${offer.startingPrice} ${offer.currency}`
-                            : "Add starting price"}
-                        </span>
-                      }
-                      editable={editable}
-                      isPending={isPending}
-                      inputType="amount"
-                      suffix={offer.currency}
-                      selectOnEdit
-                      onSave={(v) => patch("startingPrice", v)}
-                    />
-                  </span>
-                </Tooltip>
-                {/* What the platform's own sync reported (#481). It is the only way a bidder count
-                    can get here — nothing types one in — so this line is also what says the figure
-                    beside it, and the "In bidding" chip above, came from the marketplace rather
-                    than from the collector. A flagged auction Allegro now reports no bidders on
-                    still says so: that disagreement is the collector's to settle, by hand. */}
-                {offer.bidderCount !== null && (
-                  <Tooltip content="Reported by the platform's own sync" align="end">
-                    <span>
-                      · {offer.bidderCount === 0
-                        ? "no bidders"
-                        : `${offer.bidderCount} bidder${offer.bidderCount === 1 ? "" : "s"}`}
-                    </span>
-                  </Tooltip>
-                )}
-                {offer.priceCheckedAt && (
-                  <Tooltip content="When this price was last checked against the listing" align="end">
-                    <span>· checked {new Date(offer.priceCheckedAt).toISOString().slice(0, 10)}</span>
-                  </Tooltip>
-                )}
-                {/* When the auction closes (#490) — read-only here and edited on the header form,
-                    because on a connected platform it is the sync's to keep current (#481) and an
-                    inline edit would invite typing over what the marketplace just said. */}
-                {offer.endsAt && (
-                  <Tooltip content="When this auction closes" align="end">
-                    <span>· closes {formatInstant(String(offer.endsAt))}</span>
-                  </Tooltip>
-                )}
-              </span>
-            )}
-            {blockedOnPrice && (
-              <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
-                Set {missingPriceLabel} to{" "}
-                {advanceTo === "active"
-                  ? offer.state === "pending"
-                    ? "approve this offer"
-                    : "activate this offer"
-                  : "mark this offer ready"}
-              </span>
-            )}
-            {/* The platform's own opening figure (#362/#553), offered back only on an auction that
-                still has no starting price. It is a *creation-time* seed, so on an offer that
-                already carries one, showing it again would be inviting the collector to undo a
-                decision they have already made. */}
-            {editable &&
-              isAuctionListing(offer.listingType) &&
-              !offer.startingPrice &&
-              offer.platformDefaultStartingPrice && (
-                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                  <Tooltip
-                    content={`What ${offer.platformName} opens an auction at by default`}
-                    align="end"
-                  >
-                    <span>
-                      <Icon name="suggestion" size="sm" /> platform default{" "}
-                      {offer.platformDefaultStartingPrice} {offer.currency}
-                    </span>
-                  </Tooltip>
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => patch("startingPrice", offer.platformDefaultStartingPrice!)}
-                    style={USE_BTN}
-                  >
-                    Use
-                  </button>
-                </span>
-              )}
-          </div>
         </div>
 
         {offer.needsAction && (
@@ -1574,6 +1433,177 @@ export function OfferDetailPanel({
         )}
       </div>
 
+      {/* Pricing (#2522): directly under the compact header, because setting the price is what this
+          screen is for — the price table on the left, and on the right, in tabs, what it is weighed
+          against: the Colnect market (#2454), which used to sit under the description. */}
+      <OfferPricingPanel
+        collectionId={collectionId}
+        priceTable={
+          <>
+            {/* What the figure is *called* follows the listing type (#449) — an auction's is where
+                the bidding stands, not something the seller asked for — but it is one field either
+                way, and editing it in place is how a bid is refreshed (#351's pattern: committing
+                stamps the check date shown below it). */}
+            {/* The price and the figures it is weighed against, as a small table (#1829) made to
+                read without its tooltips (#1839): the platform's floor (#731), the catalogue value
+                (#230), Estimated value — the suggestion — the market and the cost, each per set with
+                its profit over the cost, and the offer's own price as the last row. Clicking a price
+                writes the figure the seller **states** (`askingPriceField`), never an auction's
+                current price, which would be recording a bid nobody placed. The offer's own price
+                reads as text and becomes its field on click, as it always has. */}
+            <OfferPriceTable
+              offer={offer}
+              askingPrice={askingPrice}
+              target={askingPriceNoun}
+              ownLabel={isAuctionListing(offer.listingType) ? priceLabel(offer.listingType) : "Your price"}
+              editable={editable}
+              disabled={isPending}
+              onApply={(amount) => patch(askingPriceField, amount)}
+              priceEditor={
+                <InlineText
+                  value={offer.price === "0.00" ? "" : offer.price}
+                  placeholder={isAuctionListing(offer.listingType) ? "Record a bid" : "Set price"}
+                  display={
+                    offer.price === "0.00" ? (
+                      <span style={{ color: "var(--color-text-muted)", fontWeight: 500, fontSize: "0.75rem", cursor: "text" }}>
+                        {/* An unbid auction is not *unpriced* — it is up at its opening figure with
+                            nobody having bid, which is a different and perfectly normal thing (#449). */}
+                        {isAuctionListing(offer.listingType) ? "no bids yet" : "no price yet"}
+                      </span>
+                    ) : (
+                      <span style={{ cursor: "text" }}>{offer.price}</span>
+                    )
+                  }
+                  editable={editable}
+                  isPending={isPending}
+                  inputType="amount"
+                  suffix={offer.currency}
+                  // A price is retyped whole, never amended in the middle (#329).
+                  selectOnEdit
+                  onSave={(v) => patch("price", v)}
+                />
+              }
+            />
+            {/* An auction's two extra facts (#449), both muted under the live figure: what it opened
+                at — a record, nothing is computed from it — and when the figure was last confirmed
+                against the listing. Refreshing a bid is manual by decision (ADR-0021 §8), so an
+                undated one says nothing about how current it is. Auction-only: a quick buy's price
+                is the seller's own and nothing moves it behind their back. */}
+            {isAuctionListing(offer.listingType) && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", fontVariantNumeric: "tabular-nums" }}>
+                <Tooltip content="What this auction opened at" align="start">
+                  <span>
+                    <InlineText
+                      value={offer.startingPrice ?? ""}
+                      placeholder="Add starting price"
+                      display={
+                        <span style={{ cursor: "text" }}>
+                          {offer.startingPrice
+                            ? `from ${offer.startingPrice} ${offer.currency}`
+                            : "Add starting price"}
+                        </span>
+                      }
+                      editable={editable}
+                      isPending={isPending}
+                      inputType="amount"
+                      suffix={offer.currency}
+                      selectOnEdit
+                      onSave={(v) => patch("startingPrice", v)}
+                    />
+                  </span>
+                </Tooltip>
+                {/* What the platform's own sync reported (#481). It is the only way a bidder count
+                    can get here — nothing types one in — so this line is also what says the figure
+                    beside it, and the "In bidding" chip above, came from the marketplace rather
+                    than from the collector. A flagged auction Allegro now reports no bidders on
+                    still says so: that disagreement is the collector's to settle, by hand. */}
+                {offer.bidderCount !== null && (
+                  <Tooltip content="Reported by the platform's own sync" align="start">
+                    <span>
+                      · {offer.bidderCount === 0
+                        ? "no bidders"
+                        : `${offer.bidderCount} bidder${offer.bidderCount === 1 ? "" : "s"}`}
+                    </span>
+                  </Tooltip>
+                )}
+                {offer.priceCheckedAt && (
+                  <Tooltip content="When this price was last checked against the listing" align="start">
+                    <span>· checked {new Date(offer.priceCheckedAt).toISOString().slice(0, 10)}</span>
+                  </Tooltip>
+                )}
+                {/* When the auction closes (#490) — read-only here and edited on the header form,
+                    because on a connected platform it is the sync's to keep current (#481) and an
+                    inline edit would invite typing over what the marketplace just said. */}
+                {offer.endsAt && (
+                  <Tooltip content="When this auction closes" align="start">
+                    <span>· closes {formatInstant(String(offer.endsAt))}</span>
+                  </Tooltip>
+                )}
+              </span>
+            )}
+            {blockedOnPrice && (
+              <span style={{ fontSize: "0.75rem", color: "var(--color-warning)" }}>
+                Set {missingPriceLabel} to{" "}
+                {advanceTo === "active"
+                  ? offer.state === "pending"
+                    ? "approve this offer"
+                    : "activate this offer"
+                  : "mark this offer ready"}
+              </span>
+            )}
+            {/* The platform's own opening figure (#362/#553), offered back only on an auction that
+                still has no starting price. It is a *creation-time* seed, so on an offer that
+                already carries one, showing it again would be inviting the collector to undo a
+                decision they have already made. */}
+            {editable &&
+              isAuctionListing(offer.listingType) &&
+              !offer.startingPrice &&
+              offer.platformDefaultStartingPrice && (
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem", flexWrap: "wrap" }}>
+                  <Tooltip
+                    content={`What ${offer.platformName} opens an auction at by default`}
+                    align="start"
+                  >
+                    <span>
+                      <Icon name="suggestion" size="sm" /> platform default{" "}
+                      {offer.platformDefaultStartingPrice} {offer.currency}
+                    </span>
+                  </Tooltip>
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => patch("startingPrice", offer.platformDefaultStartingPrice!)}
+                    style={USE_BTN}
+                  >
+                    Use
+                  </button>
+                </span>
+              )}
+          </>
+        }
+        tabs={[
+          {
+            key: "colnect-market",
+            label: "Colnect market",
+            // What Colnect's market asks for this offer's stamps, per condition — null (and so no
+            // tab) on every offer that is not on Colnect; never read yet, it is drawn but empty.
+            empty: !offer.colnectMarket?.readAt,
+            content: offer.colnectMarket ? (
+              <OfferColnectMarketCard
+                collectionId={collectionId}
+                offerId={offerId}
+                market={offer.colnectMarket}
+                assistantPresent={assistantPresent}
+                editable={editable}
+                ownPrice={askingPrice}
+                onApply={(amount) => patch(askingPriceField, amount)}
+                onRecorded={onMarketRecorded}
+              />
+            ) : null,
+          },
+        ]}
+      />
+
       {/* Listing text (#266/#267): the offer's description and its seller-only private note, both
           generated from the platform's templates and freely editable, each with its own ↻. */}
       <OfferListingText
@@ -1625,22 +1655,6 @@ export function OfferDetailPanel({
           kit={offer.facebook}
           onChanged={() => invalidateAll(collectionId)}
           onRepost={canRepost ? () => setReposting(true) : undefined}
-        />
-      )}
-
-      {/* What Colnect's market asks for this offer's stamps, per condition (#2454) — the Colnect
-          platform's own card, in the slot the other platforms' cards take. Null (and so absent) on
-          every offer that is not on Colnect. */}
-      {offer.colnectMarket && (
-        <OfferColnectMarketCard
-          collectionId={collectionId}
-          offerId={offerId}
-          market={offer.colnectMarket}
-          assistantPresent={assistantPresent}
-          editable={editable}
-          ownPrice={askingPrice}
-          onApply={(amount) => patch(askingPriceField, amount)}
-          onRecorded={onMarketRecorded}
         />
       )}
 
