@@ -26,6 +26,7 @@ import {
   type PriceZone,
 } from "@/lib/offer-price-table";
 import { trendStatement } from "@/lib/price-trend";
+import { describeLastSaleNote, isoDay, type EarlierOffers, type LastSale } from "@/lib/earlier-offers-rules";
 
 /** The `OfferDetail` fields the table reads. */
 export interface OfferPriceTableOffer {
@@ -50,6 +51,8 @@ export interface OfferPriceTableOffer {
   costPrice: string | null;
   costUnconvertible: boolean;
   setsTotals: { setCount: number; copyCount: number; costEstimated: boolean; costOpening: boolean; costGaps: CostGaps };
+  /** The two *Last sale* rows' figures (#2521); absent on a surface that does not draw them. */
+  earlierOffers?: Pick<EarlierOffers, "lastSale" | "lastSaleUnconvertible">;
 }
 
 const MUTED: React.CSSProperties = { color: "var(--color-text-muted)" };
@@ -133,6 +136,23 @@ function about(row: OfferPriceRow, offer: OfferPriceTableOffer, ownLabel: string
       parts.push(more > 0 ? `${shown.join("; ")}; ${more} more` : shown.join("; "));
       return parts.join(" — ");
     }
+    case "lastSalePlatform":
+    case "lastSaleAny": {
+      const any = row.key === "lastSaleAny";
+      const where = any ? "on any platform" : `on ${offer.platformName}`;
+      const sale = offer.earlierOffers?.lastSale[any ? "any" : "platform"] ?? null;
+      if (row.amount === null || !sale) {
+        return offer.earlierOffers?.lastSaleUnconvertible[any ? "any" : "platform"]
+          ? `These stamps in this condition sold ${where}, but no rate converts the amount into ${offer.currency}`
+          : `No earlier offer of these stamps in this condition has sold ${where}`;
+      }
+      return [
+        `What these stamps in this condition last sold for ${where}, per set — what the sale recorded, not the listed price`,
+        describeLastSaleSources(sale, setCount),
+      ]
+        .filter(Boolean)
+        .join(" — ");
+    }
     case "cost": {
       const parts = ["What the copies cost per set"];
       if (offer.setsTotals.costEstimated) parts.push("partly an estimate, while their lot is open");
@@ -164,6 +184,12 @@ function note(row: OfferPriceRow, offer: OfferPriceTableOffer): { text: string; 
         : null;
     case "marketTrend":
       return offer.marketTrendPrice ? { text: describeMarketTrendNote(offer.marketTrendPrice.trends), warn: false } : null;
+    case "lastSalePlatform":
+    case "lastSaleAny": {
+      const any = row.key === "lastSaleAny";
+      const sale = offer.earlierOffers?.lastSale[any ? "any" : "platform"] ?? null;
+      return row.amount !== null && sale ? { text: describeLastSaleNote(sale, any), warn: false } : null;
+    }
     case "cost": {
       // A missing cost says why (#2333, #2436); a figure says what is under it — an estimate, opening values.
       if (row.amount === null) {
@@ -193,8 +219,19 @@ const NAME: Record<Exclude<OfferPriceRowKey, "own">, string> = {
   estimated: "Estimated",
   market: "Market",
   marketTrend: "Market trend",
+  lastSalePlatform: "Last sale · this platform",
+  lastSaleAny: "Last sale · any platform",
   cost: "Cost",
 };
+
+/** The sales behind a *Last sale* figure, for its tooltip — each offer, platform, date and amount, and
+ *  how many of the offer's sets have one where the sets differ. */
+function describeLastSaleSources(sale: LastSale, setCount: number): string {
+  const each = sale.sources.map((s) => `#${s.offerNo} on ${s.platformName}, ${isoDay(s.soldAt)}: ${s.amount}`);
+  const parts = [each.join("; ")];
+  if (sale.valuedSets < setCount) parts.push(`${sale.valuedSets} of ${sets(setCount)}`);
+  return parts.join(" — ");
+}
 
 /** The table's rows for `offer` — its own price the saved one — so the price table and the Colnect
  *  market's zones (#2523) read the same figures. */
@@ -205,6 +242,8 @@ function offerTableRows(offer: OfferPriceTableOffer) {
     estimated: offer.suggestedPrice,
     market: offer.marketPrice?.amount ?? null,
     marketTrend: offer.marketTrendPrice?.amount ?? null,
+    lastSalePlatform: offer.earlierOffers ? (offer.earlierOffers.lastSale.platform?.amount ?? null) : undefined,
+    lastSaleAny: offer.earlierOffers ? (offer.earlierOffers.lastSale.any?.amount ?? null) : undefined,
     cost: offer.costPrice,
     own: offer.price === "0.00" ? null : offer.price,
   });
@@ -221,8 +260,9 @@ export function offerPriceZones(offer: OfferPriceTableOffer): PriceZone[] {
  * columns — the row's name with a short note in brackets, *Price*, *Profit over cost*, and since #2477
  * *Your price vs* (the offer's own price against each row's, {@link priceVsOwn}) — the
  * platform's minimum, the catalogue value, Estimated value (the suggestion), what the market paid,
- * Market trend under Market when a price trend applies (#2461), what the copies cost, and the offer's
- * own price last. Every figure is per set and in the offer's
+ * Market trend under Market when a price trend applies (#2461), what the same stamps last sold for on
+ * this platform and on any (#2521, drawn where the offer carries them), what the copies cost, and the
+ * offer's own price last. Every figure is per set and in the offer's
  * currency. A figure that does not exist is left out (#1184), except Minimum and Market, drawn `—`
  * (#1843), and the offer's own price, which is where it is set.
  *

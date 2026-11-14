@@ -179,6 +179,7 @@ const DETAIL: OfferDetailRow = {
   platformDefaultStartingPrice: null,
   platformMinimumPrice: "2.00",
   url: null,
+  earlierOffers: { rows: [], lastSale: { platform: null, any: null } },
   setsTotals: { catalogTotal: "208.00", catalogValuedSets: 2, costTotal: "60.00" },
   sets: [
     {

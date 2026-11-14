@@ -35,6 +35,10 @@
 // stamp's price trend (#2460's rule, `market-trend.ts`) — so a stamp whose price keeps rising is not
 // priced against a median years behind its market. Market itself stays the plain median. The row is
 // drawn only when a trend applies to at least one copy; it is not a suggestion — Estimated is.
+//
+// **#2521 added two Last sale rows under them**: what the same stamps in the same condition last sold
+// for on this offer's platform, and on any platform (`earlier-offers-rules.ts`). Figures like Market,
+// not suggestions; drawn on the offer's own screen only, `—` with why where there is no such sale.
 
 import { offerCostTotals, type OfferSetCost } from "./offer-cost";
 import { formatTrendRate, type TrendStatementInput } from "./price-trend";
@@ -289,7 +293,16 @@ export function describeEstimateNote(ratio: number): string {
 }
 
 /** `own` is the offer's own price — the table's last row since #1839. */
-export type OfferPriceRowKey = "minimum" | "catalogue" | "estimated" | "market" | "marketTrend" | "cost" | "own";
+export type OfferPriceRowKey =
+  | "minimum"
+  | "catalogue"
+  | "estimated"
+  | "market"
+  | "marketTrend"
+  | "lastSalePlatform"
+  | "lastSaleAny"
+  | "cost"
+  | "own";
 
 export interface OfferPriceRow {
   key: OfferPriceRowKey;
@@ -311,6 +324,10 @@ export interface OfferPriceFigures {
   /** Market brought to today by the price trend (#2461); null when no trend applies, and the row is
    *  then not drawn. Absent reads as null. */
   marketTrend?: string | null;
+  /** What the same stamps in the same condition last sold for on this platform and on any platform
+   *  (#2521). Absent: the rows are not drawn (a surface that does not read them); null: drawn `—`. */
+  lastSalePlatform?: string | null;
+  lastSaleAny?: string | null;
   cost: string | null;
   /** The offer's own price; null while it has none. */
   own: string | null;
@@ -322,9 +339,14 @@ const ROW_ORDER: readonly OfferPriceRowKey[] = [
   "estimated",
   "market",
   "marketTrend",
+  "lastSalePlatform",
+  "lastSaleAny",
   "cost",
   "own",
 ];
+
+/** The rows drawn empty wherever their figure is given at all (#2521) — absent, they are not drawn. */
+const DRAWN_WHERE_GIVEN: ReadonlySet<OfferPriceRowKey> = new Set(["lastSalePlatform", "lastSaleAny"]);
 
 /** The rows drawn whether or not they have a figure: Minimum (#1843), Market (#1839) and Cost (#2333),
  *  whose absence is itself worth saying — a missing cost says why — and the offer's own price, which is
@@ -351,7 +373,9 @@ export function offerPriceRows(figures: OfferPriceFigures): OfferPriceRow[] {
       continue;
     }
     if (!(Number.isFinite(value) && value > 0)) {
-      if (ALWAYS_DRAWN.has(key)) rows.push({ key, amount: null, margin: null });
+      if (ALWAYS_DRAWN.has(key) || (DRAWN_WHERE_GIVEN.has(key) && figures[key] !== undefined)) {
+        rows.push({ key, amount: null, margin: null });
+      }
       continue;
     }
     rows.push({ key, amount, margin: known ? priceMargin(value, cost) : null });
@@ -386,6 +410,8 @@ export const PRICE_SCALE_LABEL: Record<PriceScaleKey, string> = {
   estimated: "Est.",
   market: "Market",
   marketTrend: "Market trend",
+  lastSalePlatform: "Last sale",
+  lastSaleAny: "Last sale (any)",
   cost: "Cost",
 };
 

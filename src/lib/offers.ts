@@ -105,6 +105,8 @@ import { loadColnectConditionMap } from "./colnect";
 import { colnectGradeFor } from "./colnect-conditions";
 import { catalogSearchValueFromLabel } from "./catalog-number";
 import { composeSetCatalogKeys, composeSetSearchText } from "./offer-compose-search";
+import { readEarlierOffers } from "./earlier-offers";
+import type { EarlierOffers } from "./earlier-offers-rules";
 import { colnectMarketUrl, colnectSaleCode, colnectSearchUrl, colnectStampUrl } from "./colnect-link";
 import {
   listedVariantKey,
@@ -5501,6 +5503,11 @@ export interface OfferDetail {
   /** The Colnect market card (#2454): the last read of what Colnect's marketplace asks for this
    *  offer's stamps, per condition. Null on every offer that is not on the Colnect platform. */
   colnectMarket: OfferColnectMarket | null;
+  /** What the same stamps were offered and sold for before (#2521): every earlier offer of exactly
+   *  this offer's stamps — sold, withdrawn or still open, never one still being prepared — newest
+   *  first, and the last sale of them in the same condition on this platform and on any platform, the
+   *  price table's two *Last sale* rows. Every amount per set, in the offer's currency. */
+  earlierOffers: EarlierOffers;
   /** The copies on this offer that are promised in an **agreed** trade (#639), each with the trade
    * holding it. Non-empty is what makes **Activate** refuse — stated on the screen so the refusal is
    * met before the button rather than by it, and reported at every state rather than only where it
@@ -6049,6 +6056,17 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         })
       : null;
 
+  // What the same stamps were offered and sold for before (#2521), every amount brought into the
+  // offer's currency with the same rate the price table's figures use.
+  const earlier = await readEarlierOffers({
+    collectionId: offer.collectionId,
+    offerId,
+    platformId: offer.platformId,
+    baseCurrency,
+    baseToOffer: offer.currency === baseCurrency ? 1 : baseToOffer,
+    ownSets: sets.map((s) => ({ id: s.id, label: s.label, itemIds: s.itemIds })),
+  });
+
   // Asking price converted to base at the current rate (#208). Skipped when already in base or
   // unpriced; a missing rate leaves it null.
   const priceNum = Number(offer.price);
@@ -6203,6 +6221,7 @@ export async function getOfferDetail(ownerId: string, offerId: string): Promise<
         : [],
     platformItems,
     colnectMarket,
+    earlierOffers: earlier,
     // #639. Read off the sets this screen already has rather than by a query of its own, and asked
     // of every offer whatever its state: what it says is *true about the copies*, and an offer whose
     // stock is spoken for is worth knowing about while it is still being assembled.

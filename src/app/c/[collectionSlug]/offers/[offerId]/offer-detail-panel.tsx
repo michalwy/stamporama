@@ -60,6 +60,7 @@ import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
 import { OfferPriceTable, offerPriceZones } from "./offer-price-table";
 import { OfferColnectMarketCard } from "./offer-colnect-market-card";
+import { OfferEarlierOffersCard } from "./offer-earlier-offers-card";
 import { OfferPricingPanel } from "./offer-pricing-panel";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
 import { OfferListingText, EditedChip } from "./offer-listing-text";
@@ -1601,6 +1602,26 @@ export function OfferDetailPanel({
                 onRecorded={onMarketRecorded}
               />
             ) : null,
+          },
+          {
+            key: "earlier-offers",
+            // What the same stamps were offered and sold for before (#2521), with their count — not
+            // drawn where there are none.
+            label: `Earlier offers (${offer.earlierOffers.rows.length})`,
+            content:
+              offer.earlierOffers.rows.length > 0 ? (
+                <OfferEarlierOffersCard
+                  collectionSlug={collectionSlug}
+                  rows={offer.earlierOffers.rows}
+                  platformId={offer.platformId}
+                  currency={offer.currency}
+                  priceZones={offerPriceZones(offer)}
+                  ownPrice={askingPrice}
+                  target={askingPriceNoun}
+                  editable={editable}
+                  onApply={(amount) => patch(askingPriceField, amount)}
+                />
+              ) : null,
           },
         ]}
       />

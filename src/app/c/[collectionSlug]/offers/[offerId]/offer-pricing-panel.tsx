@@ -6,7 +6,7 @@ import { usePersistedCollectionValue } from "../../shared/use-persisted-collecti
 
 // The **Pricing** panel (#2522) — directly under the offer's compact header, because setting the price
 // is what the offer's screen is for. Two columns: the price table on the left, and on the right tabs
-// of what the price is weighed against — the Colnect market first (#2454); #2521 adds Earlier offers.
+// of what the price is weighed against — the Colnect market first (#2454), then Earlier offers (#2521).
 //
 // A tab is drawn only where its card would render (`content` non-null). One that is drawn but has
 // nothing to show yet (`empty` — a Colnect market never read) is never picked on its own while

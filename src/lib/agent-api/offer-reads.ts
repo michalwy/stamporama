@@ -13,6 +13,7 @@
 
 import { candidateSet, compact, catalogLabels, copyValue } from "./collection-reads";
 import { describeEstimateSource, type EstimateSource } from "../offer-price-table";
+import { isoDay, type EarlierOfferRow, type EarlierOffers, type LastSale } from "../earlier-offers-rules";
 import type {
   AgentCandidateSet,
   AgentCopyValue,
@@ -262,6 +263,48 @@ export interface AgentOfferPricing {
    *  platform's currency. Advisory only: nothing applies it, clamps to it, or refuses a price under
    *  it, and dropping deliberately to the floor is the case it exists for. */
   readonly platformMinimum?: string;
+  /** What the same stamps in the same condition last **sold** for (#2521) — on this listing's
+   *  marketplace, and on any — per set, in the **offer's** currency: what the sale recorded, never the
+   *  price it was listed at. Each absent where there is no such sale. Evidence of what this collector
+   *  got, so it is stated beside the other figures and never instead of them. */
+  readonly lastSale: { readonly platform?: AgentLastSale; readonly anyPlatform?: AgentLastSale };
+}
+
+/** One *Last sale* figure (#2521). */
+export interface AgentLastSale {
+  readonly amount: string;
+  /** The listing it sold through, its marketplace and the day of the sale. */
+  readonly offerId: string;
+  readonly offerNo: number;
+  readonly platform: string;
+  readonly soldOn: string;
+  /** How many sales the amount averages, where the listing's sets differ and each has its own; absent
+   *  for one. */
+  readonly sales?: number;
+}
+
+/** One earlier listing of exactly this listing's stamps (#2521). */
+export interface AgentEarlierOffer {
+  readonly offerId: string;
+  readonly offerNo: number;
+  /** `set 2 of 3`, where that listing had several sets. */
+  readonly set?: string;
+  /** Which of this listing's sets it is for, where they are not all alike. */
+  readonly forSet?: string;
+  /** When it went up. */
+  readonly date: string;
+  readonly platform: string;
+  readonly condition?: string;
+  /** False where it was in another condition — it is listed, but no *Last sale* counts it. */
+  readonly sameCondition: boolean;
+  /** The price it was listed at, per set, in the offer's currency. */
+  readonly listedAt?: string;
+  /** `sold`, `withdrawn`, `not_sold` (its listing closed as sold, but not this set), or the listing's
+   *  state while it is still open. */
+  readonly outcome: string;
+  /** What it sold for, per set, in the offer's currency, and the day — only where it sold. */
+  readonly soldFor?: string;
+  readonly soldOn?: string;
 }
 
 /** One set of a listing — what a buyer actually takes. */
@@ -313,6 +356,9 @@ export interface AgentOfferDetail {
   readonly currency: string;
   readonly baseCurrency: string;
   readonly pricing: AgentOfferPricing;
+  /** Every earlier listing of exactly this listing's stamps (#2521) — sold, withdrawn or still open,
+   *  in any condition — newest first. */
+  readonly earlierOffers: AgentEarlierOffer[];
   readonly sets: AgentOfferSet[];
   readonly copyCount: number;
   readonly url?: string;
@@ -347,6 +393,7 @@ export interface OfferDetailRow {
   readonly platformDefaultStartingPrice: string | null;
   readonly platformMinimumPrice: string | null;
   readonly url: string | null;
+  readonly earlierOffers: Pick<EarlierOffers, "rows" | "lastSale">;
   readonly setsTotals: {
     readonly catalogTotal: string | null;
     readonly catalogValuedSets: number;
@@ -399,6 +446,38 @@ function namedFields(flags: Readonly<Record<string, boolean>>): string[] {
     .sort();
 }
 
+function agentLastSale(sale: LastSale | null): AgentLastSale | undefined {
+  if (!sale) return undefined;
+  const source = sale.sources[0];
+  return compact({
+    amount: sale.amount,
+    offerId: source.offerId,
+    offerNo: source.offerNo,
+    platform: source.platformName,
+    soldOn: isoDay(source.soldAt),
+    sales: sale.sources.length > 1 ? sale.sources.length : undefined,
+  });
+}
+
+/** One earlier listing as the agent is told it (#2521). */
+export function agentEarlierOffer(row: EarlierOfferRow): AgentEarlierOffer {
+  const outcome = row.outcome;
+  return compact({
+    offerId: row.offerId,
+    offerNo: row.offerNo,
+    set: row.setLabel ?? undefined,
+    forSet: row.forSet ?? undefined,
+    date: isoDay(row.date),
+    platform: row.platformName,
+    condition: row.conditionLabel ?? undefined,
+    sameCondition: row.sameCondition,
+    listedAt: statedAmount(row.listed),
+    outcome: outcome.kind === "open" ? outcome.state : outcome.kind === "unsold" ? "not_sold" : outcome.kind,
+    soldFor: outcome.kind === "sold" ? (outcome.amount ?? undefined) : undefined,
+    soldOn: outcome.kind === "sold" ? isoDay(outcome.soldAt) : undefined,
+  });
+}
+
 export function offerDetail(row: OfferDetailRow, path: string): AgentOfferDetail {
   // The market figure is per set on the screen, because a set is what a buyer takes; an agent asked
   // *what is this listing worth* wants the listing, so the sets are summed here. They partition the
@@ -439,7 +518,12 @@ export function offerDetail(row: OfferDetailRow, path: string): AgentOfferDetail
       costTotal: statedAmount(row.setsTotals.costTotal),
       platformOpening: statedAmount(row.platformDefaultStartingPrice),
       platformMinimum: statedAmount(row.platformMinimumPrice),
+      lastSale: compact({
+        platform: agentLastSale(row.earlierOffers.lastSale.platform),
+        anyPlatform: agentLastSale(row.earlierOffers.lastSale.any),
+      }),
     }),
+    earlierOffers: row.earlierOffers.rows.map(agentEarlierOffer),
     sets: row.sets.map((set) =>
       compact({
         setId: set.id,
