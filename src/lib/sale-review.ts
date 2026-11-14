@@ -115,6 +115,14 @@ export function saleCopiesAddedAction(set: {
 }
 
 /**
+ * What adding free extras says (#2532): *added free extras #12, #13* — the copies by number, at no
+ * price, since a free extra is given away.
+ */
+export function saleFreeExtrasAddedAction(copyNos: readonly string[]): string {
+  return `added ${copyNos.length === 1 ? "free extra" : "free extras"} ${copyNos.join(", ")}`;
+}
+
+/**
  * What cancelling a sale through the API says (#2500): *cancelled the sale — 2 offers back to
  * active, 1 withdrawn*, the offers named only where the cancel moved any.
  */

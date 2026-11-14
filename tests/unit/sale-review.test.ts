@@ -6,6 +6,7 @@ import {
   nextSaleApiReview,
   readSaleApiReviewMark,
   saleCopiesAddedAction,
+  saleFreeExtrasAddedAction,
   saleLineAddedAction,
 } from "../../src/lib/sale-review";
 
@@ -107,5 +108,12 @@ describe("what adding copies on no offer says (#2531)", () => {
       "added copies #12, #13 as one set at 20.00 PLN"
     );
     assert.equal(saleCopiesAddedAction({ copyNos: ["#7"], price: "5.00", currency: "EUR" }), "added copy #7 at 5.00 EUR");
+  });
+});
+
+describe("what adding free extras says (#2532)", () => {
+  it("names the copies by number, with no price", () => {
+    assert.equal(saleFreeExtrasAddedAction(["#12", "#13"]), "added free extras #12, #13");
+    assert.equal(saleFreeExtrasAddedAction(["#7"]), "added free extra #7");
   });
 });

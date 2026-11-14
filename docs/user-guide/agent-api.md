@@ -205,9 +205,15 @@ finding which went and to whom. It can:
 - **[cancel a sale](sales.md#cancelling-a-sale-the-buyer-never-paid-for) the buyer never paid
   for** — one not yet sent — with a reason, saying which of the offers it closed are withdrawn; the
   rest go back to active, exactly as in the dialog. It reads cancelled sales too, with what they had
-  sold.
+  sold;
+- **see a sale's [free extras](sales.md#free-extras) and add them** — what **Add free extras** would
+  propose, within the budget the marketplace's and the buyer's terms give the order, or a count and
+  budget the assistant states instead; and then the copies it chooses, onto the sale's **Free extras**
+  line at 0, exactly as the dialog adds them. Only into a sale you already have; a copy that would
+  break a complete series is refused with the dialog's message, and a sale already sent only when the
+  assistant says it is correcting one.
 
-Every sale it records, adds to, moves sets between, writes a note on or cancels is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
+Every sale it records, adds to, moves sets between, writes a note on, gives free extras with or cancels is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
 until you confirm it. **It cannot delete a sale or move one along** — no *Paid*, *Packed* or *Sent*,
 no packing, shipping, prices or buyer changed afterwards; that stays on the sale's own screen. It
 does not record a running auction's current bid either: the price it sells at is the one it read.
