@@ -58,7 +58,7 @@ import { OfferAllegroCard } from "./offer-allegro-card";
 import { OfferFacebookCard } from "./offer-facebook-card";
 import { OfferDelcampeCard } from "./offer-delcampe-card";
 import { OfferSetsView } from "./offer-sets-view";
-import { OfferPriceTable } from "./offer-price-table";
+import { OfferPriceTable, offerPriceZones } from "./offer-price-table";
 import { OfferColnectMarketCard } from "./offer-colnect-market-card";
 import { OfferPricingPanel } from "./offer-pricing-panel";
 import { useTitleLanguages } from "@/app/c/[collectionSlug]/shared/use-title-languages";
@@ -1596,6 +1596,7 @@ export function OfferDetailPanel({
                 assistantPresent={assistantPresent}
                 editable={editable}
                 ownPrice={askingPrice}
+                priceZones={offerPriceZones(offer)}
                 onApply={(amount) => patch(askingPriceField, amount)}
                 onRecorded={onMarketRecorded}
               />

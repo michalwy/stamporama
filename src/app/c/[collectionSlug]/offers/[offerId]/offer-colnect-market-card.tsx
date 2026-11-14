@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   axisPosition,
+  axisZones,
   dotAreaScale,
   dotDiameter,
   dotLegendCounts,
@@ -12,11 +13,13 @@ import {
   type MarketTick,
   type OfferColnectMarket,
 } from "@/lib/colnect-market-rules";
+import type { PriceZone } from "@/lib/offer-price-table";
 import { recordColnectMarketReadAction } from "@/app/actions/offers";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 import { assistantHint } from "../assistant-listing";
 import { MARKET_ELEMENT_ID, useAssistantMarket } from "../assistant-market-handoff";
+import { PRICE_ZONE_COLOR } from "./offer-price-table";
 
 // **Colnect market** (#2454) — what Colnect's marketplace asks for this offer's stamps, per
 // condition, read by the Assistant on the collector's own Colnect session.
@@ -30,7 +33,8 @@ import { MARKET_ELEMENT_ID, useAssistantMarket } from "../assistant-market-hando
 // row, its lowest price larger and bold (#2463); the other rows' dots, ticks and figures recede to
 // neutral grey, so a price is not read from the wrong row (#2469). A receded dot comes back to full
 // strength while the pointer is on it. A dot's area follows its number of offers, on a scale worked out
-// from the read and shared by every row, the legend showing it (#2473).
+// from the read and shared by every row, the legend showing it (#2473). Every row's axis is tinted in
+// the offer's price zones — the *Your price* scale's, at the same prices — named in the legend (#2523).
 //
 // A click on a price — a dot, or a figure beside the strip — sets the offer's price that price less
 // the platform's step, shown at once as a typed price is (#2413). Whether a price is absurd is the
@@ -125,6 +129,14 @@ const OWN_PRICE_MARK = "2px solid var(--color-warning)";
 /** The same two marks on a row that is not the offer's own condition (#2469). */
 const RECEDED_LOWEST_MARK = "1px solid var(--color-text-muted)";
 const RECEDED_MEDIAN_MARK = "1px dashed var(--color-text-muted)";
+
+/** The offer's price zones on a strip (#2523): a band along the axis, light enough that the dots, the
+ * lowest and median marks and the offer's price read on top of it — the scale's own colours (#2497),
+ * at this strength here and in the legend. */
+const ZONE_BAND_HEIGHT = 16;
+const ZONE_TINT_OPACITY = 0.45;
+
+type AxisZone = PriceZone & { start: number; end: number };
 
 /** Where the offer's own price sits on the axis, and how it is labelled; null with no price. */
 interface OwnPriceMark {
@@ -266,6 +278,7 @@ function Dot({
 function Strip({
   row,
   ticks,
+  zones,
   largestGroup,
   ownPrice,
   currency,
@@ -274,6 +287,8 @@ function Strip({
 }: {
   row: MarketRow;
   ticks: readonly MarketTick[];
+  /** The offer's price zones on this axis — every row the same (#2523). */
+  zones: readonly AxisZone[];
   largestGroup: number;
   ownPrice: OwnPriceMark | null;
   currency: string;
@@ -283,6 +298,22 @@ function Strip({
   // A row with no offers keeps its line and gridlines, so the rows stay aligned (#2464).
   return (
     <div style={{ position: "relative", height: STRIP_HEIGHT }}>
+      {zones.map((zone) => (
+        <span
+          key={zone.key}
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: pct(zone.start),
+            width: pct(zone.end - zone.start),
+            top: (STRIP_HEIGHT - ZONE_BAND_HEIGHT) / 2,
+            height: ZONE_BAND_HEIGHT,
+            background: PRICE_ZONE_COLOR[zone.key],
+            opacity: ZONE_TINT_OPACITY,
+            zIndex: 0,
+          }}
+        />
+      ))}
       {ticks.map((t) => (
         <Mark key={t.label} position={t.position} border="1px solid var(--color-border)" z={0} />
       ))}
@@ -392,8 +423,17 @@ function LegendDot({ count, largestGroup }: { count: number; largestGroup: numbe
 }
 
 /** What each mark on the strips means (#2464) — the dot sizes this read's (#2473): one offer, about
- * half the largest group and the largest group — and the offer's price only when it has one. */
-function Legend({ withOwnPrice, largestGroup }: { withOwnPrice: boolean; largestGroup: number }) {
+ * half the largest group and the largest group — the offer's price only when it has one, and each
+ * price zone tinted on the axes, named as the *Your price* scale names it (#2523). */
+function Legend({
+  withOwnPrice,
+  largestGroup,
+  zones,
+}: {
+  withOwnPrice: boolean;
+  largestGroup: number;
+  zones: readonly AxisZone[];
+}) {
   const tick = (border: string) => <span style={{ display: "inline-block", height: 14, borderLeft: border }} />;
   return (
     <div
@@ -418,6 +458,24 @@ function Legend({ withOwnPrice, largestGroup }: { withOwnPrice: boolean; largest
       <LegendItem swatch={tick(LOWEST_MARK)} label="lowest" />
       <LegendItem swatch={tick(MEDIAN_MARK)} label="median" />
       {withOwnPrice && <LegendItem swatch={tick(OWN_PRICE_MARK)} label="your price" />}
+      {zones.map((zone) => (
+        <LegendItem
+          key={zone.key}
+          swatch={
+            <span
+              style={{
+                display: "inline-block",
+                width: 14,
+                height: 10,
+                borderRadius: 2,
+                background: PRICE_ZONE_COLOR[zone.key],
+                opacity: ZONE_TINT_OPACITY,
+              }}
+            />
+          }
+          label={zone.label}
+        />
+      ))}
     </div>
   );
 }
@@ -463,6 +521,7 @@ export function OfferColnectMarketCard({
   assistantPresent,
   editable,
   ownPrice,
+  priceZones,
   onApply,
   onRecorded,
 }: {
@@ -474,6 +533,9 @@ export function OfferColnectMarketCard({
   editable: boolean;
   /** The offer's own price — what the seller states — or null while it has none (#2464). */
   ownPrice: string | null;
+  /** The offer's price zones (#2497) in prices, the *Your price* scale's — worked out once for the
+   *  offer, so every condition's row is tinted the same (#2523). */
+  priceZones: readonly PriceZone[];
   /** Set the offer's price — the same write a typed price makes. */
   onApply: (amount: string) => void;
   /** A read was kept: re-read the offer. */
@@ -508,6 +570,7 @@ export function OfferColnectMarketCard({
   const apply = editable ? onApply : null;
   const { view, currency, step } = market;
   const placed = axisPosition(view.axis, ownPrice);
+  const zones = axisZones(view.axis, priceZones);
   const ownMark: OwnPriceMark | null = placed && {
     position: placed.position,
     label:
@@ -566,7 +629,7 @@ export function OfferColnectMarketCard({
         </p>
       )}
 
-      {market.readAt && view.anyListings && <Legend withOwnPrice={ownMark !== null} largestGroup={view.largestGroup} />}
+      {market.readAt && view.anyListings && <Legend withOwnPrice={ownMark !== null} largestGroup={view.largestGroup} zones={zones} />}
 
       {market.readAt && view.anyListings &&
         view.items.map((item) => (
@@ -628,7 +691,7 @@ export function OfferColnectMarketCard({
                         justifyContent: "center",
                       }}
                     >
-                      <Strip row={row} ticks={view.ticks} largestGroup={view.largestGroup} ownPrice={ownMark} currency={currency} step={step} onApply={apply} />
+                      <Strip row={row} ticks={view.ticks} zones={zones} largestGroup={view.largestGroup} ownPrice={ownMark} currency={currency} step={step} onApply={apply} />
                     </div>
                     <div
                       style={{

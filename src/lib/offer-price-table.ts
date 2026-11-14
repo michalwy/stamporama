@@ -431,6 +431,29 @@ export const PRICE_SCALE_HEADROOM = 0.1;
 
 type ScaleBound = { key: PriceScaleKey; value: number };
 
+/** One of the {@link PriceScaleZoneKey} zones as prices, not positions: it runs from `from` up to `to`,
+ *  `to` null where it runs on past every price (above Catalogue, or the last zone with no Catalogue).
+ *  Any axis — the scale's linear one, the Colnect market's logarithmic one (#2523) — places it. */
+export interface PriceZone {
+  key: PriceScaleZoneKey;
+  from: number;
+  to: number | null;
+  /** The legend's name for it, from the prices that actually bound it — `Cost–Cat.` with no Estimated. */
+  label: string;
+}
+
+/** The prices that bound a zone — Minimum, Cost, Estimated, Catalogue — out of the table's rows; a row
+ *  with no price, a negative one, Market and Market trend bound nothing. */
+function zoneBounds(rows: readonly OfferPriceRow[]): Partial<Record<PriceScaleKey, number>> {
+  const bounds: Partial<Record<PriceScaleKey, number>> = {};
+  for (const row of rows) {
+    if (row.key !== "minimum" && row.key !== "cost" && row.key !== "estimated" && row.key !== "catalogue") continue;
+    const value = row.amount === null ? NaN : Number(row.amount);
+    if (Number.isFinite(value) && value >= 0) bounds[row.key] = value;
+  }
+  return bounds;
+}
+
 /**
  * **The scale's zones** (#2497), each bounded by reference prices as the collector settled them on
  * 2026-11-13: red below both Minimum and Cost, coral between them (whichever is lower first), a pale
@@ -439,13 +462,17 @@ type ScaleBound = { key: PriceScaleKey; value: number };
  *
  * A zone whose bounding price is unknown is not drawn and its neighbour runs on to the next known
  * price: with no Estimated, pale teal runs from Cost to Catalogue; with no Cost, red ends at Minimum;
- * with no Catalogue, the last zone runs to the end of the axis. Where Estimated is at or above
- * Catalogue there is no green: pale teal runs to Catalogue, then blue. Market and Market trend bound
- * nothing. The zones are contiguous from 0 to `max`, each starting where the one before ends, so an
- * Estimated below Cost cannot run a zone backwards — it just leaves no pale teal; a zone with no width
- * is dropped. No zone at all when none of the four bounding prices is known.
+ * with no Catalogue, the last zone runs on past every price. Where Estimated is at or above Catalogue
+ * there is no green: pale teal runs to Catalogue, then blue. Market and Market trend bound nothing. The
+ * zones are contiguous from 0, each starting where the one before ends, so an Estimated below Cost
+ * cannot run a zone backwards — it just leaves no pale teal; a zone with no width is dropped. No zone
+ * at all when none of the four bounding prices is known.
+ *
+ * In prices, so the price scale and the Colnect market's strips (#2523) draw the same zones at the
+ * same prices, each on its own axis.
  */
-function scaleZones(bounds: Partial<Record<PriceScaleKey, number>>, max: number): PriceScaleZone[] {
+export function priceZones(rows: readonly OfferPriceRow[]): PriceZone[] {
+  const bounds = zoneBounds(rows);
   const bound = (key: PriceScaleKey): ScaleBound | null => (bounds[key] === undefined ? null : { key, value: bounds[key]! });
   const minimum = bound("minimum");
   const cost = bound("cost");
@@ -459,7 +486,7 @@ function scaleZones(bounds: Partial<Record<PriceScaleKey, number>>, max: number)
   const span = (from: ScaleBound | null, to: ScaleBound | null) =>
     from && to ? `${name(from.key)}–${name(to.key)}` : from ? `Above ${name(from.key)}` : to ? `Below ${name(to.key)}` : "";
 
-  // Each drawn zone, with the price that ends it (null: runs to the end of the axis).
+  // Each drawn zone, with the price that ends it (null: runs on past every price).
   const plan: Array<{ key: PriceScaleZoneKey; to: ScaleBound | null; label: (from: ScaleBound | null) => string }> = [];
   if (floor.length > 0)
     plan.push({
@@ -473,17 +500,26 @@ function scaleZones(bounds: Partial<Record<PriceScaleKey, number>>, max: number)
   if (green) plan.push({ key: "estimatedCatalogue", to: catalogue, label: (from) => span(from, catalogue) });
   if (catalogue) plan.push({ key: "aboveCatalogue", to: null, label: () => `Above ${name("catalogue")}` });
 
-  const zones: PriceScaleZone[] = [];
+  const zones: PriceZone[] = [];
   let from: ScaleBound | null = null;
   let start = 0;
   for (const step of plan) {
-    const endValue = step.to ? Math.min(max, Math.max(start * max, step.to.value)) : max;
-    const end = endValue / max;
-    if (end > start) zones.push({ key: step.key, start, end, label: step.label(from) });
-    start = Math.max(start, end);
+    const end = step.to ? Math.max(start, step.to.value) : null;
+    if (end === null || end > start) zones.push({ key: step.key, from: start, to: end, label: step.label(from) });
+    if (end !== null) start = end;
     from = step.to;
   }
   return zones;
+}
+
+/** {@link priceZones} on the scale's linear axis from 0 to `max`; a zone that ends up with no width
+ *  there is dropped. */
+function scaleZones(zones: readonly PriceZone[], max: number): PriceScaleZone[] {
+  return zones.flatMap((zone) => {
+    const start = Math.min(zone.from, max) / max;
+    const end = zone.to === null ? 1 : Math.min(zone.to, max) / max;
+    return end > start ? [{ key: zone.key, start, end, label: zone.label }] : [];
+  });
 }
 
 /**
@@ -533,12 +569,10 @@ export function priceScale(rows: readonly OfferPriceRow[], minGap = PRICE_SCALE_
       else lastBelow = position;
       return { key: reference.key, amount: reference.amount, position, side };
     });
-  const bounds: Partial<Record<PriceScaleKey, number>> = {};
-  for (const r of references) if (r.key !== "market" && r.key !== "marketTrend") bounds[r.key] = r.value;
   return {
     ticks,
     own: own ? { amount: own.amount, position: at(own.value) } : null,
-    zones: scaleZones(bounds, max),
+    zones: scaleZones(priceZones(rows), max),
   };
 }
 
