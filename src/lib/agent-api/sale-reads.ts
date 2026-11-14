@@ -88,6 +88,8 @@ export interface AgentSaleLine {
   readonly copies: readonly string[];
   /** The line names one of the offer's interchangeable sets, but nobody has chosen which (#697). */
   readonly setChoicePending: boolean;
+  /** The sale's free extras (#2408, #2532): copies given away at price 0, all on this one line. */
+  readonly freeExtra: boolean;
 }
 
 /** One sale as `get_sale` states it. */
@@ -209,6 +211,7 @@ export function saleRecord(
       price: string;
       itemLabels: readonly string[];
       setChoicePending: boolean;
+      freeExtra: boolean;
     }[];
     grossProceeds: string;
     buyerHandling: string | null;
@@ -257,6 +260,7 @@ export function saleRecord(
       price: line.price,
       copies: [...line.itemLabels],
       setChoicePending: line.setChoicePending,
+      freeExtra: line.freeExtra,
     })),
     gross: detail.grossProceeds,
     buyerHandling: detail.buyerHandling,

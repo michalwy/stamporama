@@ -1162,6 +1162,8 @@ const SALE_API_WRITES = new Map<string, string>([
   ["cancelSaleThroughApi", "src/lib/sales.ts"],
   // Copies on no offer sold as one set (#2531), the sale marked — new or added to.
   ["addSaleCopySetThroughApi", "src/lib/sales.ts"],
+  // Free extras given away with a sale already recorded (#2532), the sale marked.
+  ["addSaleFreeExtrasThroughApi", "src/lib/sales.ts"],
   ["findOrCreateBuyer", "src/lib/facebook-sales.ts"],
 ]);
 
@@ -1222,6 +1224,12 @@ describe("the agent API's operation modules (#1949)", () => {
       2,
       "`addSaleCopySetThroughApi` writes a sale without the to-review marker (#1948)"
     );
+    // Free extras (#2532) go only into a sale already recorded: one write, marked once.
+    assert.equal(
+      [...exportedFunctionBody(domain, "addSaleFreeExtrasThroughApi").matchAll(/markSaleWrittenByApi\(tx,/g)].length,
+      1,
+      "`addSaleFreeExtrasThroughApi` writes a sale without the to-review marker (#1948)"
+    );
   });
 
   it("reach no other writer of a sale — no delete, no status, no header, line, packing or share link", () => {
@@ -1239,6 +1247,8 @@ describe("the agent API's operation modules (#1949)", () => {
     assert.ok(salesWriters.includes("cancelSale") && salesWriters.includes("cancelSaleThroughApi"));
     // The screen's Add copies (#2021) writes no marker either (#2531).
     assert.ok(salesWriters.includes("addSaleCopySet") && salesWriters.includes("addSaleCopySetThroughApi"));
+    // Nor does the screen's Add free extras (#2408, #2532).
+    assert.ok(salesWriters.includes("addSaleFreeExtras") && salesWriters.includes("addSaleFreeExtrasThroughApi"));
     assert.match(exportedFunctionBody(domain, "cancelSale"), /CONFIRMED_SALE_API_REVIEW/);
     assert.doesNotMatch(exportedFunctionBody(domain, "cancelSaleThroughApi"), /CONFIRMED_SALE_API_REVIEW/);
     assert.doesNotMatch(

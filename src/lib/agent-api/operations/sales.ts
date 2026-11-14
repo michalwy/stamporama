@@ -4,8 +4,10 @@ import { normalizeFacebookProfileUrl } from "../../facebook-profile-rules";
 import {
   SaleActionBlockedError,
   addSaleCopySetThroughApi,
+  addSaleFreeExtrasThroughApi,
   countSales,
   getSaleDetail,
+  listFreeExtraCandidates,
   listSalesPaginated,
   listSellableOffers,
   moveSaleLinesThroughApi,
@@ -17,7 +19,8 @@ import {
 import type { SaleRecordStatus } from "../../sale-status";
 import type { CancelOfferOutcome } from "../../sale-cancel-rules";
 import { SELLABLE_OFFER_STATES } from "../../sale-rules";
-import { saleCopiesAddedAction, saleLineAddedAction } from "../../sale-review";
+import { saleCopiesAddedAction, saleFreeExtrasAddedAction, saleLineAddedAction } from "../../sale-review";
+import { isSaleCancelled } from "../../sale-status";
 import { formatItemNo } from "../../item-number";
 import {
   FACEBOOK_PROFILES_SELECT,
@@ -50,6 +53,8 @@ import {
   saleRow,
 } from "../sale-reads";
 import { parseSaleRef } from "../conversation-log-reads";
+import { freeExtraProposal, NO_BUDGET, type AgentFreeExtraProposal } from "../free-extra-reads";
+import { INCLUDE_SPECIALISED_PARAMETER, includeSpecialisedParam } from "./checklist-type-params";
 import { readCollectionVocabulary } from "./vocabulary";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import type { AgentBuyer, AgentSale, AgentSaleRow } from "../sale-reads";
@@ -91,6 +96,12 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // marker in one transaction. No offer is touched: one holding a copy sold this way is flagged by the
 // derivation, as for any copy sold elsewhere (ADR-0013).
 //
+// **A seventh, since #2532**: `add_free_extras` gives copies away with a sale — the sale's *Add free
+// extras* (#2408) — onto its one free-extras line at 0, through `addSaleFreeExtrasThroughApi`, which
+// runs the dialog's guards (a copy the sale could not propose, a complete set broken, #2422) and writes
+// the line and the *to review* marker in one transaction. Only into a sale already recorded, and a sent
+// one only with `to_sent_sale`. `find_free_extras` is its read: what the dialog would propose.
+//
 // **No deleting, and no moving a sale.** No operation removes a sale or a line, moves a sale through
 // its fulfilment statuses, changes its header, a line's price or set, or its packing, shipping or share link — those stay in
 // the app, where the collector has the parcel in view. `tests/unit/agent-api-operation-boundary.test.ts`
@@ -115,10 +126,10 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 async function assertSale(
   context: OperationContext,
   saleId: string
-): Promise<{ buyerId: string | null; currency: string }> {
+): Promise<{ buyerId: string | null; currency: string; status: string }> {
   const sale = await prisma.sale.findFirst({
     where: { id: saleId, collectionId: context.collectionId, collection: { ownerId: context.ownerId } },
-    select: { buyerId: true, currency: true },
+    select: { buyerId: true, currency: true, status: true },
   });
   if (!sale) {
     throw notFound(
@@ -327,7 +338,7 @@ export const getSaleOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The sale. Each line is one sold set: `offerNo` is the offer it sold from — null, with `offerId` and `setId`, on a set of copies sold on no offer — `fromPlatform` the marketplace that offer is listed on where it is not the sale's own, `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `note` is the collector's own private remark, or null. `toReview` is present while what this API recorded waits for the collector's confirmation.",
+      "The sale. Each line is one sold set: `offerNo` is the offer it sold from — null, with `offerId` and `setId`, on a set of copies sold on no offer — `fromPlatform` the marketplace that offer is listed on where it is not the sale's own, `set` how the set reads, `price` what it sold for in the sale's `currency`, and `copies` the copies that left with it; `setChoicePending` says the line names one of the offer's interchangeable sets that nobody has chosen yet, and `freeExtra` marks the sale's free extras — copies given away at 0, all on one line. `gross` is the lines added up; `buyerHandling`, `buyerPaidTotal` and `commission` are in the sale's currency, `shippingCost` in `shippingCurrency`, and `net` in `baseCurrency`. `note` is the collector's own private remark, or null. `toReview` is present while what this API recorded waits for the collector's confirmation.",
   },
   handler: async (context, params) => readSale(context, params),
 };
@@ -670,7 +681,8 @@ const SELL_COPIES_PARAMETERS: readonly ParameterSpec[] = [
  *  by number after id. A name that finds no copy refuses the call, naming it. */
 async function resolveCopies(
   context: OperationContext,
-  values: readonly string[]
+  values: readonly string[],
+  nothingDone = "Nothing was sold."
 ): Promise<{ ids: string[]; copyNos: string[] }> {
   const refs = parseCopyRefs(values, "copies");
   const scope = { collectionId: context.collectionId, collection: { ownerId: context.ownerId } };
@@ -688,7 +700,7 @@ async function resolveCopies(
   ];
   if (missing.length > 0) {
     throw notFound(
-      `No copy ${missing.join(", ")} is in this token's collection. \`search_collection\` or \`find_unlisted_copies\` finds the right ones. Nothing was sold.`
+      `No copy ${missing.join(", ")} is in this token's collection. \`search_collection\` or \`find_unlisted_copies\` finds the right ones. ${nothingDone}`
     );
   }
   const copies = new Map<string, number>();
@@ -791,6 +803,130 @@ export const sellCopiesOperation: Operation = {
       "The sale as it now stands, in `get_sale`'s shape, marked `toReview` with what was added. The set is the line with no `offerNo`, carrying the copies and the price.",
   },
   handler: async (context, params) => sellCopies(context, params),
+};
+
+// ── find_free_extras / add_free_extras (#2532) ──────────────────────────
+
+const FIND_FREE_EXTRAS_PARAMETERS: readonly ParameterSpec[] = [
+  SALE_ID_PARAMETER,
+  {
+    name: "count",
+    in: "query",
+    type: "integer",
+    required: false,
+    description: "At most this many copies, a series' copies each counting. Left out, no count applies — the sale's terms state none.",
+  },
+  {
+    name: "budget",
+    in: "query",
+    type: "string",
+    required: false,
+    description: `At most this much in value, in the sale's currency — in place of the budget the sale's terms give. \`${NO_BUDGET}\` drops the terms' budget, to propose by \`count\` alone. Refused with \`budget_percent\`.`,
+  },
+  {
+    name: "budget_percent",
+    in: "query",
+    type: "string",
+    required: false,
+    description: "At most this percentage of the order's value — the sale's paid lines, without shipping and free extras — in place of the budget the sale's terms give. Refused with `budget`.",
+  },
+  INCLUDE_SPECIALISED_PARAMETER,
+];
+
+export async function findFreeExtras(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<AgentFreeExtraProposal> {
+  const saleId = requiredString(params, "saleId");
+  const sale = await assertSale(context, saleId);
+  if (isSaleCancelled(sale.status)) {
+    throw invalidRequest("This sale is cancelled and cannot be changed.");
+  }
+  const source = await refusingDomainGuards(() =>
+    listFreeExtraCandidates(context.ownerId, saleId, includeSpecialisedParam(params))
+  );
+  return freeExtraProposal(saleId, source, {
+    count: optionalInteger(params, "count"),
+    budget: optionalString(params, "budget"),
+    budgetPercent: optionalString(params, "budget_percent"),
+  });
+}
+
+export const findFreeExtrasOperation: Operation = {
+  name: "find_free_extras",
+  method: "GET",
+  path: "/sales/{saleId}/free-extras",
+  description:
+    "What a sale proposes to give away as free extras — copies put into the parcel for nothing on top of what the buyer bought — as the app's Add free extras proposes them: the cheapest copies for sale or trade first, a copy on no offer before a listed one of the same value, whole complete series before loose copies (a complete set is never broken), within a count and a budget. The budget is the one the sale's terms give the order — its marketplace's and its buyer's own, each the better for the buyer — unless the call states `count`, `budget` or `budget_percent`. Nothing is written: `add_free_extras` adds the copies chosen.",
+  writes: false,
+  parameters: FIND_FREE_EXTRAS_PARAMETERS,
+  result: {
+    kind: "object",
+    description:
+      "`series` are complete sets proposed whole and `copies` loose copies, each in the proposal's order, every copy with `copyId`, `copyNo`, what it is, its catalogue `value` in the sale's `currency` and `listed` (on an open offer, which giving it away flags). `count` and `value` total them. `terms` states the marketplace's and the buyer's terms in the sale's currency, whether free extras are `due` on this order (`none` — no terms, `below-minimum`, or `due`), and the `budget` they give it. `limits` is what the proposal was made within — null where none applies (no terms, an order under the minimum, and no limit sent), and then nothing is proposed. `orderValue` is what the budget's percentage is taken of. `unvaluedCount` counts copies that could go but have no value, so are never proposed.",
+  },
+  handler: async (context, params) => findFreeExtras(context, params),
+};
+
+const ADD_FREE_EXTRAS_PARAMETERS: readonly ParameterSpec[] = [
+  SALE_ID_PARAMETER,
+  {
+    name: "copies",
+    in: "body",
+    type: "string[]",
+    required: true,
+    description:
+      "The copies given away, each by its id or its copy number, `#123` — chosen from `find_free_extras`. Each must be one the sale could propose: in stock, for sale or for trade, on no open trade or proposal, in no listing in active bidding. A series goes whole or not at all.",
+  },
+  {
+    name: "to_sent_sale",
+    in: "body",
+    type: "boolean",
+    required: false,
+    description:
+      "Send true to add to a sale already sent — a correction, such as an extra that went in the parcel but was not recorded. Never send it otherwise.",
+  },
+  { ...INCLUDE_SPECIALISED_PARAMETER, in: "body" },
+];
+
+export async function addFreeExtras(context: OperationContext, params: ParsedParams): Promise<AgentSale> {
+  const saleId = requiredString(params, "saleId");
+  await assertSale(context, saleId);
+  const values = stringList(params, "copies");
+  if (values.length === 0) {
+    throw invalidRequest('Send the copies given away as "copies" — their ids or copy numbers. Nothing was added.');
+  }
+  const copies = await resolveCopies(context, values, "Nothing was added.");
+  await refusingDomainGuards(() =>
+    addSaleFreeExtrasThroughApi(
+      context.ownerId,
+      context.collectionId,
+      saleId,
+      copies.ids,
+      {
+        toSentSale: optionalBoolean(params, "to_sent_sale") === true,
+        includeSpecialised: includeSpecialisedParam(params),
+      },
+      [saleFreeExtrasAddedAction(copies.copyNos)]
+    )
+  );
+  return readSaleById(context, saleId);
+}
+
+export const addFreeExtrasOperation: Operation = {
+  name: "add_free_extras",
+  method: "POST",
+  path: "/sales/{saleId}/free-extras",
+  description:
+    "Give copies away with a sale already recorded, as the app's Add free extras does: the copies named join the sale's one Free extras line at price 0, opened the first time. They leave the holdings as any sold copy does; an offer that also holds one is flagged. A copy the sale could not propose, copies that would break a complete series, a cancelled sale, and a sale already sent (unless `to_sent_sale`) are refused. Never starts a sale. The sale waits for the collector's review.",
+  writes: true,
+  parameters: ADD_FREE_EXTRAS_PARAMETERS,
+  result: {
+    kind: "object",
+    description:
+      "The sale as it now stands, in `get_sale`'s shape, marked `toReview` with what was added. The free extras are the line with `freeExtra` true, at price 0.",
+  },
+  handler: async (context, params) => addFreeExtras(context, params),
 };
 
 // ── move_sale_sets ───────────────────────────────────────────────────────────

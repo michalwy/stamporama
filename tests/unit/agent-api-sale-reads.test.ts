@@ -104,6 +104,7 @@ describe("the sale record (#1949)", () => {
         price: "15.00",
         itemLabels: ["Mi 100", "Mi 101"],
         setChoicePending: false,
+        freeExtra: false,
         // What the screen's line carries and an agent is not told.
         netBase: "15.00",
       },
@@ -116,6 +117,7 @@ describe("the sale record (#1949)", () => {
         price: "5.00",
         itemLabels: [],
         setChoicePending: true,
+        freeExtra: true,
       },
     ],
     grossProceeds: "20.00",
@@ -151,6 +153,7 @@ describe("the sale record (#1949)", () => {
         price: "15.00",
         copies: ["Mi 100", "Mi 101"],
         setChoicePending: false,
+        freeExtra: false,
       },
       {
         id: "l2",
@@ -162,6 +165,7 @@ describe("the sale record (#1949)", () => {
         price: "5.00",
         copies: [],
         setChoicePending: true,
+        freeExtra: true,
       },
     ]);
     assert.deepEqual(record.buyer, { id: "c1", name: "Jan Nowak" });

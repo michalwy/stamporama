@@ -2134,6 +2134,46 @@ export async function addSaleFreeExtras(
   opts: { toSentSale?: boolean; includeSpecialised?: boolean } = {}
 ): Promise<string> {
   const ref = await assertSaleOwner(ownerId, saleId);
+  const itemIds = await checkSaleFreeExtras(ref, itemIdsRaw, opts);
+  return refusingDoubleSale(() => prisma.$transaction((tx) => writeSaleFreeExtras(tx, saleId, itemIds)));
+}
+
+/**
+ * Add copies to a sale as free extras through the agent API (#2532) — *Add free extras* (#2408) by its
+ * own guards ({@link checkSaleFreeExtras}), onto the sale's one free-extras line, **in one transaction**
+ * with the *to review* marker (#1948), so a sale cannot be given extras through the API unmarked. Only
+ * into a sale already recorded: free extras go with something sold, so this never starts a sale.
+ * `actions` is what the marker names, worded by the caller (`saleFreeExtrasAddedAction`). Returns the
+ * free-extras line's id.
+ */
+export async function addSaleFreeExtrasThroughApi(
+  ownerId: string,
+  collectionId: string,
+  saleId: string,
+  itemIdsRaw: readonly string[],
+  opts: { toSentSale?: boolean; includeSpecialised?: boolean },
+  actions: readonly string[]
+): Promise<string> {
+  const ref = await assertSaleOwner(ownerId, saleId);
+  if (ref.collectionId !== collectionId) throw new Error("Sale not found or access denied.");
+  const itemIds = await checkSaleFreeExtras(ref, itemIdsRaw, opts);
+  return refusingDoubleSale(() =>
+    prisma.$transaction(async (tx) => {
+      const lineId = await writeSaleFreeExtras(tx, saleId, itemIds);
+      await markSaleWrittenByApi(tx, saleId, { kind: "changed", actions });
+      return lineId;
+    })
+  );
+}
+
+/** *Add free extras*' guards (#2408, #2422), read-only: a cancelled sale, nothing ticked, a sent sale
+ *  not meant, a copy the sale could no longer propose, and copies that would break a complete set.
+ *  Returns the copies, each once. */
+async function checkSaleFreeExtras(
+  ref: Pick<SaleRef, "collectionId" | "status">,
+  itemIdsRaw: readonly string[],
+  opts: { toSentSale?: boolean; includeSpecialised?: boolean }
+): Promise<string[]> {
   const itemIds = [...new Set(itemIdsRaw)];
   refuseCancelledSale(ref.status);
   if (itemIds.length === 0) {
@@ -2162,34 +2202,36 @@ export async function addSaleFreeExtras(
       "Giving these copies away would break a complete series. Give the whole series, or only copies held above its complete sets. Open the proposal again."
     );
   }
-  return refusingDoubleSale(() =>
-    prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${saleId} FOR UPDATE`;
-      // A sale recorded before #2420 may hold several, one copy each: they stay, and the first takes
-      // what is added now.
-      const existing = await tx.saleLine.findFirst({
-        where: { saleId, freeExtra: true },
-        orderBy: { id: "asc" },
-        select: { id: true },
-      });
-      if (existing) {
-        await tx.saleLineItem.createMany({ data: itemIds.map((itemId) => ({ saleLineId: existing.id, itemId })) });
-        return existing.id;
-      }
-      const line = await tx.saleLine.create({
-        data: {
-          saleId,
-          offerId: null,
-          offerSetId: null,
-          price: "0",
-          freeExtra: true,
-          items: { create: itemIds.map((itemId) => ({ itemId })) },
-        },
-        select: { id: true },
-      });
-      return line.id;
-    })
-  );
+  return itemIds;
+}
+
+/** The copies onto the sale's one free-extras line (#2420), opened the first time — inside the
+ *  caller's transaction, the sale locked first so two additions at once still share one line. */
+async function writeSaleFreeExtras(tx: DbTransaction, saleId: string, itemIds: readonly string[]): Promise<string> {
+  await tx.$queryRaw`SELECT "id" FROM "sale" WHERE "id" = ${saleId} FOR UPDATE`;
+  // A sale recorded before #2420 may hold several, one copy each: they stay, and the first takes
+  // what is added now.
+  const existing = await tx.saleLine.findFirst({
+    where: { saleId, freeExtra: true },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
+  if (existing) {
+    await tx.saleLineItem.createMany({ data: itemIds.map((itemId) => ({ saleLineId: existing.id, itemId })) });
+    return existing.id;
+  }
+  const line = await tx.saleLine.create({
+    data: {
+      saleId,
+      offerId: null,
+      offerSetId: null,
+      price: "0",
+      freeExtra: true,
+      items: { create: itemIds.map((itemId) => ({ itemId })) },
+    },
+    select: { id: true },
+  });
+  return line.id;
 }
 
 /**

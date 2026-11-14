@@ -167,10 +167,10 @@ describe("the sale operations (#1949)", () => {
   }
 
   it("carries the nine operations, seven of them writes", () => {
-    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "sell_copies", "move_sale_sets", "set_sale_note", "cancel_sale"];
+    const names = ["list_sales", "get_sale", "find_or_create_buyer", "sell_offer", "sell_offer_set", "sell_copies", "find_free_extras", "add_free_extras", "move_sale_sets", "set_sale_note", "cancel_sale"];
     for (const name of names) assert.ok(OPERATIONS.some((operation) => operation.name === name), name);
     const writing = OPERATIONS.filter((operation) => names.includes(operation.name) && operation.writes).map((o) => o.name);
-    assert.deepEqual(writing.sort(), ["cancel_sale", "find_or_create_buyer", "move_sale_sets", "sell_copies", "sell_offer", "sell_offer_set", "set_sale_note"]);
+    assert.deepEqual(writing.sort(), ["add_free_extras", "cancel_sale", "find_or_create_buyer", "move_sale_sets", "sell_copies", "sell_offer", "sell_offer_set", "set_sale_note"]);
   });
 
   it("deletes no sale and moves none — no such operation exists", () => {
@@ -184,8 +184,16 @@ describe("the sale operations (#1949)", () => {
     // A fourth writes the collector's private note (#2379), and nothing else about the sale.
     // A fifth cancels a sale the buyer never paid for (#2500): the sale is kept, as a record, and the
     // one status it reaches is *Cancelled* — nothing is deleted and nothing moves through payment or
-    // shipping.
-    const LEAVES_SALES_STANDING = ["add_sale_attachments", "move_sale_sets", "convert_proposal_to_sale", "set_sale_note", "cancel_sale"];
+    // shipping. A sixth gives copies away with the sale (#2532): they join its free-extras line at 0,
+    // as the sale screen's *Add free extras* does — a line added, nothing deleted, no status or amount.
+    const LEAVES_SALES_STANDING = [
+      "add_sale_attachments",
+      "move_sale_sets",
+      "convert_proposal_to_sale",
+      "set_sale_note",
+      "cancel_sale",
+      "add_free_extras",
+    ];
     const offenders = OPERATIONS.filter((operation) => {
       if (LEAVES_SALES_STANDING.includes(operation.name)) return false;
       const words = operation.name.split("_");
