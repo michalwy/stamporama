@@ -6,6 +6,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { SELECT_STRIP, type CopySelection } from "./inventory-copy-list";
 import { useInventoryItemsInfinite, type InventoryItemFilters } from "./use-inventory-query";
 import { useReportRowsInView } from "./use-rows-in-view";
+import { useReportGroupSelectState } from "./use-select-all";
 import { Icon } from "@/app/icons";
 import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
@@ -216,7 +217,7 @@ export function useGroupMembers({
     selection,
   ]);
 
-  function setAllSelected(next: boolean) {
+  function setAllSelected(next: boolean, { open = true }: { open?: boolean } = {}) {
     if (!next) {
       // Untick what is loaded and cancel any pending request, so a group ticked while collapsed can
       // be unticked before its pages have even arrived.
@@ -224,10 +225,40 @@ export function useGroupMembers({
       selection.onSetMany(quickSelectable, false);
       return;
     }
-    onWant();
+    if (open) onWant();
     // Bumped rather than set, so asking twice re-ticks a group the collector has since unticked.
     setSelectAllNonce((n) => n + 1);
   }
+
+  // **The list's header box** (#2538) asks every group mounted when it is pressed. Served from the
+  // nonce this group was mounted under, so a group that arrives later — a page scrolled to after
+  // the select-all — is not ticked by a request made before it was on screen. It does **not** open
+  // the group, unlike the group's own box: one group opening shows the copies being ticked, every
+  // loaded group opening at once would turn the list into a flat one, and *Expand all* is there
+  // for that. A folded group's box and the bar still say what was ticked.
+  const request = selection.selectAllRequest;
+  const servedRequest = useRef(request?.nonce ?? 0);
+  useEffect(() => {
+    if (!request || servedRequest.current === request.nonce) return;
+    servedRequest.current = request.nonce;
+    setAllSelected(request.select, { open: false });
+    // `setAllSelected` is a fresh closure each render; the request is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request]);
+
+  // How ticked this group is, for the header box (#2538). `empty` is a group whose box has nothing
+  // to tick once its members are all in; one not read yet is `none`, which is what its box says.
+  const membersComplete = !!data && !hasNextPage;
+  useReportGroupSelectState(
+    selection.onGroupSelectState,
+    allSelected
+      ? "all"
+      : partiallySelected
+        ? "some"
+        : membersComplete && quickSelectable.length === 0
+          ? "empty"
+          : "none"
+  );
 
   return {
     members,

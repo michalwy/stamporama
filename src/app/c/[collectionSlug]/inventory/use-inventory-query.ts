@@ -389,6 +389,36 @@ export function useItemCount(collectionId: string, filters: InventoryItemFilters
   });
 }
 
+/** Every copy matching the filters that select-all would tick (#2538) — under duplicate grouping
+ * (`axes` set) without the groups' outliers. Asked only while the header box is ticked, which is
+ * the only time the bar offers to extend to them; under `inventory/<id>` so every write that
+ * invalidates the list re-asks it. */
+export function useSelectableItemIds(
+  collectionId: string,
+  filters: InventoryItemFilters,
+  axes: CopyGroupAxes | null,
+  enabled: boolean
+) {
+  return useQuery<{ ids: string[] }>({
+    queryKey: ["inventory", collectionId, "selectable", filters, axes] as const,
+    queryFn: async () => {
+      const params = itemFilterParams(filters);
+      if (axes) {
+        params.set("duplicates", "true");
+        if (axes.condition) params.set("groupByCondition", "true");
+        if (axes.format) params.set("groupByFormat", "true");
+        if (axes.certificate) params.set("groupByCertificate", "true");
+      }
+      const res = await fetch(
+        `/api/collections/${collectionId}/items/selectable?${params.toString()}`
+      );
+      if (!res.ok) throw new Error("Failed to read the copies matching the filters");
+      return res.json();
+    },
+    enabled,
+  });
+}
+
 export function useInventoryItemsInfinite(
   collectionId: string,
   filters: InventoryItemFilters,

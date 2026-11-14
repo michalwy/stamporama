@@ -1591,6 +1591,31 @@ and their hints name that count where it differs (*"Applies to the 3 of the 4 co
 are for sale and in hand"*). A group you have folded shut still counts: its header is on screen with
 its own tick box, and folding a row is a way of reading the list, not a way of filtering it.
 
+### Selecting everything the list shows
+
+The **box at the top of the list**, in the same column as the rows' checkboxes, ticks **every copy
+loaded on screen** — the rows you have scrolled through so far. It shows a dash while only some of
+them are ticked, and unticking it clears the whole selection, as **Clear** does.
+
+The list loads more copies as you scroll, so when the filters match more copies than are loaded, the
+selection bar then offers the rest: **Select all 300 copies matching the filters**. Taking it ticks
+every copy the filters match, the ones you have not scrolled to yet included, and the bar says **All
+300 copies selected**, with **Clear selection** beside it. Every action on the bar — a bulk edit, a
+new offer, a collage — then reaches all of them, exactly as it would a selection ticked by hand. The
+bar always names the number, so an action over hundreds of copies is never taken without seeing how
+many.
+
+This is the one time the bar acts on copies that are not drawn, and it is because you asked it to,
+with the count in front of you. The selection is **the copies that matched when you took it**: change
+the filters afterwards and it behaves like any other selection — the copies the new filters hide stay
+ticked and come back when you release them — and nothing is added to it or taken out of it by itself.
+
+In a list [grouped by duplicates, location or issue](#grouping-the-list), the top box ticks the
+copies of **every loaded group**, by the same rule each group's own box follows: a copy that
+[differs from its group](#grouping-duplicates) is left out. It does not open the groups — each
+group's own box shows what it ticked, and **Expand all** is there to see them. The offer to select
+everything matching then counts the copies of every matching group, by the same rule.
+
 ### Conflicts in the selection bar
 
 While the **Not offered on…** (or **Never listed on…**) filter names a platform, the bar also
