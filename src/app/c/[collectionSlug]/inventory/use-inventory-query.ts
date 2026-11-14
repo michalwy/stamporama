@@ -1,6 +1,8 @@
 "use client";
 
 import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CATALOG_SCOPE_PARAM } from "@/lib/catalog-search-scope";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import type {
   CopyGroupRow,
   IssueGroupCompleteness,
@@ -86,6 +88,8 @@ export interface InventoryItemFilters extends TagFilterOpts, FaultFilterOpts {
    * catalog number ("Mi PL 200", #146). */
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** The catalogues a number is searched in (#2529); absent is every one. */
+  catalogScope?: string[];
   /** The fields the search box matches, when the collector narrowed it beside the box (#2238);
    * absent is every field. */
   searchFields?: CopySearchField[];
@@ -175,6 +179,8 @@ export interface InventoryYearFacetFilters extends TagFilterOpts, FaultFilterOpt
   search?: string;
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** The catalogues a number is searched in (#2529); absent is every one. */
+  catalogScope?: string[];
   searchFields?: CopySearchField[];
   stampId?: string;
   issueId?: string;
@@ -265,6 +271,7 @@ export function itemFilterParams(filters: InventoryItemFilters): URLSearchParams
   if (filters.search) params.set("search", filters.search);
   if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
   if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+  if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
   if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
   if (filters.stampId) params.set("stampId", filters.stampId);
   if (filters.stampIds && filters.stampIds.length > 0)
@@ -545,6 +552,7 @@ export function useHoldingsValuation(
       search: filters.search,
       catalogVendorId: filters.catalogVendorId,
       catalogNumber: filters.catalogNumber,
+      catalogScope: filters.catalogScope,
       searchFields: filters.searchFields,
       issueId: filters.issueId,
       locationId: filters.locationId,
@@ -587,6 +595,7 @@ export function useHoldingsValuation(
       if (filters.search) params.set("search", filters.search);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
       if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.issueId) params.set("issueId", filters.issueId);
       if (filters.locationId) params.set("locationId", filters.locationId);
@@ -647,6 +656,7 @@ export function useItemYears(
       if (filters.search) params.set("search", filters.search);
       if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
       if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
+      if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
       if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
       if (filters.stampId) params.set("stampId", filters.stampId);
       if (filters.issueId) params.set("issueId", filters.issueId);
@@ -853,10 +863,13 @@ export function useInvalidateContacts() {
  * by the stamp-search API; disabled until the user types (the dropdown only opens
  * then), matching {@link useContactSearch}. */
 export function useStampPickerSearch(collectionId: string, query: string) {
+  // The catalogues a number is searched in (#2529) — the one choice every list and picker shares.
+  const { scope } = useCatalogSearchScope();
   return useQuery<StampSearchItem[]>({
-    queryKey: ["inventory", collectionId, "stampSearch", query] as const,
+    queryKey: ["inventory", collectionId, "stampSearch", query, scope] as const,
     queryFn: async () => {
       const params = new URLSearchParams({ q: query });
+      if (scope) params.set(CATALOG_SCOPE_PARAM, scope.join(","));
       const res = await fetch(
         `/api/collections/${collectionId}/stamps/search?${params.toString()}`
       );

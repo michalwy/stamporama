@@ -65,7 +65,9 @@ function flag(name: string, key: string, opts: { narrows?: boolean } = {}): Stor
   return { name, key, defaultValue: "0", ...opts };
 }
 
-/** The catalogue a number is looked up in (#146) — no filter at all without a number typed. */
+/** The catalogue a number was once looked up in (#146) — an address written before the shared
+ *  choice of catalogues (#2529) may still carry it, and it narrows nothing. The choice itself is not
+ *  a view's: one per collection, shared by every list and picker, so no preset captures it. */
 const CATALOG_VENDOR_ALONE = ["catalogVendorId"] as const;
 
 /** The tag filter's mode (#1182) — says nothing without tags picked. */
@@ -122,7 +124,6 @@ export const STAMPS_VIEW: ListViewSpec = {
   remembered: [
     ...AREA_YEAR,
     ...sort("stamps"),
-    rememberedRaw("catalogVendorId", "list-catalog-vendor"),
   ],
   stored: [SUB_AREAS, searchFields("stamps-search-fields")],
   refs: CATALOGUE_REFS,
@@ -134,7 +135,6 @@ export const ISSUES_VIEW: ListViewSpec = {
   remembered: [
     ...AREA_YEAR,
     ...sort("issues"),
-    rememberedRaw("catalogVendorId", "list-catalog-vendor"),
   ],
   stored: [SUB_AREAS, searchFields("issues-search-fields")],
   refs: CATALOGUE_REFS,

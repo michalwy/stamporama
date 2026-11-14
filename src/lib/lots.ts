@@ -1,4 +1,5 @@
 import "server-only";
+import { catalogNumberTest } from "./catalog-search-scope";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { settleCopyConditionsTx } from "./item-condition";
 import { Prisma } from "@/generated/prisma/client";
@@ -871,6 +872,15 @@ async function planAttachableCopies(
     sortBy === "value" ? valuateItemsByIds(collectionId, keys.map((k) => k.id)) : null,
   ]);
   const { vendorMapFor } = buildAreaVendorMaps(areas, prefixes);
+  // The catalogues a number is searched in (#2529), a typed prefix winning — read off the areas'
+  // catalogues, the vendors the picker's own control offers.
+  const searched = catalogNumberTest(
+    search,
+    areas.flatMap((a) =>
+      a.catalogEntries.map((e) => ({ id: e.catalogVendorId, abbreviation: e.vendorAbbreviation }))
+    ),
+    query.catalogScope
+  );
   const candidates = keys.map((k) => ({
     ...k,
     value: { baseAmount: values?.get(k.id)?.baseAmount ?? null },
@@ -882,7 +892,8 @@ async function planAttachableCopies(
     areaRailOrder(areas),
     (c) => {
       const vm = vendorMapFor(c.areaId, c.issueId);
-      return c.catalogNumbers.map((cn) => {
+      // Only numbers in the catalogues the search reads (#2529).
+      return c.catalogNumbers.filter((cn) => searched(cn.catalogVendorId)).map((cn) => {
         const v = vm.get(cn.catalogVendorId);
         return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
       });

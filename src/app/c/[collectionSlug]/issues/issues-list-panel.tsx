@@ -81,12 +81,11 @@ import {
 } from "@/lib/stamp-tree-selection";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useListAreaYearFilter } from "@/app/c/[collectionSlug]/shared/use-list-area-year-filter";
-import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import {
   ListToolbar,
   LIST_BANNER_STYLE,
   type SortOption,
-  type CatalogVendorOption,
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
 import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
@@ -234,16 +233,9 @@ export function IssuesListPanel({
     searchParams.get("sortDir"),
     ["year", "name", "catalogNumber"]
   );
-  // Catalog vendor filter, remembered per collection (#115): the URL param wins when present
-  // (shareable), else fall back to the last-selected vendor on a fresh visit. Shared across the
-  // stamp and issue lists so a chosen catalog carries between them.
-  const [storedCatalogVendor, rememberCatalogVendor] = usePersistedCollectionValue(
-    "list-catalog-vendor",
-    collectionId
-  );
-  const catalogVendorId = searchParams.has("catalogVendorId")
-    ? (searchParams.get("catalogVendorId") ?? "")
-    : (storedCatalogVendor ?? "");
+  // The catalogues a number is searched in (#2529) — one remembered choice every list and picker
+  // shares, ticked beside the catalogue box; it replaced the single remembered vendor (#115).
+  const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
   const catalogNumber = searchParams.get("catalogNumber") ?? "";
 
   // The tag filter (#1182) — the issue's **own** labels, nothing inherited from its stamps, which is
@@ -259,31 +251,18 @@ export function IssuesListPanel({
   // Branches or one run for an issue with several checklists (#1520), for every issue at once.
   const [checklistDisplay, setChecklistDisplay] = useChecklistDisplayMode(collectionId);
 
-  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
-    const seen = new Map<string, CatalogVendorOption>();
-    for (const area of areas) {
-      for (const entry of area.catalogEntries) {
-        if (!seen.has(entry.catalogVendorId)) {
-          seen.set(entry.catalogVendorId, {
-            id: entry.catalogVendorId,
-            name: entry.vendorName,
-            abbreviation: entry.vendorAbbreviation,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values());
-  }, [areas]);
-
   // Prefixed catalog search (#146): a vendor abbreviation typed into the number box
-  // ("Mi PL 200") resolves and overrides the dropdown; a bare number falls back to
-  // the dropdown vendor, or searches across all vendors when none is selected.
+  // ("Mi PL 200") resolves and wins over the ticked catalogues; a bare number is matched in the
+  // ticked ones (#2529), or in every one while all are ticked.
   const parsedCatalog = useMemo(
     () => parseCatalogSearch(catalogNumber, catalogVendors),
     [catalogNumber, catalogVendors]
   );
-  const effectiveCatalogVendorId = parsedCatalog.vendorId ?? catalogVendorId;
+  const effectiveCatalogVendorId = parsedCatalog.vendorId ?? "";
   const effectiveCatalogNumber = parsedCatalog.number;
+  // Sent only when there is a number to read — the box's or the search's — so an empty search asks
+  // the request it always did.
+  const sentCatalogScope = effectiveCatalogNumber || search ? catalogScope : undefined;
 
   // The quick search box gets the same prefix parsing (#289): "Mi PL 200" or "BL31" is
   // never stored verbatim, so alongside the plain text we send the parsed vendor (when an
@@ -302,6 +281,7 @@ export function IssuesListPanel({
       searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      catalogScope: sentCatalogScope,
       ...tagFilter,
       issueFormatIds,
       year: year || undefined,
@@ -310,7 +290,7 @@ export function IssuesListPanel({
       sortBy,
       sortDir,
     }),
-    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, issueFormatIds, year, displayConditionId, displayFormatId, sortBy, sortDir]
+    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, sentCatalogScope, tagFilter, issueFormatIds, year, displayConditionId, displayFormatId, sortBy, sortDir]
   );
 
   // The half of the filter set a stamp *inside* an issue can satisfy (#631). Handed to every row so
@@ -322,8 +302,10 @@ export function IssuesListPanel({
       searchFields: narrowedSearchFields,
       catalogNumber: effectiveCatalogNumber || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
+      searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      catalogScope: sentCatalogScope,
     }),
-    [search, narrowedSearchFields, effectiveCatalogNumber, effectiveCatalogVendorId]
+    [search, narrowedSearchFields, effectiveCatalogNumber, effectiveCatalogVendorId, parsedSearch, sentCatalogScope]
   );
 
   const yearFacetFilters: IssueYearFacetFilters = useMemo(
@@ -335,10 +317,11 @@ export function IssuesListPanel({
       searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      catalogScope: sentCatalogScope,
       ...tagFilter,
       issueFormatIds,
     }),
-    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, issueFormatIds]
+    [filterAreaIds, search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, sentCatalogScope, tagFilter, issueFormatIds]
   );
 
   const { data: yearFacets, isLoading: yearsLoading } = useIssueYears(
@@ -356,11 +339,12 @@ export function IssuesListPanel({
       searchFields: narrowedSearchFields,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       catalogNumber: effectiveCatalogNumber || undefined,
+      catalogScope: sentCatalogScope,
       ...tagFilter,
       issueFormatIds,
       year: year || undefined,
     }),
-    [search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, tagFilter, issueFormatIds, year]
+    [search, parsedSearch, narrowedSearchFields, effectiveCatalogVendorId, effectiveCatalogNumber, sentCatalogScope, tagFilter, issueFormatIds, year]
   );
 
   const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
@@ -673,13 +657,8 @@ export function IssuesListPanel({
           sortDir={sortDir}
           onSortChange={(sb, sd) => { persistSort(sb as IssueSortBy, sd); updateParams({ sortBy: sb, sortDir: sd }); }}
           sortOptions={ISSUE_SORT_OPTIONS}
-          catalogVendors={catalogVendors}
-          catalogVendorId={catalogVendorId}
           catalogNumber={catalogNumber}
-          onCatalogSearchChange={(vid, num) => {
-            rememberCatalogVendor(vid);
-            updateParams({ catalogVendorId: vid, catalogNumber: num });
-          }}
+          onCatalogNumberChange={(num) => updateParams({ catalogVendorId: "", catalogNumber: num })}
           /* The stamp selection's bar (#808), the Copies list's shape (#1021): up while anything is
              ticked — with every tick hidden it reads `0 of 5` and keeps only Clear, the one control
              still reaching them — naming the ticks in view, the subtree they carry, and what became

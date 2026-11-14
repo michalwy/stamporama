@@ -6,6 +6,7 @@ import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
 import { SEARCH_FIELDS_WIDTH } from "./search-fields-control";
+import { CatalogScopeControl, useCatalogScopeShown } from "./catalog-search-scope";
 
 // The free-text search box a server-side list toolbar carries (#193, #465, #484), and the debounce
 // that decides when what was typed becomes a request. Extracted here when the auction screens got
@@ -86,6 +87,9 @@ interface ListSearchBoxProps {
   /** The fields the box matches, ticked beside it (#2238) — a `SearchFieldsControl`. Held to the box
    *  as `ListToolbar`'s slot holds it, so a wrapping toolbar never parts the two. */
   searchFields?: React.ReactNode;
+  /** Draw the catalogues a number is searched in (#2529) after the fields — while the box's
+   *  *Catalogue number* field is ticked. */
+  catalogScope?: boolean;
 }
 
 /** The box itself: a text input with a clear affordance that appears once there is something to
@@ -98,7 +102,9 @@ export function ListSearchBox({
   label,
   width = "18rem",
   searchFields,
+  catalogScope = false,
 }: ListSearchBoxProps) {
+  const scopeShown = useCatalogScopeShown(catalogScope);
   const box = (
     <div
       style={{
@@ -153,12 +159,15 @@ export function ListSearchBox({
         display: "flex",
         alignItems: "center",
         gap: "0.375rem",
-        flex: `0 1 calc(${width} + ${SEARCH_FIELDS_WIDTH} + 0.375rem)`,
+        flex: scopeShown
+          ? `0 1 calc(${width} + 2 * (${SEARCH_FIELDS_WIDTH} + 0.375rem))`
+          : `0 1 calc(${width} + ${SEARCH_FIELDS_WIDTH} + 0.375rem)`,
         minWidth: 0,
       }}
     >
       {box}
       {searchFields}
+      {scopeShown && <CatalogScopeControl />}
     </div>
   );
 }

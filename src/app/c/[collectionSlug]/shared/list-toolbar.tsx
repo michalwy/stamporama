@@ -6,6 +6,11 @@ import { Tooltip } from "./tooltip";
 import { Icon } from "@/app/icons";
 import { TextInput } from "./text-input";
 import { SEARCH_FIELDS_WIDTH } from "./search-fields-control";
+import {
+  CatalogScopeControl,
+  useCatalogScopeShown,
+  useCatalogSearchScope,
+} from "./catalog-search-scope";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -113,10 +118,10 @@ export interface ListToolbarProps {
   /** Empty for a screen with nothing to order — the collection structure screen (#1401), whose rows
    *  follow their dimension's own order — and the bar then draws no sort control at all. */
   sortOptions: readonly SortOption[];
-  catalogVendors?: CatalogVendorOption[];
-  catalogVendorId?: string;
+  /** The catalogue box (#146) — a number, bare or prefixed, matched in the catalogues ticked beside
+   *  it (#2529). Drawn when the handler is given and the collection has a catalogue. */
   catalogNumber?: string;
-  onCatalogSearchChange?: (vendorId: string, number: string) => void;
+  onCatalogNumberChange?: (number: string) => void;
   children?: React.ReactNode;
   /** The last rows inside the sticky block — quick offer mode's parameters and the bar over the
    * ticked selection, in that order, both on the Copies list (#537/#373/#848). Rendered here rather
@@ -187,6 +192,9 @@ export interface ListToolbarProps {
   /** The fields the search box matches, ticked beside it (#2238) — a `SearchFieldsControl`. Held
    *  to the box so the row never wraps between the two; the box keeps `searchMaxWidth` of its own. */
   searchFields?: React.ReactNode;
+  /** Draw the catalogues a number is searched in (#2529) after {@link searchFields} — while the
+   *  box's *Catalogue number* field is ticked. */
+  searchCatalogScope?: boolean;
   /** The **grouped** bar (#2086), the Issues list's: given `filters` or `view`, the row is drawn as
    * four groups in a fixed order — the search; the filters (the catalogue search first, then these);
    * the view (the sort control first, then these); and `actions` at the right end. The bar wraps
@@ -209,10 +217,8 @@ export function ListToolbar({
   sortDir,
   onSortChange,
   sortOptions,
-  catalogVendors,
-  catalogVendorId,
   catalogNumber,
-  onCatalogSearchChange,
+  onCatalogNumberChange,
   children,
   footer,
   sortDisabledReason = null,
@@ -220,6 +226,7 @@ export function ListToolbar({
   searchMaxWidth = "20rem",
   searchPlaceholder = "Search...",
   searchFields,
+  searchCatalogScope = false,
   actions,
   filters,
   view,
@@ -262,42 +269,28 @@ export function ListToolbar({
   }, [search]);
 
   const grouped = filters !== undefined || view !== undefined;
+  const { vendors: catalogVendors } = useCatalogSearchScope();
+  const searchScopeShown = useCatalogScopeShown(searchCatalogScope);
   const catalogSearch =
-    catalogVendors && catalogVendors.length > 0 && onCatalogSearchChange ? (
+    catalogVendors.length > 0 && onCatalogNumberChange ? (
       <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexShrink: 0 }}>
         <span style={LABEL_STYLE}>Catalog</span>
-        <select
-          value={catalogVendorId ?? ""}
-          onChange={(e) =>
-            onCatalogSearchChange(e.target.value, catalogNumber ?? "")
-          }
-          style={{ ...SELECT_STYLE, minWidth: "8rem" }}
-        >
-          <option value="">All vendors</option>
-          {catalogVendors.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name} ({v.abbreviation})
-            </option>
-          ))}
-        </select>
-        {/* Accepts a bare number or a prefixed one ("Mi PL 200", "MiPL200"); a
-            recognized vendor prefix overrides the dropdown (#146). Always enabled
-            so a number can be searched across all vendors without picking one. */}
+        {/* The catalogues the number is matched in (#2529) — the one choice every list and picker
+            shares. A recognized vendor prefix ("Mi PL 200") still wins over it (#146). */}
+        <CatalogScopeControl />
         <TextInput
           placeholder="e.g. 200 or Mi PL 200"
           value={catalogNumber ?? ""}
-          onChange={(e) =>
-            onCatalogSearchChange(catalogVendorId ?? "", e.target.value)
-          }
+          onChange={(e) => onCatalogNumberChange(e.target.value)}
           style={{ ...INPUT_STYLE, width: "10rem" }}
         />
         {/* Kept in place, hidden, while there is nothing to clear: typing a number must not move
             the controls after it (#868) — on the grouped bar they share its line (#2086). */}
-        <span style={catalogVendorId || catalogNumber ? undefined : { visibility: "hidden" }}>
+        <span style={catalogNumber ? undefined : { visibility: "hidden" }}>
           <Tooltip content="Clear catalog search">
             <button
               type="button"
-              onClick={() => onCatalogSearchChange("", "")}
+              onClick={() => onCatalogNumberChange("")}
               aria-label="Clear catalog search"
               tabIndex={-1}
               style={CLEAR_BTN}
@@ -361,11 +354,14 @@ export function ListToolbar({
         gap: "0.375rem",
         flex: "1 1 auto",
         minWidth: 0,
-        maxWidth: `calc(${searchMaxWidth} + ${SEARCH_FIELDS_WIDTH} + 0.375rem)`,
+        maxWidth: searchScopeShown
+          ? `calc(${searchMaxWidth} + 2 * (${SEARCH_FIELDS_WIDTH} + 0.375rem))`
+          : `calc(${searchMaxWidth} + ${SEARCH_FIELDS_WIDTH} + 0.375rem)`,
       }}
     >
       {searchInput}
       {searchFields}
+      {searchScopeShown && <CatalogScopeControl />}
     </div>
   ) : (
     searchInput

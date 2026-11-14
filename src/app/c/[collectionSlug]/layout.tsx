@@ -12,6 +12,8 @@ import { ScanUploadsPanel } from "./scan-uploads-panel";
 import { UmbrellaPricesQuestionProvider } from "./shared/umbrella-prices-question";
 import { SpecialisedChecklistsProvider } from "./shared/specialised-checklists";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
+import { listSearchableCatalogVendors } from "@/lib/areas";
+import { CatalogSearchScopeProvider } from "./shared/catalog-search-scope";
 
 interface CollectionLayoutProps {
   children: React.ReactNode;
@@ -57,6 +59,9 @@ export default async function CollectionLayout({
   // The specialised-checklists switch (#1617), read from the same cookie every route reads, so the
   // toggles' first paint agrees with the data drawn under them.
   const includeSpecialised = await readIncludeSpecialised(collection.id);
+  // The catalogues a number search can be narrowed to (#2529), for the one choice every list and
+  // picker shares.
+  const catalogVendors = await listSearchableCatalogVendors(collection.id);
 
   return (
     // The provider wraps the **whole** shell rather than only the page: the sidebar's notification
@@ -66,21 +71,23 @@ export default async function CollectionLayout({
       <SpecialisedChecklistsProvider collectionId={collection.id} initial={includeSpecialised}>
         {/* #1573's question, asked from whichever screen gives a priced stamp its first variant. */}
         <UmbrellaPricesQuestionProvider>
-          {/* The sidebar beside the screen, or no sidebar on a phone screen (#2002). */}
-          <CollectionFrame
-            sidebar={
-              <CollectionSidebar
-                collectionSlug={collectionSlug}
-                collectionId={collection.id}
-                collectionName={collection.name}
-                appVersion={getAppVersionLabel()}
-                appReleaseDate={getAppReleaseDate()}
-              />
-            }
-            corner={<ScanUploadsPanel collectionId={collection.id} collectionSlug={collectionSlug} />}
-          >
-            {children}
-          </CollectionFrame>
+          <CatalogSearchScopeProvider collectionId={collection.id} vendors={catalogVendors}>
+            {/* The sidebar beside the screen, or no sidebar on a phone screen (#2002). */}
+            <CollectionFrame
+              sidebar={
+                <CollectionSidebar
+                  collectionSlug={collectionSlug}
+                  collectionId={collection.id}
+                  collectionName={collection.name}
+                  appVersion={getAppVersionLabel()}
+                  appReleaseDate={getAppReleaseDate()}
+                />
+              }
+              corner={<ScanUploadsPanel collectionId={collection.id} collectionSlug={collectionSlug} />}
+            >
+              {children}
+            </CollectionFrame>
+          </CatalogSearchScopeProvider>
         </UmbrellaPricesQuestionProvider>
       </SpecialisedChecklistsProvider>
     </QueryProvider>

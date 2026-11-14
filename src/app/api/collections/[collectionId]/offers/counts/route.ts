@@ -5,6 +5,7 @@ import { offerFilterCounts } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
 import { readSearchParam } from "@/lib/text-input";
 import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { OFFER_SEARCH_FIELD_KEYS } from "@/lib/offer-search-fields";
 
 // Faceted counts for the offer list's filter controls (#332). Takes the same params as the list
@@ -30,6 +31,7 @@ export async function GET(
       states,
       search: readSearchParam(sp),
       searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), OFFER_SEARCH_FIELD_KEYS),
+      catalogScope: parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM)),
       needsAction: sp.get("needsAction") === "1",
       bidding: sp.get("bidding") === "1",
       endedAuction: sp.get("endedAuction") === "1",

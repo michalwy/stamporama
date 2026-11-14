@@ -17,6 +17,10 @@ import { copyMatchesSearch } from "@/lib/copy-search";
 import { countHiddenTicks, hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import {
+  CatalogScopeControl,
+  useCatalogNumberScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { useSubtreeScope } from "@/app/c/[collectionSlug]/shared/subtree-scope";
@@ -116,6 +120,8 @@ export function AddCopiesDialog({
   );
 
   const [search, setSearch] = usePersistedSearch(`${collectionId}:sale-copies`);
+  // The catalogues a number is searched in (#2529) — the one choice every list and picker shares.
+  const { searched } = useCatalogNumberScope(search.trim());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [price, setPrice] = useState("");
 
@@ -154,13 +160,14 @@ export function AddCopiesDialog({
       // stamp, issue, location ref, catalogue number or — bare — its own number.
       return copyMatchesSearch(c, raw, () => {
         const vm = vendorMapFor(c.areaId, c.issueId);
-        return c.catalogNumbers.map((cn) => {
+        // Only numbers in the catalogues the search reads (#2529).
+        return c.catalogNumbers.filter((cn) => searched(cn.catalogVendorId)).map((cn) => {
           const v = vm.get(cn.catalogVendorId);
           return catalogMatchKey(v?.vendorAbbreviation ?? "", v?.prefix, cn.number);
         });
       });
     });
-  }, [copies, year, search, vendorMapFor]);
+  }, [copies, year, search, vendorMapFor, searched]);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -245,6 +252,8 @@ export function AddCopiesDialog({
               style={{ ...SEARCH_STYLE, flex: 1 }}
               aria-label="Filter copies"
             />
+            {/* The catalogues a number is searched in (#2529) — the lists' shared choice. */}
+            <CatalogScopeControl />
             <NotOnOpenOfferToggle checked={notOnOpenOffer} onChange={setNotOnOpenOffer} />
             <IssueFormatFilter
               collectionId={collectionId}

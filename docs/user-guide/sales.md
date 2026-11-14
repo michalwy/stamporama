@@ -1195,6 +1195,11 @@ choice is remembered for this list in each collection, apart from the phrase its
 box leaves it as it is, and a link to the list does not carry it. It works the same way as on the
 [Copies list](inventory.md).
 
+While *Catalogue number* is ticked, a second control after it picks **which catalogues** a number
+is searched in — one choice for the whole collection, shared by every list and picker
+([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)). **Add a line** and **Add copies** read
+it too.
+
 ## Related
 
 - [Offers](offers.md) — the listings (and their sets) a sale is recorded against.

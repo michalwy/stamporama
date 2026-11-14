@@ -39,6 +39,10 @@ import { hiddenTicksSuffix } from "@/lib/picker-hidden-ticks";
 import { summarizeRelink, untickOrder, type TickedCopy } from "@/lib/attach-relink";
 import { ListFilterSidebar } from "@/app/c/[collectionSlug]/shared/list-filter-sidebar";
 import { useCollectionFilterStore } from "@/app/c/[collectionSlug]/shared/use-collection-filter-store";
+import {
+  CatalogScopeControl,
+  useCatalogSearchScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { usePersistedSearch } from "@/app/c/[collectionSlug]/shared/use-persisted-search";
 import { resolveAreaFilterIds } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { SortControl } from "@/app/c/[collectionSlug]/shared/list-toolbar";
@@ -314,12 +318,14 @@ export function AttachCopiesDialog({
 
   // The search is sent once typing pauses: every keystroke would otherwise be a read.
   const debouncedSearch = useDebouncedValue(search);
+  // The catalogues a number is searched in (#2529) — the one choice every list and picker shares.
+  const { scope: catalogScope } = useCatalogSearchScope();
   const query = useMemo(() => {
     const params = new URLSearchParams();
     for (const state of states) params.append("state", state);
-    writeAttachQuery(params, filters, year, debouncedSearch, includeSubLocations);
+    writeAttachQuery(params, filters, year, debouncedSearch, includeSubLocations, catalogScope);
     return params.toString();
-  }, [states, filters, year, debouncedSearch, includeSubLocations]);
+  }, [states, filters, year, debouncedSearch, includeSubLocations, catalogScope]);
   const {
     data,
     isLoading,
@@ -507,6 +513,8 @@ export function AttachCopiesDialog({
               style={{ ...SEARCH_STYLE, flex: 1 }}
               aria-label="Filter copies"
             />
+            {/* The catalogues a number is searched in (#2529) — the lists' shared choice. */}
+            <CatalogScopeControl />
           </div>
 
           {/* The picker's own filters (#2121), applied where the copies are read (#2179). The state

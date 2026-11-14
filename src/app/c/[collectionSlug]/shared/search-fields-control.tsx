@@ -17,6 +17,23 @@ import {
  *  ellipsise. Exported for `ListToolbar`, which holds the box and this control together. */
 export const SEARCH_FIELDS_WIDTH = "10rem";
 
+/** The words a {@link SearchFieldsControl} uses. */
+export interface SearchFieldsWording<K extends string> {
+  ariaLabel: string;
+  heading: string;
+  /** The first row, which ticks every one again. */
+  all: string;
+  /** What the trigger reads for what is ticked. */
+  label: (ticked: readonly K[], fields: readonly SearchField<K>[]) => string;
+}
+
+const SEARCH_FIELDS_WORDING: SearchFieldsWording<string> = {
+  ariaLabel: "Fields the search matches",
+  heading: "Search in",
+  all: "All fields",
+  label: searchFieldsLabel,
+};
+
 /**
  * The fields a search box matches, ticked beside the box (#2238) — one control for every list's
  * search box (#2239–#2245), each passing its own fields and remembering the choice through
@@ -31,10 +48,14 @@ export function SearchFieldsControl<K extends string>({
   fields,
   ticked,
   onChange,
+  wording = SEARCH_FIELDS_WORDING,
 }: {
   fields: readonly SearchField<K>[];
   ticked: readonly K[];
   onChange: (next: K[]) => void;
+  /** What the control is called and says — the catalogues a number is searched in (#2529) reuse it
+   *  with their own words. */
+  wording?: SearchFieldsWording<K>;
 }) {
   const { open, setOpen, pos, triggerRef, menuRef } = useFilterPopover<HTMLButtonElement>();
   const keys = fields.map((f) => f.key);
@@ -46,14 +67,14 @@ export function SearchFieldsControl<K extends string>({
       <button
         ref={triggerRef}
         type="button"
-        aria-label="Fields the search matches"
+        aria-label={wording.ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         style={filterTriggerStyle({ active: narrowed, width: "100%" })}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {searchFieldsLabel(ticked, fields)}
+          {wording.label(ticked, fields)}
         </span>
         <span style={{ display: "inline-flex", opacity: 0.7, flexShrink: 0 }}>
           <Icon name="caret" size="xs" />
@@ -64,8 +85,8 @@ export function SearchFieldsControl<K extends string>({
         typeof document !== "undefined" &&
         createPortal(
           <div ref={menuRef} style={filterMenuStyle(pos, FILTER_MENU_Z_INDEX)}>
-            <span style={FILTER_MENU_HEADING_STYLE}>Search in</span>
-            <div role="listbox" aria-multiselectable aria-label="Fields the search matches">
+            <span style={FILTER_MENU_HEADING_STYLE}>{wording.heading}</span>
+            <div role="listbox" aria-multiselectable aria-label={wording.ariaLabel}>
               <button
                 type="button"
                 onClick={() => onChange([...keys])}
@@ -79,7 +100,7 @@ export function SearchFieldsControl<K extends string>({
                   borderRadius: 0,
                 }}
               >
-                All fields
+                {wording.all}
               </button>
               {fields.map((f) => {
                 // The last ticked field stays ticked: a box searching nothing would be broken.

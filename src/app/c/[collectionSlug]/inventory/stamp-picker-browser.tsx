@@ -84,7 +84,10 @@ import {
 } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 import { useDebouncedValue } from "@/app/c/[collectionSlug]/shared/autocomplete";
-import type { CatalogVendorOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import {
+  CatalogScopeControl,
+  useCatalogSearchScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { useIssueMembers, useInvalidateInventory } from "./use-inventory-query";
 import { issueLabel, pickedCatalogLabels, type PickedStamp } from "./stamp-picker-shared";
 import { SelectableStampNode } from "./selectable-stamp-node";
@@ -334,21 +337,10 @@ export function StampPickerBrowser({
   const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   const search = useDebouncedValue(filter);
 
-  const catalogVendors = useMemo<CatalogVendorOption[]>(() => {
-    const seen = new Map<string, CatalogVendorOption>();
-    for (const area of areas) {
-      for (const entry of area.catalogEntries) {
-        if (!seen.has(entry.catalogVendorId)) {
-          seen.set(entry.catalogVendorId, {
-            id: entry.catalogVendorId,
-            name: entry.vendorName,
-            abbreviation: entry.vendorAbbreviation,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values());
-  }, [areas]);
+  // The catalogues a number is searched in (#2529) — the one remembered choice every list and
+  // picker shares, ticked beside the box; a typed prefix still wins over it.
+  const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
+  const sentCatalogScope = search ? catalogScope : undefined;
 
   // A prefixed number typed into the box ("Mi PL 200", "PL200", "BL31") never appears verbatim in
   // a stored number, so the bare number and the vendor its abbreviation named ride alongside the
@@ -364,10 +356,11 @@ export function StampPickerBrowser({
       search: search || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
+      catalogScope: sentCatalogScope,
       year: year || undefined,
       issueFormatIds,
     }),
-    [areaIds, search, parsedSearch, year, issueFormatIds]
+    [areaIds, search, parsedSearch, sentCatalogScope, year, issueFormatIds]
   );
 
   // The facets drop the year and keep everything else, so each count says what picking that year
@@ -378,9 +371,10 @@ export function StampPickerBrowser({
       search: search || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
+      catalogScope: sentCatalogScope,
       issueFormatIds,
     }),
-    [areaIds, search, parsedSearch, issueFormatIds]
+    [areaIds, search, parsedSearch, sentCatalogScope, issueFormatIds]
   );
 
   const { data: yearFacets = [], isLoading: yearsLoading } = useIssueYears(
@@ -396,10 +390,11 @@ export function StampPickerBrowser({
       search: search || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
       searchCatalogNumber: parsedSearch.number || undefined,
+      catalogScope: sentCatalogScope,
       year: year || undefined,
       issueFormatIds,
     }),
-    [search, parsedSearch, year, issueFormatIds]
+    [search, parsedSearch, sentCatalogScope, year, issueFormatIds]
   );
 
   const { data: areaFacets } = useIssueAreaFacets(collectionId, areaFacetFilters);
@@ -884,6 +879,8 @@ function IssueBrowser({
           // Focus + select the remembered filter text on open, so typing overwrites it (#183).
           data-autofocus-select
         />
+        {/* The catalogues a number is searched in (#2529) — the lists' shared choice. */}
+        <CatalogScopeControl />
         <IssueFormatFilter
           collectionId={collectionId}
           selected={issueFormatIds}
@@ -1169,7 +1166,17 @@ function PickIssueRow({
   // must have come from a stamp inside — so this row reads its stamps even while collapsed, which
   // is the one case #186 needs them for. Everything else waits for the collector to expand. The
   // rule itself is `issue-stamp-match.ts`, shared with the Issues list (#631).
-  const probeForInnerMatch = needsInnerStampMatch(issue, { search }, vendorMap);
+  // Read under the catalogues the search reads (#2529), its typed prefix winning, as the server did.
+  const { vendors: scopeVendors, scope: catalogScope } = useCatalogSearchScope();
+  const stampQuery = useMemo(
+    () => ({
+      search,
+      searchCatalogVendorId: parseCatalogSearch(search, scopeVendors).vendorId ?? undefined,
+      catalogScope,
+    }),
+    [search, scopeVendors, catalogScope]
+  );
+  const probeForInnerMatch = needsInnerStampMatch(issue, stampQuery, vendorMap);
   const { data: members = [], isLoading: membersLoading } = useIssueMembers(
     collectionId,
     issue.id,
@@ -1178,8 +1185,8 @@ function PickIssueRow({
   // Null while the probe is still out or the header explained the hit: only a row that really
   // surfaced through its stamps narrows the rest of its tree.
   const matchedStampIds = useMemo(
-    () => matchedStampsInIssue(issue, members, { search }, vendorMap),
-    [issue, members, search, vendorMap]
+    () => matchedStampsInIssue(issue, members, stampQuery, vendorMap),
+    [issue, members, stampQuery, vendorMap]
   );
   // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
   // filter clears, the row falls back to the user's own toggle.

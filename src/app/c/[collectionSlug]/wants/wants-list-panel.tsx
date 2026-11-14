@@ -38,6 +38,10 @@ import { WantIssueGroupRow } from "./want-issue-group-row";
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
+import {
+  CatalogScopeControl,
+  useCatalogSearchScope,
+} from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { WANT_SEARCH_FIELDS, WANT_SEARCH_FIELD_KEYS } from "@/lib/want-search-fields";
 import { WantFormDialog } from "./want-form-dialog";
 import { useToast } from "@/app/toast-provider";
@@ -178,20 +182,9 @@ export function WantsListPanel({
   // Prefixed catalog numbers (#1261), read by the same parser as the Issues and Copies lists' search
   // boxes (#146, #289): `Mi SU 3637`, `Mi SU3637` and `Mi·SU 3637` are never stored verbatim, so the
   // bare number — and the vendor, when its abbreviation led — travels beside the text.
-  const catalogVendors = useMemo(() => {
-    const seen = new Map<string, { id: string; abbreviation: string }>();
-    for (const area of areas) {
-      for (const entry of area.catalogEntries) {
-        if (!seen.has(entry.catalogVendorId)) {
-          seen.set(entry.catalogVendorId, {
-            id: entry.catalogVendorId,
-            abbreviation: entry.vendorAbbreviation,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values());
-  }, [areas]);
+  // The catalogues a number is searched in (#2529) — the one remembered choice every list and
+  // picker shares; a typed prefix still wins over it.
+  const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
   const searchText = debouncedQuery.trim();
   const parsedSearch = useMemo(
     () => parseCatalogSearch(searchText, catalogVendors),
@@ -199,6 +192,7 @@ export function WantsListPanel({
   );
   const searchCatalogNumber = (searchText && parsedSearch.number) || undefined;
   const searchCatalogVendorId = (searchCatalogNumber && parsedSearch.vendorId) || undefined;
+  const searchCatalogScope = searchText ? catalogScope : undefined;
   // The fields that box matches (#2241, #2238's control), ticked beside it and remembered per
   // collection, though nothing else on this toolbar is. Sent only with a search, so an empty box asks
   // the request it always did.
@@ -225,10 +219,11 @@ export function WantsListPanel({
       search: searchText || undefined,
       searchCatalogNumber,
       searchCatalogVendorId,
+      searchCatalogScope,
       searchFields: narrowedSearchFields,
       stampId,
     }),
-    [status, priorities, conditionIds, issueFormatIds, filterAreaIds, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
+    [status, priorities, conditionIds, issueFormatIds, filterAreaIds, searchText, searchCatalogNumber, searchCatalogVendorId, searchCatalogScope, narrowedSearchFields, stampId]
   );
   const listFilters: WantListFilters = useMemo(
     () => ({ ...facetFilters, year: year || undefined }),
@@ -253,10 +248,11 @@ export function WantsListPanel({
       search: searchText || undefined,
       searchCatalogNumber,
       searchCatalogVendorId,
+      searchCatalogScope,
       searchFields: narrowedSearchFields,
       stampId,
     }),
-    [status, priorities, conditionIds, issueFormatIds, year, searchText, searchCatalogNumber, searchCatalogVendorId, narrowedSearchFields, stampId]
+    [status, priorities, conditionIds, issueFormatIds, year, searchText, searchCatalogNumber, searchCatalogVendorId, searchCatalogScope, narrowedSearchFields, stampId]
   );
   const { data: areaFacets } = useWantAreaFacets(collectionId, areaFacetFilters);
 
@@ -442,6 +438,8 @@ export function WantsListPanel({
             ticked={searchFields.ticked}
             onChange={searchFields.setTicked}
           />
+          {/* The catalogues a number is searched in (#2529), while that is one of the fields. */}
+          {searchFields.ticked.includes("catalogNumber") && <CatalogScopeControl />}
         </div>
 
         <ListPresetsControl collectionId={collectionId} spec={WANTS_VIEW} local={presetLocal} />

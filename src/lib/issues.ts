@@ -1,4 +1,5 @@
 import "server-only";
+import { catalogVendorWhere } from "./catalog-search-scope";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { assertIssueFormatInCollection } from "./stamp-issue-formats";
 import { stampSizeProfileWrite } from "./scanning-profiles";
@@ -1097,8 +1098,14 @@ export interface IssueListFilterOpts {
    *  field. Only the Issues list's box sends it — the agent API and the picker read them all. A
    *  `#12` search is the issue number whatever is here. */
   searchFields?: IssueSearchField[];
+  /** The vendor a prefix typed into the catalogue box named (`Mi 200`, #146) — it wins over
+   *  {@link catalogScope}. */
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** The catalogues a catalogue number is searched in (#2529) — the collector's one shared choice,
+   *  for the catalogue box and the search box's *Catalogue number* field alike; a typed prefix still
+   *  wins. Absent is every one. */
+  catalogScope?: string[];
   /** Narrow to the issues with numbers in this catalogue (#2170): a declared range in it, or a stamp
    *  of the issue numbered in it. Unlike {@link catalogVendorId} it filters alone. */
   numberedInVendorId?: string;
@@ -1162,10 +1169,12 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
       or.push({ members: { some: { stamp: { name: { contains: s, mode: "insensitive" } } } } });
     }
     if (on("catalogNumber")) {
+      // In the ticked catalogues only (#2529); a prefix typed with the number is read below.
+      const scoped = catalogVendorWhere(null, opts.catalogScope);
       or.push(
-        { catalogNumbers: { some: { firstNumber: { contains: s, mode: "insensitive" } } } },
-        { catalogNumbers: { some: { lastNumber: { contains: s, mode: "insensitive" } } } },
-        { members: { some: { stamp: { catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } } } } } }
+        { catalogNumbers: { some: { ...scoped, firstNumber: { contains: s, mode: "insensitive" } } } },
+        { catalogNumbers: { some: { ...scoped, lastNumber: { contains: s, mode: "insensitive" } } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { ...scoped, number: { contains: s, mode: "insensitive" } } } } } } }
       );
       // Prefixed catalog numbers in the quick search (#289): the raw text of "Mi PL 200"
       // never appears in a stored number, so the caller also hands us the number parsed out
@@ -1174,9 +1183,7 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
       // lets "Fi BL31" reach a stored "BL31" through its digit run.
       if (opts.searchCatalogNumber) {
         const n = { contains: opts.searchCatalogNumber, mode: "insensitive" as const };
-        const vendorClause = opts.searchCatalogVendorId
-          ? { catalogVendorId: opts.searchCatalogVendorId }
-          : {};
+        const vendorClause = catalogVendorWhere(opts.searchCatalogVendorId, opts.catalogScope);
         or.push(
           { catalogNumbers: { some: { ...vendorClause, firstNumber: n } } },
           { catalogNumbers: { some: { ...vendorClause, lastNumber: n } } },
@@ -1198,11 +1205,11 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
     conditions.push(or.length > 0 ? { OR: or } : { id: { in: [] } });
   }
 
-  // Catalog filter (#146): a number narrows to a vendor when one is set, else it
-  // matches across every vendor. Matches the issue's own first/last range numbers
+  // Catalog filter (#146): a number is matched in the vendor its typed prefix named, else in the
+  // ticked catalogues (#2529), else in every one. Matches the issue's own first/last range numbers
   // or any member stamp's number. A vendor without a number does not filter alone.
   if (opts.catalogNumber) {
-    const vendorClause = opts.catalogVendorId ? { catalogVendorId: opts.catalogVendorId } : {};
+    const vendorClause = catalogVendorWhere(opts.catalogVendorId, opts.catalogScope);
     conditions.push({
       OR: [
         { catalogNumbers: { some: { ...vendorClause, firstNumber: opts.catalogNumber } } },

@@ -5,6 +5,7 @@ import type { WantIssueGroupRow, WantListItem, WantYearFacet } from "@/lib/wants
 import type { WantPriority } from "@/lib/want-rules";
 import type { AreaFacet } from "@/lib/area-facets";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { CATALOG_SCOPE_PARAM } from "@/lib/catalog-search-scope";
 import type { WantSearchField } from "@/lib/want-search-fields";
 import { appendIssueFormatParam } from "@/lib/issue-format-filter";
 
@@ -34,6 +35,8 @@ export interface WantListFilters {
    *  its abbreviation led. Sent beside the text, which the server still matches as typed. */
   searchCatalogNumber?: string;
   searchCatalogVendorId?: string;
+  /** The catalogues a number is searched in (#2529); absent is every one. */
+  searchCatalogScope?: string[];
   /** The fields the search box matches, when the collector narrowed it beside the box (#2241);
    *  absent is every field. */
   searchFields?: WantSearchField[];
@@ -74,6 +77,9 @@ function toParams(filters: WantListFilters): URLSearchParams {
   if (filters.searchCatalogNumber) params.set("searchCatalogNumber", filters.searchCatalogNumber);
   if (filters.searchCatalogVendorId) {
     params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
+  }
+  if (filters.searchCatalogScope) {
+    params.set(CATALOG_SCOPE_PARAM, filters.searchCatalogScope.join(","));
   }
   if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
   return params;

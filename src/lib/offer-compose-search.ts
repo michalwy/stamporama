@@ -63,11 +63,16 @@ export function composeSetCatalogKeys(printedNumbers: readonly string[]): string
  * pre-lowercased-and-nothing-else string is still fine for), and a two-argument contract where one
  * argument is "the same thing but lowercased" is one the caller can get wrong silently.
  */
-export function composeSetMatches(set: ComposeSetSearchable, query: string): boolean {
+export function composeSetMatches(
+  set: ComposeSetSearchable,
+  query: string,
+  /** Narrows the catalogue keys to the catalogues the search reads (#2529); every key without it. */
+  keysInScope: (keys: readonly string[]) => readonly string[] = (keys) => keys
+): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   if (set.label.toLowerCase().includes(q)) return true;
   if (set.itemLabels.join(" ").toLowerCase().includes(q)) return true;
   if (set.searchText.includes(q)) return true;
-  return catalogKeyMatches(query, set.catalogKeys);
+  return catalogKeyMatches(query, keysInScope(set.catalogKeys));
 }

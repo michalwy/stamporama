@@ -35,6 +35,7 @@ import {
 import { usePersistedFlag } from "@/app/c/[collectionSlug]/shared/use-persisted-flag";
 import { usePersistedCollectionValue } from "@/app/c/[collectionSlug]/shared/use-persisted-collection-value";
 import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
+import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
 import { OFFER_SEARCH_FIELDS, OFFER_SEARCH_FIELD_KEYS } from "@/lib/offer-search-fields";
 import {
@@ -244,6 +245,10 @@ export function OffersListPanel({
     OFFER_SEARCH_FIELD_KEYS
   );
   const narrowedSearchFields = search ? searchFields.narrowed : undefined;
+  // The catalogues a number is searched in (#2529) — the one remembered choice every list and
+  // picker shares, sent only with a search.
+  const { scope: catalogScope } = useCatalogSearchScope();
+  const sentCatalogScope = search ? catalogScope : undefined;
 
   // Narrowed to the offers under the hammer (#215) when a link says so — the notification centre's
   // "bidding started" group (#481) is the one that does. URL-only and never remembered: it is where
@@ -287,6 +292,7 @@ export function OffersListPanel({
       includeClosed,
       search: search || undefined,
       searchFields: narrowedSearchFields,
+      catalogScope: sentCatalogScope,
       post,
     }),
     [
@@ -301,6 +307,7 @@ export function OffersListPanel({
       includeClosed,
       search,
       narrowedSearchFields,
+      sentCatalogScope,
       post,
     ]
   );
@@ -799,6 +806,8 @@ export function OffersListPanel({
                 onChange={searchFields.setTicked}
               />
             }
+            /* The catalogues a number is searched in (#2529), while that is one of the fields. */
+            catalogScope={searchFields.ticked.includes("catalogNumber")}
           />
           <ListPresetsControl collectionId={collectionId} spec={OFFERS_VIEW} />
           <select

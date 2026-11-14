@@ -13,6 +13,7 @@ import type { ItemListItem } from "@/lib/items";
 import type { SaleRecordStatus } from "@/lib/sale-status";
 import type { SaleSearchField } from "@/lib/sale-search-fields";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { CATALOG_SCOPE_PARAM } from "@/lib/catalog-search-scope";
 import { writeFreeExtraFilterQuery, type FreeExtraFilters } from "@/lib/free-extra-filters";
 import {
   keepRowsAcrossTreeChange,
@@ -37,6 +38,8 @@ export interface SaleFilters {
   search?: string;
   /** The fields `search` matches (#2243), sent only when it narrows — absent is every field. */
   searchFields?: SaleSearchField[];
+  /** The catalogues a number is searched in (#2529); absent is every one. */
+  catalogScope?: string[];
   /** Only sales holding a line whose set nobody has chosen yet (#697). */
   setChoicePending?: boolean;
   /** Only sales carrying the *to review* marker (#1948). */
@@ -60,6 +63,7 @@ export function useSalesInfinite(collectionId: string, filters: SaleFilters) {
       if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.search) params.set("search", filters.search);
       if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
+      if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
       if (filters.setChoicePending) params.set("setChoice", "1");
       if (filters.toReview) params.set("toReview", "1");
       const res = await fetch(`/api/collections/${collectionId}/sales?${params.toString()}`);

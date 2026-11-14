@@ -3290,6 +3290,12 @@ remembered for this list in each collection, apart from the phrase in the box: c
 leaves it as it is, since it is how the box reads what you type, not a filter on the offers. An offer
 opened from the searched list steps through it read the same way.
 
+While *Catalogue number* is ticked, a second control after it picks **which catalogues** a number
+is searched in — one choice for the whole collection, shared by every list and picker
+([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)). Stepping from an offer to the next one
+reads the search the same way, and the offer pickers — **Add set**, **Add to offer**, a post's and
+a proposal's **Add lots** — read it too.
+
 The search **combines** with the platform, state and show-closed filters rather than replacing them,
 and the counts and the summary bar describe the searched set like they do any other filter. It is
 remembered per collection with the rest of them — and the phrase you left in the box is **there

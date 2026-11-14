@@ -7,8 +7,8 @@ import { notifyLotPref, subscribeLotPref } from "./lot-view-prefs";
  * A single string UI preference persisted per collection in localStorage and reactive across every
  * component that reads the same (namespace, collection) key — the string-valued sibling of
  * {@link usePersistedFlag}. Used for remembered list-filter selections that are a client preference
- * rather than shareable URL state: the catalog vendor filter (#115) and the "not offered on"
- * platform filter (#275).
+ * rather than shareable URL state: the "not offered on" platform filter (#275), and the catalogues a
+ * number is searched in (#2529, which replaced the single catalog vendor filter of #115).
  *
  * A list panel keeps the URL param authoritative when present (so links stay shareable) and falls
  * back to this stored value on a fresh navigation, mirroring the current selection back on change.

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { searchStampsForPicker } from "@/lib/stamps";
 import { readSearchParam } from "@/lib/text-input";
+import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 
 export async function GET(
   request: NextRequest,
@@ -15,9 +16,11 @@ export async function GET(
 
   const { collectionId } = await params;
   const query = readSearchParam(request.nextUrl.searchParams, "q") ?? "";
+  // The catalogues a number is searched in (#2529) — the pickers' shared choice; absent is every one.
+  const catalogScope = parseCatalogScope(request.nextUrl.searchParams.get(CATALOG_SCOPE_PARAM));
 
   try {
-    const items = await searchStampsForPicker(session.user.id, collectionId, query);
+    const items = await searchStampsForPicker(session.user.id, collectionId, query, { catalogScope });
     return NextResponse.json({ items });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

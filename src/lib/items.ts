@@ -5,6 +5,7 @@ import {
   type Franking,
   type ValuationMethod,
 } from "./piece-valuation";
+import { catalogVendorWhere } from "./catalog-search-scope";
 import "server-only";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
@@ -1211,6 +1212,9 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * #200 even though the raw string isn't a substring of the stored number. */
   catalogVendorId?: string;
   catalogNumber?: string;
+  /** The catalogues a catalogue number is searched in (#2529) — the collector's one shared choice;
+   *  a typed prefix ({@link catalogVendorId}) wins over it. Absent is every one. */
+  catalogScope?: string[];
   /** The fields {@link search} matches, when the collector has narrowed it (#2238); absent is every
    * field. Only the Copies list's box sends it — every other way into this search reads them all.
    * A `#123` search is the copy number whatever is here. */
@@ -1514,8 +1518,14 @@ function buildItemWhere(
       carried.push(issue);
     }
     if (on("catalogNumber")) {
+      // In the ticked catalogues only (#2529); a prefix typed with the number is read below.
       const catalog: Prisma.StampWhereInput = {
-        catalogNumbers: { some: { number: { contains: s, mode: "insensitive" } } },
+        catalogNumbers: {
+          some: {
+            number: { contains: s, mode: "insensitive" },
+            ...catalogVendorWhere(null, filters.catalogScope),
+          },
+        },
       };
       or.push({ stamp: catalog });
       carried.push(catalog);
@@ -1527,7 +1537,7 @@ function buildItemWhere(
           catalogNumbers: {
             some: {
               number: { contains: filters.catalogNumber, mode: "insensitive" },
-              ...(filters.catalogVendorId ? { catalogVendorId: filters.catalogVendorId } : {}),
+              ...catalogVendorWhere(filters.catalogVendorId, filters.catalogScope),
             },
           },
         };
