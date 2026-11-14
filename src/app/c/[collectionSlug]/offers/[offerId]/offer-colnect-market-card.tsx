@@ -37,13 +37,11 @@ import { MARKET_ELEMENT_ID, useAssistantMarket } from "../assistant-market-hando
 // collector's call: nothing here filters or suggests.
 //
 // Nothing is read on its own. **Check Colnect market** starts a read; the card keeps the last one
-// until **Refresh** replaces it. Rendered on an offer on Colnect only.
+// until **Refresh** replaces it. Rendered on an offer on Colnect only, as the first tab of the offer's
+// Pricing panel (#2522).
 
+// The Pricing panel's tab (#2522) frames and names it, so the card draws neither a border nor a heading.
 const CARD: React.CSSProperties = {
-  border: "1px solid var(--color-border)",
-  borderRadius: "0.5rem",
-  background: "var(--color-bg-elevated)",
-  padding: "1rem",
   display: "flex",
   flexDirection: "column",
   gap: "0.75rem",
@@ -532,9 +530,6 @@ export function OfferColnectMarketCard({
   return (
     <div style={CARD}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-        <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Colnect market
-        </h3>
         {market.readAt && (
           <span style={MUTED}>
             read {new Date(market.readAt).toISOString().slice(0, 16).replace("T", " ")}
