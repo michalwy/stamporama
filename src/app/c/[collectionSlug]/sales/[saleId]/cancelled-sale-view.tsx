@@ -14,6 +14,8 @@ import { useInvalidateSales } from "../use-sales-query";
 import { saleStatusChipStyle, saleStatusMeta } from "../sale-status";
 import { SaleNoteCard } from "./sale-note-card";
 import { SaleAttachmentsCard } from "./sale-attachments-card";
+import { SaleApiReviewChip } from "../sale-review-chip";
+import { useToast } from "@/app/toast-provider";
 import { Icon } from "@/app/icons";
 
 const CARD: React.CSSProperties = {
@@ -61,11 +63,16 @@ interface CancelledSaleViewProps {
  * with its price and what the cancel did to its offer. No amounts, no profit, no status to move on:
  * a cancelled sale counts nowhere and is never reopened. The note, the files and the conversation
  * with the buyer stay, since they are what the record is for.
+ *
+ * The one thing it still asks of the collector is the agent API's *to review* marker (#1948): a sale
+ * the agent cancelled waits for review like every other sale it writes, so the chip and *Confirm*
+ * stand here as on the ordinary screen (#2516). *Confirm* clears the marker and nothing else.
  */
 export function CancelledSaleView({ collectionId, sale, attachments }: CancelledSaleViewProps) {
   const router = useRouter();
   const params = useParams<{ collectionSlug: string }>();
   const { invalidateAll } = useInvalidateSales();
+  const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | undefined>();
   const [editingNote, setEditingNote] = useState(false);
@@ -147,6 +154,29 @@ export function CancelledSaleView({ collectionId, sale, attachments }: Cancelled
           <Tooltip content="Sold on">
             <span style={CHIP}>{isoDay(sale.soldAt)}</span>
           </Tooltip>
+          {/* The agent API's *to review* marker (#1948) — a cancel made by the agent leaves it, and
+              *Confirm* is the only way off, as on the ordinary screen (#2516). */}
+          <SaleApiReviewChip mark={sale.apiReview} chipStyle={CHIP} />
+          {sale.apiReview && (
+            <Tooltip content="You have reviewed what the agent API recorded — remove the To review mark from this sale.">
+              <button
+                type="button"
+                onClick={() =>
+                  run(
+                    async () => {
+                      const { confirmSaleReviewAction } = await import("@/app/actions/sales");
+                      return confirmSaleReviewAction(sale.id);
+                    },
+                    () => toast({ message: `Sale s${sale.saleNo} confirmed` })
+                  )
+                }
+                disabled={isPending}
+                style={SECONDARY_BTN}
+              >
+                <Icon name="check" size="sm" /> Confirm
+              </button>
+            </Tooltip>
+          )}
           {sale.externalRef && (
             <Tooltip content="Order number in the marketplace">
               <span style={CHIP}># {sale.externalRef}</span>

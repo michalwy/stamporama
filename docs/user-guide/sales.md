@@ -1014,8 +1014,12 @@ When it [moves sold sets](#moving-sold-sets-to-another-sale) between two sales, 
 - **The assistant cannot remove the mark.** Nothing it can ask for clears it.
 - **Editing the sale does not remove it either.** Correcting a price or moving the sale to *Paid* is
   not the same as having checked the whole sale, so the mark stays until you press **Confirm**.
+- **Cancelling the sale yourself removes it.** Deciding the sale's fate is having looked at it, so a
+  sale you [cancel](#cancelling-a-sale-the-buyer-never-paid-for) is no longer marked. A sale the
+  assistant cancels is marked like anything else it writes.
 - **Confirm** beside the chip on the sale's screen, or **Confirm review** in the row's **⋮** menu,
-  clears it. Both appear only while the sale is marked.
+  clears it. Both appear only while the sale is marked — on a cancelled sale's screen too, where
+  **Confirm** removes the mark and the sale stays cancelled.
 - **To review** in the toolbar narrows the list to the marked sales, and the
   [Action items](action-items.md) bell lists them under *Sales recorded by an agent, to review*.
 - **Nothing else changes.** A marked sale counts in your figures, retires its copies and moves
@@ -1117,7 +1121,8 @@ profit, sold counts, the Overview, the profit and loss screen or a contact's fig
 record — the buyer, when and why it was cancelled, and **what the buyer had bought**, each set with
 its price and what became of its offer. Its note, attachments and conversation stay, and you can
 still add to them. A cancelled sale is never reopened: if the buyer pays after all, record a new
-sale.
+sale. Cancelling it yourself also removes its [**To review · API**](#what-the-assistant-recorded--to-review--api)
+mark; a sale an assistant cancelled keeps the mark, with **Confirm** beside it on its screen.
 
 On the Sales list a cancelled sale has a red **Cancelled** chip and its reason where the proceeds
 would be. The **Cancelled** status chip lists only cancelled sales; the other status chips leave

@@ -10,7 +10,8 @@ import { API_REVIEW_LABEL } from "./auction-review";
  * looked at it. The marker is set by every API write and cleared only by the collector's *Confirm* —
  * never by an API call, and **never by editing the sale in the app**: reviewing is a deliberate act,
  * and a figure corrected by hand is not the sale reviewed (settled with the collector on 2026-10-16,
- * as #1626 settled it for auctions). Both halves are held in `sales.ts` and in
+ * as #1626 settled it for auctions). The one other collector act that clears it is **cancelling the
+ * sale in the app** (#2516): deciding its fate is the review. Both halves are held in `sales.ts` and in
  * `tests/unit/agent-api-operation-boundary.test.ts`; nothing here writes.
  *
  * Unlike an auction's, which names the **fields** the API changed, a sale's marker names what the API

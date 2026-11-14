@@ -68,7 +68,10 @@ the sale itself — who, when, on which marketplace, and what was bought.
    `BuyerCancelledWarning`) — a heads-up, never a refusal.
 8. **The agent API can cancel**: `cancel_sale` runs `cancelSaleThroughApi`, the same cancel with the
    *to review* marker (#1948) in its transaction — the one status change open to the agent. Reads
-   carry the status and, on a cancelled sale, what it had sold.
+   carry the status and, on a cancelled sale, what it had sold. **Amended by #2516:** the
+   collector's own cancel (`cancelSale`) clears the marker in its transaction — deciding the sale's
+   fate is the review — while the agent's still sets it; and the cancelled screen shows the marker
+   with *Confirm*, which clears it and changes nothing else.
 9. ***Delete sale* stays**, for a sale recorded by mistake, and still leaves no trace — a cancelled
    sale included.
 
