@@ -8,6 +8,8 @@ import {
   DEFAULT_CANCEL_REASON,
   normalizeCancelReason,
   resolveCancelOutcomes,
+  setAllCancelOutcomes,
+  sharedCancelOutcome,
 } from "../../src/lib/sale-cancel-rules";
 import {
   canCancelSale,
@@ -121,5 +123,41 @@ describe("claimedSaleLines (#2500)", () => {
     const cancelledLines = [{ offerId: "o2" }];
     assert.deepEqual(claimedSaleLines({ status: "paid", lines, cancelledLines: [] }), lines);
     assert.deepEqual(claimedSaleLines({ status: "cancelled", lines: [], cancelledLines }), cancelledLines);
+  });
+});
+
+describe("the Cancel sale dialog's all-offers choice (#2515)", () => {
+  const ids = ["o1", "o2", "o3", "o4", "o5"];
+
+  it("All withdrawn sets every offer to withdrawn, and the choice shows as selected", () => {
+    const all = setAllCancelOutcomes(ids, "withdrawn");
+    assert.deepEqual(Object.keys(all), ids);
+    for (const id of ids) assert.equal(all[id], "withdrawn");
+    assert.equal(sharedCancelOutcome(ids, all), "withdrawn");
+    assert.deepEqual(
+      [...resolveCancelOutcomes(ids, all).values()],
+      ids.map(() => "withdrawn")
+    );
+  });
+
+  it("one row changed back clears the choice, and only that offer goes back to active", () => {
+    const changed = { ...setAllCancelOutcomes(ids, "withdrawn"), o3: "active" as const };
+    assert.equal(sharedCancelOutcome(ids, changed), null);
+    const resolved = resolveCancelOutcomes(ids, changed);
+    assert.deepEqual(
+      ids.filter((id) => resolved.get(id) === "active"),
+      ["o3"]
+    );
+  });
+
+  it("shows the choice again once the rows agree", () => {
+    const changed = { ...setAllCancelOutcomes(ids, "withdrawn"), o3: "active" as const };
+    assert.equal(sharedCancelOutcome(ids, { ...changed, o3: "withdrawn" }), "withdrawn");
+    assert.equal(sharedCancelOutcome(ids, setAllCancelOutcomes(ids, "active")), "active");
+  });
+
+  it("is nothing for no offers or an offer with no choice", () => {
+    assert.equal(sharedCancelOutcome([], {}), null);
+    assert.equal(sharedCancelOutcome(["o1", "o2"], { o2: "active" }), null);
   });
 });

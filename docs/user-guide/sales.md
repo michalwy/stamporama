@@ -1098,8 +1098,10 @@ parcel already sent is a return, not a cancellation.
 
 The dialog lists the **offers the sale closed** and asks, for each, whether it goes **back to
 active** (the listing is still up, or you will put it back) or is **withdrawn**. *Back to active* is
-chosen to start with. Sets on no offer, and sets of an offer that still had others to sell, are
-simply released. You can give a **reason** — it starts as *Not paid* — and it is shown on the
+chosen to start with. With more than one offer, the heading row has **All back to active** and
+**All withdrawn**, which set every offer at once; a single offer can still be changed after. While
+the offers differ, neither is selected. Sets on no offer, and sets of an offer that still had others
+to sell, are simply released. You can give a **reason** — it starts as *Not paid* — and it is shown on the
 cancelled sale.
 
 Cancelling releases exactly what deleting does:

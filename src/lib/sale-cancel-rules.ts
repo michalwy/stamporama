@@ -38,6 +38,28 @@ export function resolveCancelOutcomes(
   return result;
 }
 
+/**
+ * What the dialog's all-offers choice (#2515) shows: the outcome every listed offer shares, or null
+ * when they differ — then neither *All back to active* nor *All withdrawn* is selected.
+ */
+export function sharedCancelOutcome(
+  offerIds: readonly string[],
+  outcomes: Readonly<Record<string, CancelOfferOutcome>>
+): CancelOfferOutcome | null {
+  if (offerIds.length === 0) return null;
+  const first = outcomes[offerIds[0]];
+  if (!isCancelOfferOutcome(first)) return null;
+  return offerIds.every((id) => outcomes[id] === first) ? first : null;
+}
+
+/** Every listed offer set to one outcome — the all-offers choice (#2515); a row can change after. */
+export function setAllCancelOutcomes(
+  offerIds: readonly string[],
+  outcome: CancelOfferOutcome
+): Record<string, CancelOfferOutcome> {
+  return Object.fromEntries(offerIds.map((id) => [id, outcome]));
+}
+
 /** The reason as stored: trimmed, and a blank one is none. */
 export function normalizeCancelReason(reason: string | null | undefined): string | null {
   const trimmed = (reason ?? "").trim();
