@@ -1,6 +1,6 @@
 "use client";
 
-import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { ListPresetsControl, useDetachListPreset } from "@/app/c/[collectionSlug]/shared/list-presets-control";
 import { SUPPLIES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import Link from "next/link";
@@ -59,6 +59,8 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
   const base = `/c/${collectionSlug}`;
   const knownSupplies = useMemo(() => new Set(stock.supplies.map((s) => s.id)), [stock]);
   const { tab, setTab, view, setView, clearRegister } = useSuppliesView(collectionId, `${base}/supplies`, knownSupplies);
+  // The register's *Clear filters* lets go of the applied preset as well (#2534).
+  const detachPreset = useDetachListPreset(collectionId, SUPPLIES_VIEW.list);
   const detail = detailId ? stock.supplies.find((s) => s.id === detailId) : undefined;
   // Over the detail dialog, a dialog it opened paints above it.
   const stackedZ = detail ? 110 : undefined;
@@ -168,7 +170,10 @@ export function SuppliesPanel({ collectionId, collectionSlug, stock, today }: Su
               base={base}
               view={view}
               setView={setView}
-              clearRegister={clearRegister}
+              clearRegister={() => {
+                detachPreset();
+                clearRegister();
+              }}
               onEdit={(use) => open({ kind: "edit", use })}
               onDelete={(use, supplyName) => open({ kind: "delete", use, supplyName })}
             />

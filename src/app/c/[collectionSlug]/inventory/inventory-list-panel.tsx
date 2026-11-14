@@ -1,6 +1,6 @@
 "use client";
 
-import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { ListPresetsControl, useDetachListPreset } from "@/app/c/[collectionSlug]/shared/list-presets-control";
 import { COPIES_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { conditioned } from "@/lib/piece-condition";
 import { useCallback, useMemo, useState, useTransition } from "react";
@@ -1319,8 +1319,11 @@ export function InventoryListPanel({
   // One write through the single `updateParams` funnel (#693): naming every key with `""` is what
   // clears the *remembered* set too, since a filter cleared to nothing leaves the URL and a key not
   // named in the update would be read straight back out of storage. The platform worklist keeps its
-  // own stored value (#275), so it is cleared beside them.
+  // own stored value (#275), so it is cleared beside them. The applied preset goes with them
+  // (#2534), whatever it held — the sort and the grouping it may carry stay on screen.
+  const detachPreset = useDetachListPreset(collectionId, COPIES_VIEW.list);
   const resetFilters = useCallback(() => {
+    detachPreset();
     rememberNotOfferedPlatform("");
     updateParams({
       ...Object.fromEntries(REMEMBERED_FILTER_KEYS.map((key) => [key, ""])),
@@ -1329,7 +1332,7 @@ export function InventoryListPanel({
       notOfferedPlatform: "",
       excludedPlatform: "",
     });
-  }, [updateParams, rememberNotOfferedPlatform]);
+  }, [detachPreset, updateParams, rememberNotOfferedPlatform]);
 
   // A piece has no condition to price (#2383); its row prices its stamps instead.
   const quickPriceSubject = dialog.kind === "quickPrice" ? conditioned(dialog.item) : null;

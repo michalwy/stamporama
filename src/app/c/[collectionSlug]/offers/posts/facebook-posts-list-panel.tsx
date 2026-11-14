@@ -1,6 +1,6 @@
 "use client";
 
-import { ListPresetsControl } from "@/app/c/[collectionSlug]/shared/list-presets-control";
+import { ListPresetsControl, useDetachListPreset } from "@/app/c/[collectionSlug]/shared/list-presets-control";
 import { POSTS_VIEW } from "@/app/c/[collectionSlug]/shared/list-view-specs";
 import { useMemo, useState } from "react";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
@@ -77,6 +77,8 @@ export function FacebookPostsListPanel({
   const [creating, setCreating] = useState(false);
   const knownGroups = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
   const { view, setView, clearFilters } = usePostsView(collectionId, `/c/${collectionSlug}/offers/posts`, knownGroups);
+  // *Clear filters* lets go of the applied preset as well (#2534).
+  const detachPreset = useDetachListPreset(collectionId, POSTS_VIEW.list);
   const { groups: groupIds, stage, untitled } = view;
 
   const filters: FacebookPostFilters = useMemo(() => ({ groupIds, stage, untitled }), [groupIds, stage, untitled]);
@@ -167,7 +169,10 @@ export function FacebookPostsListPanel({
             </span>
             <button
               type="button"
-              onClick={clearFilters}
+              onClick={() => {
+                detachPreset();
+                clearFilters();
+              }}
               style={{
                 ...FILTER_CONTROL_STYLE,
                 marginLeft: "auto",

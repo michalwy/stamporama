@@ -54,6 +54,11 @@ import { usePersistedCollectionValue } from "./use-persisted-collection-value";
 // nothing stays attached when applied, and so does one whose exact view the list returns to. The
 // detached state is remembered like the applied one, so a reload does not bring the name back.
 //
+// **A list's *Reset filters* always lets go of the preset** (#2534), whatever the preset held — a
+// sort, a grouping, or a filter the button leaves alone would otherwise keep the name on the chip,
+// marked *modified*, over a list it no longer describes. The button calls `useDetachListPreset`
+// beside its own clearing; clearing the filters one by one keeps the rule above.
+//
 // **Nothing is applied by itself.** A list opens as it always did; a preset is applied only by a
 // click.
 //
@@ -88,6 +93,18 @@ function storageKeysOf(spec: ListViewSpec, collectionId: string): string[] {
     ...(spec.remembered ?? []).map((p) => storageKey(p.store.key, collectionId)),
     ...(spec.stored ?? []).map((s) => storageKey(s.key, collectionId)),
   ];
+}
+
+/** Where the applied preset of a list is remembered, per collection. */
+function appliedPresetNamespace(list: ListKey): string {
+  return `list-preset-applied:${list}`;
+}
+
+/** Lets go of the list's applied preset (#2534) — for a list's *Reset filters*, which calls it beside
+ *  its own clearing so the control shows no preset afterwards, and a reload does not bring it back. */
+export function useDetachListPreset(collectionId: string, list: ListKey): () => void {
+  const [, setAppliedId] = usePersistedCollectionValue(appliedPresetNamespace(list), collectionId);
+  return useCallback(() => setAppliedId(""), [setAppliedId]);
 }
 
 /** The list's view as it stands, kept current with the address and with storage. */
@@ -134,7 +151,7 @@ export function ListPresetsControl({
   const { data: presets = [] } = useListPresets(collectionId, spec.list);
   const current = useCurrentListView(spec, collectionId, local);
   const [appliedId, setAppliedId] = usePersistedCollectionValue(
-    `list-preset-applied:${spec.list}`,
+    appliedPresetNamespace(spec.list),
     collectionId
   );
   const applied = presets.find((p) => p.id === appliedId);
