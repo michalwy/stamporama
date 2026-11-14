@@ -7,12 +7,14 @@ import {
   addSaleLines,
   cancelSale,
   cancelSaleThroughApi,
+  confirmSaleReview,
   countBuyerCancelledSales,
   createSale,
   deleteSale,
   getSaleDetail,
   listSaleProfitRows,
   listSalesPaginated,
+  markSaleWrittenByApi,
   setSaleStatus,
   updateSaleNote,
   SaleActionBlockedError,
@@ -291,6 +293,33 @@ describe("cancelling a sale (#2500)", () => {
     assert.equal(row.status, "cancelled");
     assert.ok(row.apiReviewAt);
     assert.deepEqual(row.apiReviewActions, ["cancelled the sale — 1 offer back to active, 1 withdrawn"]);
+  });
+
+  // #2516: cancelling in the app is the review, and a cancelled sale still marked can be confirmed.
+  it("in the app, clears the to-review marker the agent left on the sale", async () => {
+    const { saleId } = await saleOf(1);
+    await prisma.$transaction((tx) =>
+      markSaleWrittenByApi(tx, saleId, { kind: "changed", actions: ["added offer #1 at 5.00 EUR"] })
+    );
+    await cancelSale(userId, saleId, { reason: "Not paid", offerOutcomes: {} });
+    const row = await prisma.sale.findUniqueOrThrow({ where: { id: saleId } });
+    assert.equal(row.status, "cancelled");
+    assert.equal(row.apiReviewAt, null);
+    assert.equal(row.apiReviewCreated, false);
+    assert.deepEqual(row.apiReviewActions, []);
+    assert.equal((await getSaleDetail(userId, saleId))!.apiReview, null);
+  });
+
+  it("through the agent API, can be confirmed once cancelled — and stays cancelled", async () => {
+    const { saleId } = await saleOf(1);
+    await cancelSaleThroughApi(userId, collectionId, saleId, { reason: "Not paid", offerOutcomes: {} });
+    assert.ok((await getSaleDetail(userId, saleId))!.apiReview);
+    assert.equal(await confirmSaleReview(userId, saleId), true);
+    const row = await prisma.sale.findUniqueOrThrow({ where: { id: saleId } });
+    assert.equal(row.apiReviewAt, null);
+    assert.equal(row.status, "cancelled");
+    assert.ok(row.cancelledAt);
+    assert.equal(row.cancelReason, "Not paid");
   });
 
   it("leaves Delete sale deleting without a trace — an open sale, and a cancelled one", async () => {

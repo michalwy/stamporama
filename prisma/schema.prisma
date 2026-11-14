@@ -6358,11 +6358,11 @@ model Sale {
   // When the sale was cancelled (#2500); null on a sale that is not.
   cancelledAt   DateTime?
   // The *to review* marker (#1948), the sale-side twin of `AuctionSale`'s (#1626): set by every
-  // write the agent API makes to this sale, cleared only by the collector's *Confirm*.
-  // `apiReviewAt` is the latest such write and null means no marker; `apiReviewCreated` says the API
-  // recorded the sale, and `apiReviewActions` what it did, worded by the code that wrote it (*added
-  // offer #2680 at 15 PLN*) and accumulated until confirmed (`sale-review.ts`). Editing the sale in
-  // the app leaves all three alone.
+  // write the agent API makes to this sale, cleared only by the collector's *Confirm* — or by the
+  // collector cancelling the sale in the app (#2516). `apiReviewAt` is the latest such write and null
+  // means no marker; `apiReviewCreated` says the API recorded the sale, and `apiReviewActions` what it
+  // did, worded by the code that wrote it (*added offer #2680 at 15 PLN*) and accumulated until
+  // confirmed (`sale-review.ts`). Editing the sale in the app leaves all three alone.
   apiReviewAt      DateTime?
   apiReviewCreated Boolean   @default(false)
   apiReviewActions String[]  @default([])

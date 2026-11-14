@@ -3749,6 +3749,8 @@ export async function markSaleWrittenByApi(
  * *Confirm*: the collector has reviewed what the agent API recorded on this sale, so the marker goes
  * (#1948) — from the sale's own screen or its row's ⋮ menu. A sale without a marker is simply
  * already confirmed, so it is not an error; the answer is whether a marker was actually cleared.
+ * A **cancelled** sale is confirmed too (#2516) — its read-only screen offers *Confirm* while the
+ * marker stands, as the agent's cancel leaves it — and nothing else on it changes.
  */
 export async function confirmSaleReview(ownerId: string, saleId: string): Promise<boolean> {
   await assertSaleOwner(ownerId, saleId);
@@ -3897,6 +3899,10 @@ export interface CancelSaleResult {
  *   back, and is marked out of step as well.
  * - The buyer's link (#699) is withdrawn: there is nothing left to choose.
  *
+ * - The *to review* marker (#1948) goes (#2516): the collector has looked at the sale and decided its
+ *   fate, which is the review. Written here and not in {@link cancelSaleIn}, so the agent's cancel
+ *   ({@link cancelSaleThroughApi}) never reaches the clear and leaves its own mark instead.
+ *
  * Only a sale not yet sent can be cancelled. The sale is locked and read again inside the
  * transaction, so what is cancelled is what was checked; a line added or moved since the screen was
  * read is cancelled with the rest, and named on the record as the sale's screen names it now.
@@ -3906,7 +3912,9 @@ export async function cancelSale(
   saleId: string,
   input: CancelSaleInput
 ): Promise<CancelSaleResult> {
-  return cancelSaleIn(ownerId, null, saleId, input);
+  return cancelSaleIn(ownerId, null, saleId, input, (tx) =>
+    tx.sale.update({ where: { id: saleId }, data: CONFIRMED_SALE_API_REVIEW })
+  );
 }
 
 /**

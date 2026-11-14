@@ -1779,7 +1779,11 @@ hold for every auction write this surface will ever make:
 and bound by the same two rules — which #1949's `recordSaleLinesThroughApi` keeps (*Recording sales*): every sale write marks the sale through `markSaleWrittenByApi`, in
 its own transaction, naming what it did (`saleLineAddedAction` words a line — *added offer #2680 at
 15 PLN*); and nothing reachable from an agent clears it — `confirmSaleReview` and
-`CONFIRMED_SALE_API_REVIEW` are on `REVIEW_CLEARERS` beside the auctions' three.
+`CONFIRMED_SALE_API_REVIEW` are on `REVIEW_CLEARERS` beside the auctions' three. **One collector
+act besides *Confirm* clears it** (#2516): cancelling the sale on its screen (`cancelSale`), since
+deciding the sale's fate is the review. The clear sits in `cancelSale`'s own body, never in the
+`cancelSaleIn` both cancels share, so `cancelSaleThroughApi` cannot reach it — the boundary test
+pins all three bodies.
 
 ### One watchlist, and it is the screen's default
 

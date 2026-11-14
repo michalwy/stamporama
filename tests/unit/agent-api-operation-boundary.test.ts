@@ -1225,8 +1225,17 @@ describe("the agent API's operation modules (#1949)", () => {
     assert.ok(salesWriters.includes("moveSaleLines") && salesWriters.includes("moveSaleLinesThroughApi"));
     // The screen's note write (#2379) writes no marker either.
     assert.ok(salesWriters.includes("updateSaleNote") && salesWriters.includes("setSaleNoteThroughApi"));
-    // The screen's cancel (#2500) writes no marker either.
+    // The screen's cancel (#2500) writes no marker either — it clears one (#2516): the collector
+    // deciding the sale's fate is the review. The clear lives in the screen's cancel alone, never in
+    // the agent's, which leaves its own mark instead.
     assert.ok(salesWriters.includes("cancelSale") && salesWriters.includes("cancelSaleThroughApi"));
+    assert.match(exportedFunctionBody(domain, "cancelSale"), /CONFIRMED_SALE_API_REVIEW/);
+    assert.doesNotMatch(exportedFunctionBody(domain, "cancelSaleThroughApi"), /CONFIRMED_SALE_API_REVIEW/);
+    assert.doesNotMatch(
+      domain.slice(domain.indexOf("async function cancelSaleIn("), domain.indexOf("function assertSaleCancellable(")),
+      /CONFIRMED_SALE_API_REVIEW/,
+      "the cancel both paths share must not clear the to-review marker (#2516)"
+    );
     const closed = new Set([
       ...salesWriters.filter((name) => !SALE_API_WRITES.has(name)),
       ...SALE_SHARE_WRITES,
