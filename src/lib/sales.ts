@@ -1574,6 +1574,63 @@ export async function addSaleCopySet(
   opts: { toSentSale?: boolean } = {}
 ): Promise<string> {
   const ref = await assertSaleOwner(ownerId, saleId);
+  const itemIds = await checkSaleCopySet(ref, draft, opts);
+  return refusingDoubleSale(() => writeSaleCopySet(prisma, saleId, itemIds, draft.price));
+}
+
+/**
+ * Add copies on no offer to a sale as one set through the agent API (#2531) — *Add copies* (#2021)
+ * by its own guards, onto a sale already there or a new one started with the set, **in one
+ * transaction** with the *to review* marker (#1948), as {@link recordSaleLinesThroughApi} records
+ * sold sets: a sale cannot be written through the API unmarked, and a new sale whose copies are
+ * refused is never left behind empty — which the app's *Sell copies* on a new sale, two calls, can do.
+ *
+ * Unlike {@link recordSaleLinesThroughApi}, a sale already *Sent* takes the set when the caller says
+ * so (`toSentSale`), as the sale's own *Add copies* does (#1950) — the issue's decision for this
+ * write. `actions` is what the marker names, worded by the caller (`saleCopiesAddedAction`).
+ */
+export async function addSaleCopySetThroughApi(
+  ownerId: string,
+  collectionId: string,
+  target: ApiSaleTarget,
+  draft: SaleCopySetDraft,
+  opts: { toSentSale?: boolean },
+  actions: readonly string[]
+): Promise<{ saleId: string; created: boolean }> {
+  if ("saleId" in target) {
+    const ref = await assertSaleOwner(ownerId, target.saleId);
+    if (ref.collectionId !== collectionId) throw new Error("Sale not found or access denied.");
+    const itemIds = await checkSaleCopySet(ref, draft, opts);
+    await refusingDoubleSale(() =>
+      prisma.$transaction(async (tx) => {
+        await writeSaleCopySet(tx, target.saleId, itemIds, draft.price);
+        await markSaleWrittenByApi(tx, target.saleId, { kind: "changed", actions });
+      })
+    );
+    return { saleId: target.saleId, created: false };
+  }
+
+  const prepared = await prepareSaleHeader(ownerId, collectionId, target.header, {});
+  const itemIds = await checkSaleCopySet({ collectionId, status: "ordered" }, draft, {});
+  const saleId = await refusingDoubleSale(() =>
+    prisma.$transaction(async (tx) => {
+      const id = await insertSaleHeader(tx, collectionId, prepared);
+      await writeSaleCopySet(tx, id, itemIds, draft.price);
+      await markSaleWrittenByApi(tx, id, { kind: "created", actions });
+      return id;
+    })
+  );
+  return { saleId, created: true };
+}
+
+/** *Add copies*' guards (#2021), read-only, so a sale not yet inserted is checked as the open sale it
+ *  will be: a sale that takes no more, an empty pick, a sent sale not meant, and a copy that is not
+ *  the collection's or not in stock. Returns the copies, each once. */
+async function checkSaleCopySet(
+  ref: Pick<SaleRef, "collectionId" | "status">,
+  draft: SaleCopySetDraft,
+  opts: { toSentSale?: boolean }
+): Promise<string[]> {
   const itemIds = [...new Set(draft.itemIds)];
   refuseCancelledSale(ref.status);
   if (itemIds.length === 0) {
@@ -1594,19 +1651,27 @@ export async function addSaleCopySet(
       "One or more of these copies is no longer in stock — sold, gone, or not yet in hand."
     );
   }
-  return refusingDoubleSale(async () => {
-    const line = await prisma.saleLine.create({
-      data: {
-        saleId,
-        offerId: null,
-        offerSetId: null,
-        price: draft.price,
-        items: { create: itemIds.map((itemId) => ({ itemId })) },
-      },
-      select: { id: true },
-    });
-    return line.id;
+  return itemIds;
+}
+
+/** The set's one line, on no offer — inside the caller's transaction, or alone. */
+async function writeSaleCopySet(
+  db: DbTransaction | typeof prisma,
+  saleId: string,
+  itemIds: readonly string[],
+  price: string
+): Promise<string> {
+  const line = await db.saleLine.create({
+    data: {
+      saleId,
+      offerId: null,
+      offerSetId: null,
+      price,
+      items: { create: itemIds.map((itemId) => ({ itemId })) },
+    },
+    select: { id: true },
   });
+  return line.id;
 }
 
 // ── Free extras (#2408) ─────────────────────────────────────────────────────

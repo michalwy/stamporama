@@ -110,6 +110,7 @@ import {
   moveSaleSetsOperation,
   sellOfferOperation,
   sellOfferSetOperation,
+  sellCopiesOperation,
   setSaleNoteOperation,
 } from "./operations/sales";
 import { addSaleAttachmentsOperation, listSaleAttachmentsOperation } from "./operations/sale-attachments";
@@ -289,6 +290,7 @@ export const OPERATIONS: readonly Operation[] = [
   findOrCreateBuyerOperation,
   sellOfferOperation,
   sellOfferSetOperation,
+  sellCopiesOperation,
   moveSaleSetsOperation,
   setSaleNoteOperation,
   cancelSaleOperation,

@@ -1160,6 +1160,8 @@ const SALE_API_WRITES = new Map<string, string>([
   ["setSaleNoteThroughApi", "src/lib/sales.ts"],
   // Cancelling a sale the buyer never paid for (#2500), the sale marked — the one status change open.
   ["cancelSaleThroughApi", "src/lib/sales.ts"],
+  // Copies on no offer sold as one set (#2531), the sale marked — new or added to.
+  ["addSaleCopySetThroughApi", "src/lib/sales.ts"],
   ["findOrCreateBuyer", "src/lib/facebook-sales.ts"],
 ]);
 
@@ -1214,6 +1216,12 @@ describe("the agent API's operation modules (#1949)", () => {
       1,
       "`cancelSaleThroughApi` writes a sale without the to-review marker (#1948)"
     );
+    // Copies on no offer (#2531): both branches — a sale already there, and a new one — mark it.
+    assert.equal(
+      [...exportedFunctionBody(domain, "addSaleCopySetThroughApi").matchAll(/markSaleWrittenByApi\(tx,/g)].length,
+      2,
+      "`addSaleCopySetThroughApi` writes a sale without the to-review marker (#1948)"
+    );
   });
 
   it("reach no other writer of a sale — no delete, no status, no header, line, packing or share link", () => {
@@ -1229,6 +1237,8 @@ describe("the agent API's operation modules (#1949)", () => {
     // deciding the sale's fate is the review. The clear lives in the screen's cancel alone, never in
     // the agent's, which leaves its own mark instead.
     assert.ok(salesWriters.includes("cancelSale") && salesWriters.includes("cancelSaleThroughApi"));
+    // The screen's Add copies (#2021) writes no marker either (#2531).
+    assert.ok(salesWriters.includes("addSaleCopySet") && salesWriters.includes("addSaleCopySetThroughApi"));
     assert.match(exportedFunctionBody(domain, "cancelSale"), /CONFIRMED_SALE_API_REVIEW/);
     assert.doesNotMatch(exportedFunctionBody(domain, "cancelSaleThroughApi"), /CONFIRMED_SALE_API_REVIEW/);
     assert.doesNotMatch(

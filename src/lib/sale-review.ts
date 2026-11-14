@@ -100,6 +100,21 @@ export function saleLineAddedAction(line: {
 }
 
 /**
+ * What adding copies on no offer says (#2531): *added copies #12, #13 as one set at 15 PLN* — the
+ * copies by number, since no offer names them, and *as one set* only where there are several.
+ * The price is written as the writer stored it.
+ */
+export function saleCopiesAddedAction(set: {
+  copyNos: readonly string[];
+  price: string;
+  currency: string;
+}): string {
+  const copies =
+    set.copyNos.length === 1 ? `copy ${set.copyNos[0]}` : `copies ${set.copyNos.join(", ")} as one set`;
+  return `added ${copies} at ${set.price} ${set.currency}`;
+}
+
+/**
  * What cancelling a sale through the API says (#2500): *cancelled the sale — 2 offers back to
  * active, 1 withdrawn*, the offers named only where the cancel moved any.
  */
