@@ -407,10 +407,17 @@ function LineRow({
           {/* Ownership, stated and never applied (ADR-0029 §7): duplicates are bought deliberately
               for trade, so a system-applied haircut would under-bid exactly the material a
               collector most wants. */}
+          {/* Copies bought and not yet arrived are told apart from those in hand (#2543), as the
+              lot line's own chip tells them. */}
           {line.owned > 0 && (
-            <Tooltip content="Copies of this stamp at this condition you already hold. Shown as evidence — it does not change the figures.">
+            <Tooltip content="Copies of this stamp at this condition you already hold, and those bought and still on the way. Shown as evidence — it does not change the figures.">
               <span style={{ ...MUTED, color: "var(--color-accent)" }}>
-                you hold {line.owned}
+                {[
+                  line.owned > line.ownedOnTheWay ? `you hold ${line.owned - line.ownedOnTheWay}` : null,
+                  line.ownedOnTheWay > 0 ? `${line.ownedOnTheWay} on the way` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             </Tooltip>
           )}

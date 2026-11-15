@@ -26,6 +26,7 @@ import {
 } from "@/app/c/[collectionSlug]/shared/colnect-chip";
 import { SubtypeChip } from "@/app/c/[collectionSlug]/shared/subtype-chip";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
+import { LineHoldingsChip } from "../../line-holdings-chip";
 import { buildAreaPath } from "@/app/c/[collectionSlug]/shared/area-helpers";
 import { PhotoThumb } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 
@@ -204,6 +205,7 @@ export function AuctionLotLineRow({
   readOnly = false,
   onSetPrice,
   onShowValuation,
+  onOpenCopies,
   onEdit,
   onDelete,
 }: {
@@ -223,6 +225,8 @@ export function AuctionLotLineRow({
   /** Opens the Valuation dialog (#114) for the line's stamp — what the market has paid, what the
    * catalogue asks and what this collection paid, while a bid ceiling is being decided (#601). */
   onShowValuation?: () => void;
+  /** Opens the copies of the line's stamp — the click on its *held* chip (#2543). */
+  onOpenCopies?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
@@ -390,6 +394,9 @@ export function AuctionLotLineRow({
                     }
               }
             />
+            {/* What you already have of the stamp, held and on the way (#2543) — beside the want,
+                the other half of *do I need this*. */}
+            <LineHoldingsChip holdings={line.holdings} onOpenCopies={onOpenCopies} />
             {!hasCatalog && !line.stampName && (
               <span style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>(stamp)</span>
             )}

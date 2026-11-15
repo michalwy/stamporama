@@ -18,6 +18,8 @@ import { getCollectionBaseCurrency } from "./pricing";
 import { readCollectionAreas } from "./areas";
 import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadStampWantSummaries, type StampWantSummary } from "./wants";
+import { countHeldCopyRowsByStamp } from "./copy-counts";
+import { summarizeLineHoldings, type LineHoldings } from "./lot-line-holdings";
 import { makeFormatFactorLookup } from "./format-pricing";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { isUnknownVariantStamp, subtypeLabel, VARIANT_FLAG_SELECT, type SubtypeLabel } from "./variant-classification";
@@ -204,6 +206,10 @@ export interface AuctionLotLineItem extends AnchorableLine {
   /** The open wants recorded for this stamp (#532), or null for none. On a lot being bid on this
    *  is the point of the whole record: what is in front of you, and whether you are after it. */
   wants: StampWantSummary | null;
+  /** The copies the collection already has of this stamp (#2543) — held, and bought and still on
+   *  the way, at the line's own condition and at every other. Null when it has none. Information
+   *  only: nothing here moves a figure (ADR-0029 §7). */
+  holdings: LineHoldings | null;
 }
 
 /** A lot's composition: its lines and what they add up to, in the sale's currency. */
@@ -452,7 +458,7 @@ export async function valuateAuctionLotLines(
   if (rows.length === 0) return new Map();
 
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [conditions, rates, areas, issuePrefixes, wantsByStamp, factorOf] = await Promise.all([
+  const [conditions, rates, areas, issuePrefixes, wantsByStamp, factorOf, heldByStamp] = await Promise.all([
     readCollectionConditions(collectionId),
     baseToSaleRates(
       collectionId,
@@ -472,6 +478,9 @@ export async function valuateAuctionLotLines(
     rows.some((r) => r.formatId !== null)
       ? makeFormatFactorLookup(collectionId)
       : Promise.resolve(() => null),
+    // What the collection already has of each line's stamp (#2543), held and on the way — one read
+    // for the page, through the counting set every *have I got this* figure uses.
+    countHeldCopyRowsByStamp(collectionId, rows.map((r) => r.stampId)),
   ]);
   const { primaryVendorByArea, vendorMapFor } = buildAreaVendorMaps(areas, issuePrefixes);
   const currencyByLine = new Map(rows.map((row) => [row.id, row.auctionLot.auctionSale.currency]));
@@ -545,6 +554,12 @@ export async function valuateAuctionLotLines(
       photos: row.stamp.photos.map(toPhotoSummary).sort((a, b) => a.sortOrder - b.sortOrder),
       unknownVariant: isUnknownVariantStamp(row.stamp),
       wants: wantsByStamp.get(row.stampId) ?? null,
+      // Counted at every condition the line may be in (#1623) — its own, or the possible ones.
+      holdings: summarizeLineHoldings(
+        heldByStamp.get(row.stampId) ?? [],
+        lineConditions.map((c) => c.conditionId),
+        conditions
+      ),
       conditionId: row.conditionId,
       conditionName: label.long,
       conditionAbbreviation: label.short,

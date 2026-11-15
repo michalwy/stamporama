@@ -19,6 +19,8 @@ import { useAtRiskLotLines, useAuctionLotComposition, type AuctionLotView } from
 import { AuctionDuplicateWarning } from "./auction-duplicate-warning";
 import { AuctionLotCatalogValuesDialog } from "./auction-lot-catalog-values-dialog";
 import { FillCatalogueValuesButton } from "./fill-catalogue-values-button";
+import { LineHoldingsChip } from "./line-holdings-chip";
+import { InventoryPopupDialog } from "@/app/c/[collectionSlug]/inventory/inventory-popup-dialog";
 import type { ComposedLine } from "@/lib/auction-duplicates";
 
 
@@ -134,6 +136,8 @@ export function AuctionLotLinesDialog({
   /** Which line's stamp the Valuation dialog is open on (#601) — one dialog for the whole list,
    * since a hook cannot be called per row. */
   const [valuationStampId, setValuationStampId] = useState<string | null>(null);
+  /** The line whose stamp's copies are open, from its *held* chip (#2543). */
+  const [copiesOf, setCopiesOf] = useState<{ stampId: string; label: string } | null>(null);
   /** *Fill catalogue values* (#2094) is open over the lot's unpriced lines. */
   const [filling, setFilling] = useState(false);
 
@@ -301,6 +305,16 @@ export function AuctionLotLinesDialog({
                       <span style={{ fontSize: "0.8125rem", color: "var(--color-text-primary)" }}>
                         {line.stampName || (labels.length === 0 ? "(unnamed stamp)" : "")}
                       </span>
+                      {/* What you already have of the stamp (#2543), as the sale screen's line says. */}
+                      <LineHoldingsChip
+                        holdings={line.holdings}
+                        onOpenCopies={() =>
+                          setCopiesOf({
+                            stampId: line.stampId,
+                            label: [labels[0], line.stampName].filter(Boolean).join(" ") || "Stamp",
+                          })
+                        }
+                      />
                       {line.unknownVariant && (
                         <Tooltip content="A base stamp with variants: which one this is has not been recorded, so the value is the cheapest of them.">
                           <span
@@ -556,6 +570,20 @@ export function AuctionLotLinesDialog({
           <PriceDetailsDialog
             target={{ kind: "stamp", stampId: valuationStampId }}
             onClose={() => setValuationStampId(null)}
+          />,
+          document.body
+        )}
+
+      {/* The copies of a line's stamp (#2543), portaled for the reason the Valuation dialog is. */}
+      {copiesOf &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <InventoryPopupDialog
+            collectionId={collectionId}
+            areas={areas}
+            baseCurrency={lot.baseCurrency}
+            target={{ kind: "stamp", stampId: copiesOf.stampId, label: copiesOf.label }}
+            onClose={() => setCopiesOf(null)}
           />,
           document.body
         )}

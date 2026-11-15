@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { LotHoldsCopiesMark } from "./line-holdings-chip";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import {
   RowQuickActions,
@@ -1101,6 +1102,9 @@ export function AuctionLotRow({
               settled={terminal}
             />
               {lot.overCeiling && <OverCeilingChip />}
+              {/* Stamps you already have (#2543) — each line says so on its own chip, so the mark is
+                  only for a lot whose lines are not on screen: a collapsed card, or a lots-list row. */}
+              {lot.holdsCopies && !expanded && <LotHoldsCopiesMark />}
               {/* Last of the chips: the composition is work outstanding, not news about the
                   bidding, so it never stands between the status and what the price is doing. */}
               {lotNeedsComposition(lot) && <NotDescribedChip />}

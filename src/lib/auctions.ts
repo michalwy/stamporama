@@ -28,6 +28,7 @@ import {
   type AuctionLotLineItem,
 } from "./auction-lines";
 import { collidingLotIds, type AtRiskLine } from "./auction-duplicates";
+import { lotHoldsCopies } from "./lot-line-holdings";
 import {
   lineConditionCandidates,
   lineConditionLabel,
@@ -378,6 +379,10 @@ export interface AuctionLotListItem {
   myBidOverCeiling: boolean | null;
   /** Composition lines entered so far (#353). Zero is the normal state while bidding. */
   lineCount: number;
+  /** Some line of the lot is of a stamp the collection already has at that line's condition — held,
+   *  or bought and on the way (#2543). What the mark on a collapsed lot's header says, so a closed
+   *  lot holding something you have is not missed. */
+  holdsCopies: boolean;
   /** The lot is **not stamps** (#1624) — literature, an accessory. It then has no lines, is never
    * *Not described*, carries no value or recommendation, and a won one settles as an expense. */
   notStamps: boolean;
@@ -596,6 +601,7 @@ function toLotListItem(
     myAllIn,
     myBidOverCeiling: myAllIn !== null && ceiling !== null ? Number(myAllIn) > Number(ceiling) : null,
     lineCount: row._count.lines,
+    holdsCopies: lotHoldsCopies(composition?.lines ?? []),
     notStamps: row.notStamps,
     notStampsDescription: row.notStampsDescription,
     catalogValue: composition?.catalogValue ?? null,

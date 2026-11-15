@@ -149,6 +149,13 @@ export const LISTABLE_DELIVERY_STATES: readonly DeliveryState[] = COPY_BUCKETS.f
   isDelivered(b.state)
 ).map((b) => b.state);
 
+/** The delivery states of a copy **bought and not yet arrived** — what an auction lot line's chip
+ *  calls *on the way* (#2543): every bucket {@link IN_HAND_COPY_BUCKETS} does not cover. Named off
+ *  the buckets for the same reason that list is. */
+export const ON_THE_WAY_DELIVERY_STATES: readonly DeliveryState[] = COPY_BUCKETS.filter(
+  (b) => !IN_HAND_COPY_BUCKETS.some((inHand) => inHand.key === b.key)
+).map((b) => b.state);
+
 /** The buckets a copy that has **not** arrived and been filed falls in — everything the headline
  *  *you hold N* does not cover, in the order above. */
 export const IN_FLIGHT_COPY_BUCKETS = COPY_BUCKETS.filter((b) => b.key !== "held") as readonly {
