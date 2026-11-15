@@ -136,6 +136,7 @@ import {
 } from "./intake-groups";
 import { parseItemNoOnlySearch, parseItemNoSearch } from "./item-number";
 import type { CopySearchField } from "./copy-search-fields";
+import { searchTextFilter } from "./search-fields";
 import { isDeliveryState, isDelivered, UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
 import { asChecklistKind, shownChecklistWhere, type ChecklistKind } from "./checklist-kind";
 import {
@@ -1220,6 +1221,10 @@ export interface ItemListFiltersPaginated extends Omit<ItemListFilters, "conditi
    * field. Only the Copies list's box sends it — every other way into this search reads them all.
    * A `#123` search is the copy number whatever is here. */
   searchFields?: CopySearchField[];
+  /** {@link search} was typed in double quotes (#2545): each field ticked must **equal** it rather
+   * than contain it, letter case aside, and a catalogue number equal the number. Only the Copies
+   * list's routes set it. */
+  searchExact?: boolean;
   /** Restrict to copies of a single stamp (used by the stamp-level inventory popup, #110). */
   stampId?: string;
   /** Restrict to copies of **any** of these stamps (#657) — the plural of {@link stampId}, for a
@@ -1496,6 +1501,8 @@ function buildItemWhere(
     // The fields the collector ticked beside the Copies list's box (#2238); absent is every one.
     const ticked = filters.searchFields ? new Set(filters.searchFields) : null;
     const on = (field: CopySearchField) => !ticked || ticked.has(field);
+    // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+    const text = searchTextFilter(s, filters.searchExact);
     // Free text spans two levels — the linked stamp's identity and the copy's own filing
     // reference (#303) — so the OR sits on the item, not inside `stampWhere` (whose other
     // entries must stay AND-ed).
@@ -1508,12 +1515,12 @@ function buildItemWhere(
     // older build left with no entry at all.
     const carried: Prisma.StampWhereInput[] = [];
     if (on("stampName")) {
-      or.push({ stamp: { name: { contains: s, mode: "insensitive" } } });
-      carried.push({ name: { contains: s, mode: "insensitive" } });
+      or.push({ stamp: { name: text } });
+      carried.push({ name: text });
     }
     if (on("issueName")) {
       const issue: Prisma.StampWhereInput = {
-        issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } },
+        issueMemberships: { some: { issue: { name: text } } },
       };
       or.push({ stamp: issue });
       carried.push(issue);
@@ -1523,7 +1530,7 @@ function buildItemWhere(
       const catalog: Prisma.StampWhereInput = {
         catalogNumbers: {
           some: {
-            number: { contains: s, mode: "insensitive" },
+            number: text,
             ...catalogVendorWhere(null, filters.catalogScope),
           },
         },
@@ -1537,7 +1544,7 @@ function buildItemWhere(
         const parsed: Prisma.StampWhereInput = {
           catalogNumbers: {
             some: {
-              number: { contains: filters.catalogNumber, mode: "insensitive" },
+              number: searchTextFilter(filters.catalogNumber, filters.searchExact),
               ...catalogVendorWhere(filters.catalogVendorId, filters.catalogScope),
             },
           },
@@ -1546,7 +1553,7 @@ function buildItemWhere(
         carried.push(parsed);
       }
     }
-    if (on("locationRef")) or.push({ locationRef: { contains: s, mode: "insensitive" } });
+    if (on("locationRef")) or.push({ locationRef: text });
     // Internal copy number (#268): a bare numeric entry also looks up the copy by its own number,
     // `123` or `00123` from a label written while numbers were padded (#2096).
     // Added to the OR rather than replacing it — `200` is a plausible catalog number too.

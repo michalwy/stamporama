@@ -2,7 +2,13 @@
 
 import { createPortal } from "react-dom";
 import { Icon } from "@/app/icons";
-import { searchFieldsLabel, toggleSearchField, type SearchField } from "@/lib/search-fields";
+import {
+  EXACT_SEARCH_HINT,
+  searchFieldsLabel,
+  toggleSearchField,
+  type SearchField,
+} from "@/lib/search-fields";
+import { Tooltip } from "./tooltip";
 import {
   FILTER_MENU_HEADING_STYLE,
   FILTER_MENU_ITEM_STYLE,
@@ -25,6 +31,9 @@ export interface SearchFieldsWording<K extends string> {
   all: string;
   /** What the trigger reads for what is ticked. */
   label: (ticked: readonly K[], fields: readonly SearchField<K>[]) => string;
+  /** What the trigger says on hover — how the box beside it can be asked to match exactly (#2545).
+   *  None for a control that is not about the box's text. */
+  hint?: string;
 }
 
 const SEARCH_FIELDS_WORDING: SearchFieldsWording<string> = {
@@ -32,6 +41,7 @@ const SEARCH_FIELDS_WORDING: SearchFieldsWording<string> = {
   heading: "Search in",
   all: "All fields",
   label: searchFieldsLabel,
+  hint: EXACT_SEARCH_HINT,
 };
 
 /**
@@ -64,22 +74,25 @@ export function SearchFieldsControl<K extends string>({
 
   return (
     <div style={{ width: SEARCH_FIELDS_WIDTH, flexShrink: 0 }}>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={wording.ariaLabel}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        style={filterTriggerStyle({ active: narrowed, width: "100%" })}
-      >
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-          {wording.label(ticked, fields)}
-        </span>
-        <span style={{ display: "inline-flex", opacity: 0.7, flexShrink: 0 }}>
-          <Icon name="caret" size="xs" />
-        </span>
-      </button>
+      {/* The hint stands down while the menu is open, so the two never cover each other. */}
+      <Tooltip content={open ? null : wording.hint} style={{ display: "flex", width: "100%" }}>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={wording.ariaLabel}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          style={filterTriggerStyle({ active: narrowed, width: "100%" })}
+        >
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+            {wording.label(ticked, fields)}
+          </span>
+          <span style={{ display: "inline-flex", opacity: 0.7, flexShrink: 0 }}>
+            <Icon name="caret" size="xs" />
+          </span>
+        </button>
+      </Tooltip>
       {open &&
         pos &&
         typeof document !== "undefined" &&

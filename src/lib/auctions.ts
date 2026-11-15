@@ -1,4 +1,5 @@
 import "server-only";
+import { searchTextFilter } from "./search-fields";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
@@ -780,6 +781,9 @@ export interface AuctionLotFilters extends TagFilterOpts {
    * absent is every field. Only the lot list's box sends it — the agent API reads them all. A
    * `#12` search is the lot's own number whatever is here. */
   searchFields?: AuctionLotSearchField[];
+  /** {@link search} was typed in double quotes (#2545): a field must **equal** it rather than contain
+   * it, letter case aside. Only the list's own routes set it. */
+  searchExact?: boolean;
   sellerId?: string;
   platformId?: string;
   saleId?: string;
@@ -817,7 +821,7 @@ function lotListWhere(
   // Its own `AND` entry rather than a sibling key, for the same reason: the search is an `OR` over
   // several columns, and a second `OR` on the object would replace the outcome's rather than narrow
   // alongside it.
-  if (filters.search?.trim()) and.push(lotSearchWhere(filters.search, filters.searchFields));
+  if (filters.search?.trim()) and.push(lotSearchWhere(filters.search, filters.searchFields, filters.searchExact));
   // The collector's own labels (#1625) — `tag-filter.ts`' one spelling, an `AND` entry of its own
   // for the reason the search above is: *all* is an `AND`, *no tags* an `OR`, and either as a sibling
   // key would collide with the outcome's.
@@ -909,7 +913,8 @@ function outcomeWhere(outcome: AuctionLotOutcome): Prisma.AuctionLotWhereInput {
  */
 function lotSearchWhere(
   search: string,
-  fields?: readonly AuctionLotSearchField[]
+  fields?: readonly AuctionLotSearchField[],
+  exact?: boolean
 ): Prisma.AuctionLotWhereInput {
   const s = search.trim();
   if (s.startsWith(ENTITY_NO_PREFIX)) {
@@ -918,7 +923,8 @@ function lotSearchWhere(
   }
   const ticked = fields ? new Set(fields) : null;
   const on = (field: AuctionLotSearchField) => !ticked || ticked.has(field);
-  const text = { contains: s, mode: "insensitive" as const };
+  // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+  const text = searchTextFilter(s, exact);
   const or: Prisma.AuctionLotWhereInput[] = [];
   if (on("titleNotes")) or.push({ title: text }, { notes: text });
   if (on("houseLotNo")) or.push({ lotNo: text });
@@ -1794,6 +1800,9 @@ export interface AuctionSaleListFilters {
   /** The fields {@link search} matches, when the collector has narrowed it beside the box (#2245);
    * absent is every field. Only the Sales list's box sends it. */
   searchFields?: AuctionSaleSearchField[];
+  /** {@link search} was typed in double quotes (#2545): a field must **equal** it rather than contain
+   * it, letter case aside. Only the list's own routes set it. */
+  searchExact?: boolean;
 }
 
 /** The `where` fragment for the sale list's search box (#484). Case-insensitive substring over the
@@ -1802,9 +1811,11 @@ export interface AuctionSaleListFilters {
  * `Köhler 385` is found by either half. */
 function saleSearchWhere(
   search: string,
-  fields?: readonly AuctionSaleSearchField[]
+  fields?: readonly AuctionSaleSearchField[],
+  exact?: boolean
 ): Prisma.AuctionSaleWhereInput {
-  const text = { contains: search.trim(), mode: "insensitive" as const };
+  // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+  const text = searchTextFilter(search.trim(), exact);
   const branches: Record<AuctionSaleSearchField, Prisma.AuctionSaleWhereInput> = {
     name: { name: text },
     url: { url: text },
@@ -1828,7 +1839,7 @@ export async function listAuctionSales(
     where: {
       collectionId,
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.search?.trim() ? saleSearchWhere(filters.search, filters.searchFields) : {}),
+      ...(filters.search?.trim() ? saleSearchWhere(filters.search, filters.searchFields, filters.searchExact) : {}),
     },
     orderBy: { createdAt: "desc" },
     select: SALE_SELECT,

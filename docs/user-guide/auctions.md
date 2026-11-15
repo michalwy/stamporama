@@ -593,6 +593,10 @@ Finally:
   the lot numbered 12 whatever is ticked. The choice is remembered for this list in each
   collection, and **Clear filters** leaves it as it is: it is how the box reads what you type, not
   a filter on the lots.
+
+  **Text in double quotes is matched exactly**, as on the [Copies list](inventory.md): `"12"` with
+  *House lot number* ticked finds lot 12 of the house and not 112 or 120. Letter case does not
+  matter, `"#12"` is still the lot numbered 12, and a search only partly in quotes is plain text.
 - **Seller** and **platform** selects, so "everything I have running on Allegro right now" is one
   filter rather than a walk through parcels. Every option carries a count, and — like the chips —
   each says how many lots *choosing it* would show rather than how many are on screen now. So
@@ -697,6 +701,9 @@ narrowed the control is drawn in the accent colour and names the one field ticke
 (*2 fields*). The choice is remembered for this list in each collection, apart from the search and
 the status chips, and is not carried in the address bar: it is how the box reads what you type, not
 a filter on the sales. It works as the [Copies list's](inventory.md) does.
+
+Text in double quotes is matched exactly here too: `"Gärtner"` with *Seller* ticked finds that
+seller and not *Gärtner & Co*.
 
 Each row shows the parcel's **all-in total**:
 every bid you would actually pay for — *open* and *won* lots — plus the premium on each, plus

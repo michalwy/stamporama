@@ -3,8 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listOffersPaginated } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { OFFER_SEARCH_FIELD_KEYS } from "@/lib/offer-search-fields";
 import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
@@ -38,7 +37,7 @@ export async function GET(
   const needsRefresh = sp.get("needsRefresh") === "1";
   // Listings sold on a connected platform with no sale recorded here yet (#499).
   const platformSale = sp.get("platformSale") === "1";
-  const search = readSearchParam(sp);
+  const { search, searchExact } = readListSearchParams(sp);
   const includeClosed = sp.get("includeClosed") === "1";
 
   try {
@@ -53,6 +52,7 @@ export async function GET(
       needsRefresh,
       platformSale,
       search,
+      searchExact,
       // The fields the box was narrowed to beside it (#2242); absent is every field.
       searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), OFFER_SEARCH_FIELD_KEYS),
       catalogScope: parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM)),

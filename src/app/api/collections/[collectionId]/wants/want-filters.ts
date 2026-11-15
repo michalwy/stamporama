@@ -1,7 +1,6 @@
 import { isWantPriority, type WantListFilters, type WantPriority } from "@/lib/wants";
 import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { WANT_SEARCH_FIELD_KEYS } from "@/lib/want-search-fields";
 import { ISSUE_FORMAT_FILTER_PARAM } from "@/lib/issue-format-filter";
 
@@ -33,7 +32,7 @@ export function parseWantListFilters(params: URLSearchParams): WantListFilters {
     year: params.get("year") ?? undefined,
     issueId: params.get("issueId") ?? undefined,
     stampId: params.get("stampId") ?? undefined,
-    search: readSearchParam(params),
+    ...readListSearchParams(params),
     searchCatalogNumber: params.get("searchCatalogNumber") ?? undefined,
     searchCatalogVendorId: params.get("searchCatalogVendorId") ?? undefined,
     searchCatalogScope: parseCatalogScope(params.get(CATALOG_SCOPE_PARAM)),

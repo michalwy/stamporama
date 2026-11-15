@@ -1,4 +1,5 @@
 import "server-only";
+import { searchTextFilter } from "./search-fields";
 import {
   assertIssueFormatInCollection,
   STAMP_ISSUE_FORMAT_DISPLAY_SELECT,
@@ -765,6 +766,9 @@ export interface StampListFilterOpts {
   /** The fields {@link search} matches, when the collector has narrowed it (#2240); absent is every
    * field. Only the Stamps list's box sends it. */
   searchFields?: StampSearchField[];
+  /** {@link search} was typed in double quotes (#2545): a field must **equal** it rather than contain
+   * it, letter case aside. Only the list's own routes set it. */
+  searchExact?: boolean;
   /** The vendor a typed prefix named (`Mi 200`, #146) — it wins over {@link catalogScope}. */
   catalogVendorId?: string;
   catalogNumber?: string;
@@ -831,22 +835,23 @@ function buildStampListWhere(collectionId: string, opts: StampListFilterOpts): a
     const on = (field: StampSearchField) => !ticked || ticked.has(field);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const or: any[] = [];
-    if (on("stampName")) or.push({ name: { contains: s, mode: "insensitive" } });
-    if (on("issueName"))
-      or.push({ issueMemberships: { some: { issue: { name: { contains: s, mode: "insensitive" } } } } });
+    // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+    const text = searchTextFilter(s, opts.searchExact);
+    if (on("stampName")) or.push({ name: text });
+    if (on("issueName")) or.push({ issueMemberships: { some: { issue: { name: text } } } });
     if (on("catalogNumber"))
       or.push({
         catalogNumbers: {
           some: {
-            number: { contains: s, mode: "insensitive" },
+            number: text,
             ...catalogVendorWhere(null, opts.catalogScope),
           },
         },
       });
     // The two free-text attributes (#71 §6, #737): they get no filter control of their own, so
     // the search box is how `11½` or `10 gr` is asked for.
-    if (on("denomination")) or.push({ denomination: { contains: s, mode: "insensitive" } });
-    if (on("perforation")) or.push({ perforation: { contains: s, mode: "insensitive" } });
+    if (on("denomination")) or.push({ denomination: text });
+    if (on("perforation")) or.push({ perforation: text });
     conditions.push({ OR: or });
   }
 

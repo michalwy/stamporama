@@ -2,7 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseSearchFields,
+  readListSearchParams,
+  readQuotedSearch,
   searchFieldsLabel,
+  searchTextFilter,
+  searchTextMatches,
   toggleSearchField,
   writeSearchFields,
 } from "../../src/lib/search-fields";
@@ -68,5 +72,59 @@ describe("the Copies list's routes", () => {
       ["locationRef"]
     );
     assert.equal(readItemFilters(new URLSearchParams("search=A038")).searchFields, undefined);
+  });
+});
+
+// #2545: text typed in double quotes is matched exactly — the quotes must take the whole text.
+
+describe("readQuotedSearch", () => {
+  it("reads text wholly in double quotes as exact, without them", () => {
+    assert.deepEqual(readQuotedSearch('"A111"'), { text: "A111", exact: true });
+    assert.deepEqual(readQuotedSearch('  " Mi 200 "  '), { text: "Mi 200", exact: true });
+    assert.deepEqual(readQuotedSearch('"#123"'), { text: "#123", exact: true });
+  });
+
+  it("leaves everything else as typed, quotes included", () => {
+    for (const raw of ["A111", '"A111', 'A111"', 'say "A111"', '"A" "B"', '""', '"  "', '"']) {
+      assert.deepEqual(readQuotedSearch(raw), { text: raw, exact: false }, raw);
+    }
+  });
+});
+
+describe("readListSearchParams", () => {
+  it("unquotes an exact search and flags it", () => {
+    assert.deepEqual(readListSearchParams(new URLSearchParams({ search: '"A111"' })), {
+      search: "A111",
+      searchExact: true,
+    });
+  });
+
+  it("reads a plain search, and none, as before", () => {
+    assert.deepEqual(readListSearchParams(new URLSearchParams({ search: " A111 " })), {
+      search: "A111",
+    });
+    assert.deepEqual(readListSearchParams(new URLSearchParams({ search: '"A111' })), {
+      search: '"A111',
+    });
+    assert.deepEqual(readListSearchParams(new URLSearchParams()), {});
+    assert.deepEqual(readListSearchParams(new URLSearchParams({ search: "  " })), {});
+  });
+
+  it("reaches the Copies list's filters", () => {
+    const f = readItemFilters(new URLSearchParams({ search: '"A111"', searchFields: "locationRef" }));
+    assert.equal(f.search, "A111");
+    assert.equal(f.searchExact, true);
+    assert.equal(readItemFilters(new URLSearchParams({ search: "A111" })).searchExact, undefined);
+  });
+});
+
+describe("searchTextFilter / searchTextMatches", () => {
+  it("contains by default, equals when exact, case aside either way", () => {
+    assert.deepEqual(searchTextFilter("A111", false), { contains: "A111", mode: "insensitive" });
+    assert.deepEqual(searchTextFilter("A111", true), { equals: "A111", mode: "insensitive" });
+    assert.equal(searchTextMatches("A1110", "a111", false), true);
+    assert.equal(searchTextMatches("A1110", "a111", true), false);
+    assert.equal(searchTextMatches("A111", "a111", true), true);
+    assert.equal(searchTextMatches(null, "a111", true), false);
   });
 });

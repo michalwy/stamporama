@@ -3,8 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { listSalesPaginated } from "@/lib/sales";
 import { isSaleRecordStatus } from "@/lib/sale-status";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { SALE_SEARCH_FIELD_KEYS } from "@/lib/sale-search-fields";
 
@@ -32,7 +31,7 @@ export async function GET(
   // dropped rather than refused — a stale link narrows to nothing otherwise, and the chips are the
   // authority on what exists.
   const statuses = (sp.get("status") || "").split(",").filter(isSaleRecordStatus);
-  const search = readSearchParam(sp);
+  const { search, searchExact } = readListSearchParams(sp);
   // The fields that search matches, ticked beside the box (#2243) — absent is every field.
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), SALE_SEARCH_FIELD_KEYS);
   // The catalogues a number is searched in (#2529) — absent is every one.
@@ -50,6 +49,7 @@ export async function GET(
       buyerId,
       statuses,
       search,
+      searchExact,
       searchFields,
       catalogScope,
       setChoicePending,

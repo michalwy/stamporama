@@ -6,8 +6,7 @@ import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listStampsPaginated, type StampSortBy } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { STAMP_SEARCH_FIELD_KEYS } from "@/lib/stamp-search-fields";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
@@ -29,7 +28,7 @@ export async function GET(
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
-  const search = readSearchParam(sp);
+  const { search, searchExact } = readListSearchParams(sp);
   // The fields the search box was narrowed to beside it (#2240); absent is every field.
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), STAMP_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
@@ -50,6 +49,7 @@ export async function GET(
       offset,
       areaIds,
       search,
+      searchExact,
       searchFields,
       catalogVendorId,
       catalogScope,

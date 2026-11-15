@@ -234,3 +234,51 @@ describe("the catalogues a number is searched in", () => {
     );
   });
 });
+
+// #2545: a search typed in double quotes — here already unquoted, with `searchExact` — matches whole
+// values, as the server does: a name equal to the text, a number equal to it or to the number parsed
+// out of it.
+describe("an exact search", () => {
+  const exact = {};
+
+  it("explains the header only by a whole name, year or range number", () => {
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "birds", VENDORS, undefined, undefined, exact), false);
+    assert.equal(
+      issueHeaderMatchesSearch(ISSUE, "BIRDS OF POLAND", VENDORS, undefined, undefined, exact),
+      true
+    );
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "193", VENDORS, undefined, undefined, exact), false);
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "309", VENDORS, undefined, undefined, exact), true);
+    assert.equal(issueHeaderMatchesSearch(ISSUE, "30", VENDORS, undefined, undefined, exact), false);
+    assert.equal(
+      issueHeaderMatchesSearch(ISSUE, "Mi 312", VENDORS, undefined, undefined, { parsedNumber: "312" }),
+      true
+    );
+  });
+
+  it("picks the stamp numbered exactly, not its lettered variants", () => {
+    assert.deepEqual(
+      [...matchStampsBySearch(TREE, "309", VENDORS, undefined, undefined, exact)],
+      ["s-309"]
+    );
+    assert.deepEqual(
+      [...matchStampsBySearch(TREE, "309a", VENDORS, undefined, undefined, exact)],
+      ["s-309A"]
+    );
+    assert.deepEqual(
+      [...matchStampsBySearch(TREE, "perforated", VENDORS, undefined, undefined, exact)],
+      []
+    );
+  });
+
+  it("is read off the query by the tree narrowing", () => {
+    const query = { search: "309A", searchExact: true };
+    assert.deepEqual([...(matchedStampsInIssue(ISSUE, TREE, query, VENDORS) ?? [])], ["s-309A"]);
+    const prefixed = { search: "Mi 309A", searchExact: true, searchCatalogNumber: "309A" };
+    assert.deepEqual([...(matchedStampsInIssue(ISSUE, TREE, prefixed, VENDORS) ?? [])], ["s-309A"]);
+    assert.deepEqual(
+      [...(matchedStampsInIssue(ISSUE, TREE, { search: "309A" }, VENDORS) ?? [])].sort(),
+      ["s-309A", "s-309AP"]
+    );
+  });
+});

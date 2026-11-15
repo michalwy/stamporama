@@ -1,4 +1,5 @@
 import "server-only";
+import { searchTextFilter } from "./search-fields";
 import { catalogVendorWhere } from "./catalog-search-scope";
 import { lotCostInputs } from "./cost-basis";
 import { loadCostEstimates } from "./cost-estimates";
@@ -3049,6 +3050,9 @@ export interface SaleListFilters {
   /** The fields `search` matches (#2243) — absent is every field. Only the Sales list's own box sends
    * it; the agent API's `list_sales` keeps searching them all. */
   searchFields?: readonly SaleSearchField[];
+  /** {@link search} was typed in double quotes (#2545): a field must **equal** it rather than contain
+   * it, letter case aside. Only the list's own routes set it. */
+  searchExact?: boolean;
   /** The catalogues a catalogue number is searched in (#2529) — the collector's one shared choice.
    *  Absent is every one. */
   catalogScope?: readonly string[];
@@ -3082,11 +3086,13 @@ export interface PaginatedSalesResult {
 function saleSearchWhere(
   search: string,
   fields: readonly SaleSearchField[] = SALE_SEARCH_FIELD_KEYS,
-  catalogScope?: readonly string[]
+  catalogScope?: readonly string[],
+  exact?: boolean
 ): Prisma.SaleWhereInput {
   const s = search.trim();
   const ticked = new Set(fields);
-  const contains = { contains: s, mode: "insensitive" as const };
+  // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+  const contains = searchTextFilter(s, exact);
   const stampMatch: Prisma.StampWhereInput[] = [
     ...(ticked.has("stampName") ? [{ name: contains }] : []),
     // In the ticked catalogues only (#2529).
@@ -3114,7 +3120,8 @@ function saleListWhere(collectionId: string, filters: SaleListFilters): Prisma.S
     ...(filters.platformId ? { platformId: filters.platformId } : {}),
     ...(filters.buyerId ? { buyerId: filters.buyerId } : {}),
     ...(filters.statuses?.length ? { status: { in: filters.statuses } } : {}),
-    ...(filters.search ? saleSearchWhere(filters.search, filters.searchFields, filters.catalogScope) : {}),
+    ...(filters.search ? saleSearchWhere(filters.search, filters.searchFields, filters.catalogScope, filters.searchExact)
+      : {}),
     // One line is enough to put the sale on the list (#697): the collector is looking for parcels
     // that cannot be packed yet, and one undecided line stops the parcel.
     ...(filters.setChoicePending ? { lines: { some: { setChoicePending: true } } } : {}),

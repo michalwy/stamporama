@@ -15,6 +15,7 @@ import { catalogKeyMatches, catalogMatchKey } from "./catalog-number";
 import { ENTITY_NO_PREFIX, parseEntityNoSearch } from "./quick-jump";
 import type { IssueSearchField } from "./issue-search-fields";
 import { catalogVendorSearched } from "./catalog-search-scope";
+import { searchTextMatches } from "./search-fields";
 
 /** What a number needs of its vendor to be keyed — structural, so the UI's `AreaCatalogEntry`
  *  map is passed straight in and this module keeps `server-only` out of `test:unit`. */
@@ -65,6 +66,34 @@ export interface StampFilterQuery {
   searchCatalogVendorId?: string;
   /** The catalogues a number is searched in (#2529), as the server reads it; absent is every one. */
   catalogScope?: readonly string[];
+  /** {@link search} was typed in double quotes (#2545) — here already without them: whole values
+   *  only, as the server matches it. */
+  searchExact?: boolean;
+  /** The number parsed out of {@link search} (#289), which an exact search's catalogue number may
+   *  equal instead of the text — the server's second branch. */
+  searchCatalogNumber?: string;
+}
+
+/**
+ * A search typed in double quotes (#2545), read as the server reads it: a name equals the text, and
+ * a catalogue number equals the text or the number parsed out of it (`"Mi 200"` → `200`).
+ */
+export interface ExactSearch {
+  parsedNumber?: string;
+}
+
+/** The exact reading a query asks for, or undefined for the ordinary one. */
+function exactOf(query: StampFilterQuery): ExactSearch | undefined {
+  return query.searchExact ? { parsedNumber: query.searchCatalogNumber } : undefined;
+}
+
+/** Whether a stored catalogue number is the one an exact search names. */
+function numberIsExactly(number: string, search: string, exact: ExactSearch): boolean {
+  const n = number.trim().toLowerCase();
+  return (
+    n === search.trim().toLowerCase() ||
+    (!!exact.parsedNumber && n === exact.parsedNumber.trim().toLowerCase())
+  );
 }
 
 /** Whether a number in this catalogue can have answered the search box — a test over a vendor id. */
@@ -110,20 +139,28 @@ export function issueHeaderMatchesSearch(
   search: string,
   vendorMap: MatchVendorMap,
   fields?: readonly IssueSearchField[],
-  searched: VendorSearched = EVERY_VENDOR
+  searched: VendorSearched = EVERY_VENDOR,
+  exact?: ExactSearch
 ): boolean {
   const q = search.trim().toLowerCase();
   if (!q) return true;
   const onlyIssueNo = q.startsWith(ENTITY_NO_PREFIX) ? parseEntityNoSearch(search) : null;
   if (onlyIssueNo !== null) return onlyIssueNo === issue.issueNo;
-  if (searchesField(fields, "issueName") && (issue.name ?? "").toLowerCase().includes(q)) {
+  if (searchesField(fields, "issueName") && searchTextMatches(issue.name, q, !!exact)) {
     return true;
   }
-  if (!fields && issue.year != null && String(issue.year).includes(q)) return true;
+  if (!fields && issue.year != null && searchTextMatches(String(issue.year), q, !!exact)) return true;
   if (searchesField(fields, "issueNumber") && parseEntityNoSearch(search) === issue.issueNo) {
     return true;
   }
   if (!searchesField(fields, "catalogNumber")) return false;
+  if (exact) {
+    return issue.catalogNumbers.some(
+      (cn) =>
+        searched(cn.catalogVendorId) &&
+        [cn.firstNumber, cn.lastNumber].some((n) => !!n && numberIsExactly(n, search, exact))
+    );
+  }
   const keys = issue.catalogNumbers.filter((cn) => searched(cn.catalogVendorId)).flatMap((cn) => {
     const v = vendorMap.get(cn.catalogVendorId);
     const abbr = v?.vendorAbbreviation ?? "";
@@ -141,16 +178,23 @@ export function matchStampsBySearch(
   search: string,
   vendorMap: MatchVendorMap,
   fields?: readonly IssueSearchField[],
-  searched: VendorSearched = EVERY_VENDOR
+  searched: VendorSearched = EVERY_VENDOR,
+  exact?: ExactSearch
 ): Set<string> {
   const q = search.trim().toLowerCase();
   const out = new Set<string>();
   if (!q) return out;
   const byName = searchesField(fields, "stampName");
   const byNumber = searchesField(fields, "catalogNumber");
+  const numberHit = (s: MatchableStamp) =>
+    exact
+      ? s.catalogNumbers.some(
+          (cn) => searched(cn.catalogVendorId) && numberIsExactly(cn.number, search, exact)
+        )
+      : catalogKeyMatches(search, stampKeys(s, vendorMap, searched));
   for (const s of stamps) {
-    const nameHit = byName && (s.name ?? "").toLowerCase().includes(q);
-    if (nameHit || (byNumber && catalogKeyMatches(search, stampKeys(s, vendorMap, searched)))) {
+    const nameHit = byName && searchTextMatches(s.name, q, !!exact);
+    if (nameHit || (byNumber && numberHit(s))) {
       out.add(s.stampId);
     }
   }
@@ -212,7 +256,7 @@ export function needsInnerStampMatch(
   const { search, searchFields } = query;
   if (
     search?.trim() &&
-    !issueHeaderMatchesSearch(issue, search, vendorMap, searchFields, searchVendorTest(query))
+    !issueHeaderMatchesSearch(issue, search, vendorMap, searchFields, searchVendorTest(query), exactOf(query))
   ) {
     return true;
   }
@@ -240,8 +284,12 @@ export function matchedStampsInIssue(
   const sets: Set<string>[] = [];
   const { search, searchFields } = query;
   const searched = searchVendorTest(query);
-  if (search?.trim() && !issueHeaderMatchesSearch(issue, search, vendorMap, searchFields, searched)) {
-    sets.push(matchStampsBySearch(stamps, search, vendorMap, searchFields, searched));
+  const exact = exactOf(query);
+  if (
+    search?.trim() &&
+    !issueHeaderMatchesSearch(issue, search, vendorMap, searchFields, searched, exact)
+  ) {
+    sets.push(matchStampsBySearch(stamps, search, vendorMap, searchFields, searched, exact));
   }
   if (query.catalogNumber && !issueHeaderMatchesCatalogFilter(issue, query)) {
     sets.push(matchStampsByCatalogFilter(stamps, query));

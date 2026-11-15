@@ -3,8 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { offerListNeighbours } from "@/lib/offers";
 import { isOfferState } from "@/lib/offer-rules";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { OFFER_SEARCH_FIELD_KEYS } from "@/lib/offer-search-fields";
 import { parseFacebookPostNo } from "@/lib/facebook-post-rules";
@@ -34,7 +33,7 @@ export async function GET(
     const result = await offerListNeighbours(session.user.id, collectionId, offerId, {
       platformId: sp.get("platformId") || undefined,
       states,
-      search: readSearchParam(sp),
+      ...readListSearchParams(sp),
       searchFields: parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), OFFER_SEARCH_FIELD_KEYS),
       catalogScope: parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM)),
       needsAction: sp.get("needsAction") === "1",

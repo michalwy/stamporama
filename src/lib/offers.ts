@@ -1,4 +1,5 @@
 import "server-only";
+import { searchTextFilter } from "./search-fields";
 import { catalogVendorWhere } from "./catalog-search-scope";
 import { claimedSaleLines } from "./sale-cancel-rules";
 import { Prisma } from "@/generated/prisma/client";
@@ -3036,6 +3037,9 @@ export interface OfferListFilters {
    * absent is every field. Only the Offers list's box sends it. A `#12` search is the offer number
    * whatever is here. */
   searchFields?: OfferSearchField[];
+  /** {@link search} was typed in double quotes (#2545): a field must **equal** it rather than contain
+   * it, letter case aside. Only the list's own routes set it. */
+  searchExact?: boolean;
   /** The catalogues a catalogue number is searched in (#2529) — the collector's one shared choice.
    *  Absent is every one. */
   catalogScope?: string[];
@@ -3076,7 +3080,8 @@ export interface PaginatedOffersResult {
 function offerSearchWhere(
   search: string,
   fields?: readonly OfferSearchField[],
-  catalogScope?: readonly string[]
+  catalogScope?: readonly string[],
+  exact?: boolean
 ): Prisma.OfferWhereInput {
   const s = search.trim();
   // `#12` is the offer's own number and nothing else, whatever is ticked (#2242; #2136's rule).
@@ -3085,7 +3090,8 @@ function offerSearchWhere(
 
   const ticked = fields ? new Set(fields) : null;
   const on = (field: OfferSearchField) => !ticked || ticked.has(field);
-  const text = { contains: s, mode: "insensitive" as const };
+  // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+  const text = searchTextFilter(s, exact);
   /** One of the offer's copies matching, whatever is asked of the copy. */
   const heldCopy = (item: Prisma.ItemWhereInput): Prisma.OfferWhereInput => ({
     sets: { some: { items: { some: { item } } } },
@@ -3195,6 +3201,7 @@ function offerListWhere(
     | "includeClosed"
     | "search"
     | "searchFields"
+    | "searchExact"
     | "catalogScope"
     | "bidding"
     | "endedAuction"
@@ -3217,7 +3224,8 @@ function offerListWhere(
   // while flagged from being counted as work waiting to be done.
   if (filters.listingOutOfDate) and.push(LISTING_DRIFT_WHERE);
   if (refreshWhere) and.push(refreshWhere);
-  if (filters.search?.trim()) and.push(offerSearchWhere(filters.search, filters.searchFields, filters.catalogScope));
+  if (filters.search?.trim())
+    and.push(offerSearchWhere(filters.search, filters.searchFields, filters.catalogScope, filters.searchExact));
   if (needsActionIds) and.push({ id: { in: needsActionIds } });
   // An explicit state filter wins; otherwise hide closed (sold / withdrawn) offers unless the user
   // opted in (#245).
@@ -3450,6 +3458,7 @@ export async function offerListNeighbours(
     | "includeClosed"
     | "search"
     | "searchFields"
+    | "searchExact"
     | "catalogScope"
     | "bidding"
     | "endedAuction"
@@ -3781,6 +3790,7 @@ export async function offerFilterCounts(
     | "includeClosed"
     | "search"
     | "searchFields"
+    | "searchExact"
     | "catalogScope"
     | "bidding"
     | "endedAuction"
@@ -3790,7 +3800,7 @@ export async function offerFilterCounts(
   await assertCollectionOwner(ownerId, collectionId);
 
   const searchWhere = filters.search?.trim()
-    ? offerSearchWhere(filters.search, filters.searchFields, filters.catalogScope)
+    ? offerSearchWhere(filters.search, filters.searchFields, filters.catalogScope, filters.searchExact)
     : null;
   // A search is the one narrowing the derived facet cannot express, `needsActionRows` reading its
   // own SQL rather than a `where` (ADR-0013 §4). So it is resolved to ids first and handed in as
@@ -3973,6 +3983,7 @@ export async function offersSummary(
     | "includeClosed"
     | "search"
     | "searchFields"
+    | "searchExact"
     | "catalogScope"
     | "bidding"
     | "endedAuction"

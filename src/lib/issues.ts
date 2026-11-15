@@ -1,4 +1,5 @@
 import "server-only";
+import { searchTextFilter } from "./search-fields";
 import { catalogVendorWhere } from "./catalog-search-scope";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
 import { assertIssueFormatInCollection } from "./stamp-issue-formats";
@@ -1098,6 +1099,9 @@ export interface IssueListFilterOpts {
    *  field. Only the Issues list's box sends it — the agent API and the picker read them all. A
    *  `#12` search is the issue number whatever is here. */
   searchFields?: IssueSearchField[];
+  /** {@link search} was typed in double quotes (#2545): a field must **equal** it rather than contain
+   * it, letter case aside. Only the list's own routes set it. */
+  searchExact?: boolean;
   /** The vendor a prefix typed into the catalogue box named (`Mi 200`, #146) — it wins over
    *  {@link catalogScope}. */
   catalogVendorId?: string;
@@ -1164,25 +1168,27 @@ function buildIssueListWhere(collectionId: string, opts: IssueListFilterOpts): a
     const on = (field: IssueSearchField) => !ticked || ticked.has(field);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const or: any[] = [];
-    if (on("issueName")) or.push({ name: { contains: s, mode: "insensitive" } });
+    // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+    const text = searchTextFilter(s, opts.searchExact);
+    if (on("issueName")) or.push({ name: text });
     if (on("stampName")) {
-      or.push({ members: { some: { stamp: { name: { contains: s, mode: "insensitive" } } } } });
+      or.push({ members: { some: { stamp: { name: text } } } });
     }
     if (on("catalogNumber")) {
       // In the ticked catalogues only (#2529); a prefix typed with the number is read below.
       const scoped = catalogVendorWhere(null, opts.catalogScope);
       or.push(
-        { catalogNumbers: { some: { ...scoped, firstNumber: { contains: s, mode: "insensitive" } } } },
-        { catalogNumbers: { some: { ...scoped, lastNumber: { contains: s, mode: "insensitive" } } } },
-        { members: { some: { stamp: { catalogNumbers: { some: { ...scoped, number: { contains: s, mode: "insensitive" } } } } } } }
+        { catalogNumbers: { some: { ...scoped, firstNumber: text } } },
+        { catalogNumbers: { some: { ...scoped, lastNumber: text } } },
+        { members: { some: { stamp: { catalogNumbers: { some: { ...scoped, number: text } } } } } }
       );
       // Prefixed catalog numbers in the quick search (#289): the raw text of "Mi PL 200"
       // never appears in a stored number, so the caller also hands us the number parsed out
       // of it (`parseCatalogSearch`, #146) plus the vendor when its abbreviation led the
       // input. Matching stays `contains`, like the rest of the quick search — that is what
-      // lets "Fi BL31" reach a stored "BL31" through its digit run.
+      // lets "Fi BL31" reach a stored "BL31" through its digit run — and, in quotes (#2545), equality.
       if (opts.searchCatalogNumber) {
-        const n = { contains: opts.searchCatalogNumber, mode: "insensitive" as const };
+        const n = searchTextFilter(opts.searchCatalogNumber, opts.searchExact);
         const vendorClause = catalogVendorWhere(opts.searchCatalogVendorId, opts.catalogScope);
         or.push(
           { catalogNumbers: { some: { ...vendorClause, firstNumber: n } } },
