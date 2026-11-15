@@ -38,6 +38,7 @@ import { AuctionLotCatalogValuesDialog } from "../../auction-lot-catalog-values-
 import { FillCatalogueValuesButton } from "../../fill-catalogue-values-button";
 import type { AuctionLotDetailView } from "../../use-auctions-query";
 import { AuctionLotLineRow } from "./auction-lot-line-row";
+import { InventoryPopupDialog } from "@/app/c/[collectionSlug]/inventory/inventory-popup-dialog";
 import { Icon, type IconName } from "@/app/icons";
 import { useCollectionTags } from "@/app/c/[collectionSlug]/shared/use-tags";
 import { tagFilterTriggerLabel } from "@/lib/tag-filter";
@@ -143,6 +144,8 @@ interface LineCtx {
   /** Opens the Valuation dialog for the line's stamp (#601). One dialog for the screen, remembering
    * which line opened it — a hook cannot be called per row. */
   onShowValuation: (line: AuctionLotLineItem) => void;
+  /** Opens the copies of the line's stamp (#2543), one dialog for the screen like the above. */
+  onOpenCopies: (line: AuctionLotLineItem) => void;
   onEditLine: (line: AuctionLotLineItem) => void;
   onDeleteLine: (line: AuctionLotLineItem) => void;
 }
@@ -224,6 +227,7 @@ function LineRows({
             readOnly={readOnly}
             onSetPrice={canPrice ? () => ctx.onSetPrice(line) : undefined}
             onShowValuation={() => ctx.onShowValuation(line)}
+            onOpenCopies={() => ctx.onOpenCopies(line)}
             onEdit={() => ctx.onEditLine(line)}
             onDelete={() => ctx.onDeleteLine(line)}
           />
@@ -700,6 +704,10 @@ export function AuctionLotCardsView({
   const [priceError, setPriceError] = useState<string | undefined>();
   /** Which line's stamp the Valuation dialog is open on (#601). */
   const [valuationStampId, setValuationStampId] = useState<string | null>(null);
+  /** Which line's stamp the copies dialog is open on (#2543). */
+  const [copiesOf, setCopiesOf] = useState<{ stampId: string; label: string; baseCurrency: string } | null>(
+    null
+  );
   /** The lot *Fill catalogue values* (#2094) is open on. */
   const [fillingLot, setFillingLot] = useState<AuctionLotDetailView | null>(null);
   const [linePending, startLineTransition] = useTransition();
@@ -740,6 +748,12 @@ export function AuctionLotCardsView({
       if (line.conditionId !== null) setPricing({ ...line, conditionId: line.conditionId });
     },
     onShowValuation: (line) => setValuationStampId(line.stampId),
+    onOpenCopies: (line) =>
+      setCopiesOf({
+        stampId: line.stampId,
+        label: [line.catalogLabel, line.stampName].filter(Boolean).join(" ") || "Stamp",
+        baseCurrency: lots.find((lot) => lot.id === line.auctionLotId)?.baseCurrency ?? line.currency,
+      }),
     onEditLine: (line) => {
       setFormError(undefined);
       setDraft({ lotId: line.auctionLotId, value: { line } });
@@ -1109,6 +1123,18 @@ export function AuctionLotCardsView({
         <PriceDetailsDialog
           target={{ kind: "stamp", stampId: valuationStampId }}
           onClose={() => setValuationStampId(null)}
+        />
+      )}
+
+      {/* The copies of a line's stamp, from its *held* chip (#2543) — the read-only copies window the
+          copy-count badge opens (#721). */}
+      {copiesOf && (
+        <InventoryPopupDialog
+          collectionId={collectionId}
+          areas={areas}
+          baseCurrency={copiesOf.baseCurrency}
+          target={{ kind: "stamp", stampId: copiesOf.stampId, label: copiesOf.label }}
+          onClose={() => setCopiesOf(null)}
         />
       )}
     </div>

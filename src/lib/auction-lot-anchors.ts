@@ -8,6 +8,7 @@ import {
 } from "./auction-lines";
 import type { BidLine } from "./bid-recommendation";
 import { countCopiesByStampAndCondition, stampConditionKey } from "./copy-counts";
+import { ON_THE_WAY_DELIVERY_STATES } from "./delivery-state";
 import { marketKeyOf, type MarketConfidenceBadge } from "./market-value";
 import {
   readStampMarketEvidence,
@@ -222,8 +223,12 @@ export interface LineAnchor {
   /** The line priced from the catalogue alone (#2087) — the same as the fields above on a line the
    * catalogue anchors, and the figure results took the place of on a line the market anchors. */
   fromCatalogue: CatalogueAnchor;
-  /** Copies already held of this `stamp × condition` — shown, never computed with. */
+  /** Copies already held of this `stamp × condition` — shown, never computed with. Counts the copies
+   *  bought and still on the way too; {@link ownedOnTheWay} says how many of them those are. */
   owned: number;
+  /** How many of {@link owned} are bought and not yet arrived (#2543) — the popover states them
+   *  apart from the copies held. Not part of the agent API's `owned`, which stays the whole. */
+  ownedOnTheWay: number;
 }
 
 /** A resolved line that **is** an `AuctionLotLine`, which is every line on the lots screen. The two
@@ -262,6 +267,8 @@ export interface AnchorContext {
   ratios: RatioLookup;
   /** Keyed by {@link stampConditionKey}. */
   owned: Map<string, number>;
+  /** The part of {@link owned} bought and still on the way (#2543), keyed the same. */
+  onTheWay: Map<string, number>;
   /** What "today" is when results are brought to today's money (#2460). */
   now: Date;
 }
@@ -282,15 +289,16 @@ export async function loadAnchorContext(
   currencies: string[]
 ): Promise<AnchorContext> {
   const baseCurrency = await getCollectionBaseCurrency(collectionId);
-  const [evidence, rates, ratios, owned] = await Promise.all([
+  const [evidence, rates, ratios, owned, onTheWay] = await Promise.all([
     readStampMarketEvidence(collectionId, stampIds),
     baseToSaleRates(collectionId, baseCurrency, currencies),
     loadRealizationRatios(collectionId),
     countCopiesByStampAndCondition(collectionId, stampIds),
+    countCopiesByStampAndCondition(collectionId, stampIds, ON_THE_WAY_DELIVERY_STATES),
   ]);
   const marketByStamp = new Map([...evidence].map(([stampId, e]) => [stampId, e.values]));
   const hintsByStamp = new Map([...evidence].map(([stampId, e]) => [stampId, e.hints]));
-  return { baseCurrency, rates, marketByStamp, hintsByStamp, ratios, owned, now: new Date() };
+  return { baseCurrency, rates, marketByStamp, hintsByStamp, ratios, owned, onTheWay, now: new Date() };
 }
 
 /**
@@ -323,6 +331,7 @@ export function anchorLine(line: AnchorableLine, context: AnchorContext): LineAn
       market: findMarketValue(context.marketByStamp.get(line.stampId), atCondition),
       ratios: context.ratios,
       owned: context.owned.get(stampConditionKey(line.stampId, condition.conditionId)) ?? 0,
+      ownedOnTheWay: context.onTheWay.get(stampConditionKey(line.stampId, condition.conditionId)) ?? 0,
       now: context.now,
     });
     return { ...answer, hintMarkets: hintMarketsAt(context.hintsByStamp.get(line.stampId), atCondition) };
@@ -344,10 +353,12 @@ export function anchorLine(line: AnchorableLine, context: AnchorContext): LineAn
 function rangeOf(line: AnchorableLine, each: LineAnchor[]): LineAnchor {
   const anchored = each.filter((answer): answer is LineAnchor & { anchor: number } => answer.anchor !== null);
   const owned = each.reduce((sum, answer) => sum + answer.owned, 0);
+  const ownedOnTheWay = each.reduce((sum, answer) => sum + answer.ownedOnTheWay, 0);
   const identity = {
     conditionId: null,
     conditionAbbreviation: line.conditionAbbreviation,
     owned,
+    ownedOnTheWay,
     conditions: each,
   };
   const fromCatalogue = catalogueRangeOf(each.map((answer) => answer.fromCatalogue));
@@ -417,6 +428,7 @@ function emptyAnswer(line: AnchorableLine): LineAnchor {
     derivation: null,
     fromCatalogue: NO_CATALOGUE,
     owned: 0,
+    ownedOnTheWay: 0,
   };
 }
 
@@ -541,6 +553,7 @@ interface LineContext {
   market: StampMarketValue | null;
   ratios: RatioLookup;
   owned: number;
+  ownedOnTheWay: number;
   now: Date;
 }
 
@@ -569,6 +582,7 @@ function resolveLineAt(
     currency: line.currency,
     baseCurrency: context.baseCurrency,
     owned: context.owned,
+    ownedOnTheWay: context.ownedOnTheWay,
   };
 
   const market: AnchorMarketEvidence | null = context.market

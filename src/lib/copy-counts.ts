@@ -3,7 +3,7 @@ import { prisma } from "./db";
 import { NOT_TRADED_AWAY } from "./trade-exit";
 import { NOT_PIECE } from "./multi-stamp";
 import { ACROSS_TREES, NOT_ACROSS_TREES } from "./candidate-set-predicates";
-import { UNAVAILABLE_DELIVERY_STATES } from "./delivery-state";
+import { UNAVAILABLE_DELIVERY_STATES, type DeliveryState } from "./delivery-state";
 import type { HeldCopyRow } from "./held-copies";
 import { buildDescendantMap } from "./pricing";
 import { childIsVariant, VARIANT_FLAG_SELECT } from "./variant-classification";
@@ -336,15 +336,21 @@ export function stampConditionKey(stampId: string, conditionId: string): string 
  */
 export async function countCopiesByStampAndCondition(
   collectionId: string,
-  stampIds: string[]
+  stampIds: string[],
+  /** Narrows the count to copies in these delivery states — the copies *on the way* (#2543) the
+   *  popover states apart from those held. Every held copy when absent. */
+  onlyDeliveryStates?: readonly DeliveryState[]
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
   const ids = [...new Set(stampIds)];
   if (ids.length === 0) return counts;
 
+  const held = heldCopiesWhere(collectionId, ids);
   const rows = await prisma.item.groupBy({
     by: ["stampId", "conditionId"],
-    where: heldCopiesWhere(collectionId, ids),
+    where: onlyDeliveryStates
+      ? { ...held, deliveryState: { ...held.deliveryState, in: [...onlyDeliveryStates] } }
+      : held,
     _count: { _all: true },
   });
 

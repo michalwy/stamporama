@@ -853,6 +853,26 @@ ninety seconds before a lot closes: not "I collect this stamp" but "this is the 
 The judgement is the same one Stamporama makes when the copy actually arrives, so a lot marked as
 matching will greet you with that want at intake.
 
+### Lines you already have
+
+A line whose stamp you already have carries a green **held** chip: *held 2* for two copies in the
+collection, *held 2 · 1 on the way* when one more is bought and has not arrived yet (ordered, or in
+the post). A copy that has arrived and only waits to be sorted counts as held; one that never arrived
+or came damaged is not counted.
+
+The chip counts the line's **own condition** — every condition it may be in, while that is still open
+— because a copy in another condition is a different purchase decision. Hover the chip for every
+condition you hold the stamp in, the line's own first and in bold, so an MH copy against an MNH line
+is seen all the same. Click it to open your copies of that stamp. A line you have nothing of at its
+condition shows no chip.
+
+A **collapsed lot** — and every row on the lots list — carries a small **held** mark on its header
+when any of its lines has the chip, so a closed lot holding something you have is not missed.
+
+Like the panel's *you hold*, the chip is information only: it never changes the recommended bid. Lots
+you are winning on other auctions are not copies yet and are not counted here — that is what
+[*You are already winning this*](#you-are-already-winning-this) covers.
+
 ### What each line is worth
 
 Every line is valued from the catalog exactly the way a copy in your [inventory](inventory.md) is —
@@ -1196,7 +1216,8 @@ how many were left out: *not counted, other markets: 2 DE*.
 A line priced in a currency with no rate into the sale's is reported the same way — it has a value
 and it cannot be added up, which is a different fact from having none.
 
-The panel also says **how many copies of each line you already hold**. That is evidence and nothing
+The panel also says **how many copies of each line you already hold**, and apart from them how many
+are bought and still **on the way** — *you hold 2 · 1 on the way*. That is evidence and nothing
 else: it never moves a figure. Duplicates are bought deliberately, for trade and resale, so an
 automatic discount would bid *least* on exactly the material you most want. Whether it changes what
 you bid is a judgement, and the panel's job is to put the fact next to it.
