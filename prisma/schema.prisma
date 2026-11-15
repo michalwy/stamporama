@@ -86,6 +86,11 @@ model Collection {
   // setting is **keep for ever** — a scan is a source, not output (#137), so the sweep ships off and
   // is switched on by the collector who has the disk problem.
   scanSheetTtlDays String?
+  // How long a copy that has left — sold, given away in a trade, or marked no longer held — keeps its
+  // full-resolution photos (#2547) before they are replaced by a thumbnail and a reduced photo. The
+  // same vocabulary as the two columns above; null defers to `STAMPORAMA_DEPARTED_COPY_PHOTO_TTL_DAYS`
+  // and then to the built-in default of 90 days.
+  departedCopyPhotoTtlDays String?
   // The band a bid recommendation is stated as, in percent of the lot's fair figure (#508;
   // ADR-0029 §3, §4). Below the floor a lot is a bargain, past the ceiling it belongs to somebody
   // else. A percentage of `fair` rather than the market's own spread: at the sample sizes this
@@ -4124,6 +4129,10 @@ model Photo {
    * as a choice, apart from never having been given a scale; set only with the other two empty. An
    * offer collage holding such a picture beside others is drawn as its pixels fall. */
   noScale           Boolean @default(false) @map("no_scale")
+  /** When this photo was **reduced** (#2547): its copy had left the collection long enough, so its
+   * full-resolution bytes were replaced by a smaller `full` (`REDUCED_MAX_EDGE`), `width`/`height`
+   * now that one's. Null on a photo still at full resolution. Nothing reduced can be restored. */
+  reducedAt         DateTime? @map("reduced_at")
   /** Areas hidden on the **offer** images rendered from this photo (#1665); the photo itself, and
    * whatever shows it as the copy's or the stamp's photo, never changes. */
   covers PhotoCover[]
@@ -6876,6 +6885,9 @@ model Trade {
   // valuations: written on reaching `agreed`, cleared on going back to an editable status, kept
   // through `closed` and `cancelled`. What the dashboard's *To send* group measures the wait from.
   agreedAt     DateTime?
+  // When the trade was closed (#2547), or null for one that is not. Written in the write that moves
+  // it to `closed`, which is terminal. What the reduction of a given-away copy's photos counts from.
+  closedAt     DateTime?
   // ── Balancing (#638 reads these; they land here because they are terms of the agreement) ───────
   // The catalog both sides agreed to speak in, or null when the trade names none. That StampWorld
   // says something different from Fischer is a property of the negotiation, not a discrepancy to

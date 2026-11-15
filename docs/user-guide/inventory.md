@@ -2407,6 +2407,12 @@ Once a copy has been [listed on an offer that covers symbols](offers.md#covering
 shows **Offer covers** on the Photos card: tick it to see the covers laid over the photos, and click
 a photo to change them. The photo itself never changes — covers are only drawn into offer images.
 
+Some time after a copy has left — sold, given away in a trade or marked no longer held, 90 days by
+default — its photos are **reduced**: the thumbnail stays and each photo is replaced by a smaller one,
+about 1000 pixels on its long side, that still opens larger. The Photos card of the copy's page then
+says *Reduced on* and the day. A reduced photo cannot be brought back to full size; the period is set
+in [Settings → Photos & storage](collections.md#how-long-copies-that-have-left-keep-their-full-photos).
+
 Accepted formats are **JPEG, PNG, and WebP**, up to **200 MB** each. Each photo is
 automatically downscaled for storage and given a thumbnail for the list and slot views.
 

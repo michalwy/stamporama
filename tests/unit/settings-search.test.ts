@@ -73,7 +73,14 @@ describe("settings search (#1470)", () => {
   it("finds a setting on a page whose name does not say so", () => {
     assert.deepEqual(shape("currency"), [["general", ["Base currency"]]]);
     assert.deepEqual(shape("retention"), [
-      ["storage", ["Keep closed listings' images", "Keep card scans of finished batches"]],
+      [
+        "storage",
+        [
+          "Keep closed listings' images",
+          "Keep card scans of finished batches",
+          "Keep full photos of copies that have left",
+        ],
+      ],
     ]);
   });
 

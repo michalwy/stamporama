@@ -45,6 +45,8 @@ import { describeClosedOfferPhotoTtl } from "@/lib/offer-photo-cleanup-rules";
 import { instanceClosedOfferPhotoTtlMs } from "@/lib/offer-photo-retention";
 import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
 import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
+import { describeDepartedCopyPhotoTtl } from "@/lib/departed-copy-photo-rules";
+import { instanceDepartedCopyPhotoTtlMs } from "@/lib/departed-copy-photo-retention";
 import { SettingsScreen } from "./settings-screen";
 import { Screen } from "@/app/screen";
 
@@ -182,6 +184,12 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           // default is *keep for ever* unless an operator says otherwise, which is exactly the
           // sentence a collector following the instance should be reading.
           instanceScanSheetTtlLabel={describeScanSheetTtl(instanceScanSheetTtlMs())}
+          departedCopyPhotoTtl={collection.departedCopyPhotoTtlDays}
+          // The departed-copy photo period (#2547), resolved server-side the same way: 90 days
+          // unless the operator set another.
+          instanceDepartedCopyPhotoTtlLabel={describeDepartedCopyPhotoTtl(
+            instanceDepartedCopyPhotoTtlMs()
+          )}
           // The collection's scanning profiles (#1443), with what uses each — the Scanners entry.
           initialScanningProfiles={scanningProfiles}
           collectionSlug={collectionSlug}

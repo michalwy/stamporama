@@ -13,6 +13,7 @@ import { CoveredPhoto } from "@/app/c/[collectionSlug]/shared/photo-cover-editor
 import { PhotoCoverWalkDialog } from "@/app/c/[collectionSlug]/shared/photo-cover-walk-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CopyPhotoScalesDialog } from "./copy-photo-scales-dialog";
+import { describePhotoReduction } from "@/lib/departed-copy-photo-rules";
 
 // The copy's photos, and the covers drawn on them for offers (#1665). The covers are never part of
 // the copy's own photo, so the strip shows the photos as they are; the overlay is a switch, off by
@@ -23,6 +24,9 @@ import { CopyPhotoScalesDialog } from "./copy-photo-scales-dialog";
 // many of its photos have no scale, which is what keeps an offer collage from drawing them at the
 // same scale as the rest. Each photo's scale is named under the strip, a photo never given one with
 // *(default)* after the default profile's name, so a default is never mistaken for a choice (#2066).
+//
+// A copy that has left keeps only a thumbnail and a smaller photo after a while (#2547); the card
+// says when that happened, so a reduced photo is not taken for one that was small to begin with.
 
 const TOGGLE: React.CSSProperties = {
   display: "inline-flex",
@@ -43,10 +47,13 @@ export function CopyPhotosCard({
   collectionId,
   itemId,
   photos,
+  reducedAt = null,
 }: {
   collectionId: string;
   itemId: string;
   photos: PhotoSummary[];
+  /** When the photos were reduced, the copy having left the collection (#2547), or null. */
+  reducedAt?: string | null;
 }) {
   const queryClient = useQueryClient();
   const queryKey = ["item-photo-covers", collectionId, itemId] as const;
@@ -147,6 +154,11 @@ export function CopyPhotosCard({
             .filter((photo) => scaleOf.has(photo.id))
             .map((photo) => `${sideLabel(photo)}: ${photoScaleLabel(scaleOf.get(photo.id)!, scales.scanning)}`)
             .join(" · ")}
+        </p>
+      )}
+      {reducedAt && photos.length > 0 && (
+        <p style={{ margin: "0.5rem 0 0", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+          {describePhotoReduction(reducedAt)}
         </p>
       )}
       {editingScales && scales && (

@@ -11,6 +11,7 @@ import {
   setCollectionDefaultLanguage,
   setCollectionHomeMarket,
   setCollectionScanSheetTtl,
+  setCollectionDepartedCopyPhotoTtl,
   type BidPercentPatch,
 } from "@/lib/collections";
 import { clearCollectionStorageCache } from "@/lib/storage-cache";
@@ -153,6 +154,31 @@ export async function updateCollectionScanSheetTtlAction(
   if (!session) redirect(await signInPath());
   try {
     await setCollectionScanSheetTtl(session.user.id, collectionId, setting);
+    return { status: "success", setting };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to save the retention period.",
+    };
+  }
+}
+
+export type DepartedCopyPhotoTtlState =
+  | { status: "idle" }
+  | { status: "success"; setting: string | null }
+  | { status: "error"; message: string };
+
+/** Save how long this collection's copies that have left keep their full-resolution photos (#2547),
+ * from Settings → Photos & storage. `null` is *no opinion*: the instance's period, 90 days unless
+ * the operator set another. */
+export async function updateCollectionDepartedCopyPhotoTtlAction(
+  collectionId: string,
+  setting: string | null
+): Promise<DepartedCopyPhotoTtlState> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) redirect(await signInPath());
+  try {
+    await setCollectionDepartedCopyPhotoTtl(session.user.id, collectionId, setting);
     return { status: "success", setting };
   } catch (e) {
     return {

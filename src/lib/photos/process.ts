@@ -165,6 +165,24 @@ export async function turnImage(
   return { buffer: data, width: info.width, height: info.height, mime: OUTPUT[mime].mime };
 }
 
+/** Longest-edge cap for the **reduced** photo a copy keeps once it has left the collection (#2547):
+ * large enough to recognise the stamp and its perforation when opened, a small part of a scan's
+ * size. The thumbnail stays as it was. */
+export const REDUCED_MAX_EDGE = 1000;
+
+/**
+ * Reduce a stored `full` derivative to {@link REDUCED_MAX_EDGE} (#2547), re-encoded in its own
+ * format at the pipeline's defaults like every other derivative. Never enlarges, so a photo already
+ * that small comes back at its own size — the caller then keeps the bytes it has.
+ */
+export async function reduceImage(input: Buffer, mime: AcceptedMime): Promise<ProcessedVariant> {
+  const { data, info } = await sharp(input, { failOn: "error" })
+    .resize(REDUCED_MAX_EDGE, REDUCED_MAX_EDGE, { fit: "inside", withoutEnlargement: true })
+    .toFormat(OUTPUT[mime].format)
+    .toBuffer({ resolveWithObject: true });
+  return { buffer: data, width: info.width, height: info.height, mime: OUTPUT[mime].mime };
+}
+
 /**
  * Thumbnail an image the app itself produced — a rendered offer collage (#311). Distinct from
  * `processImage`, which also re-encodes the `full` derivative: a collage's `full` bytes are the

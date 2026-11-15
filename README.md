@@ -40,6 +40,8 @@ docker compose --profile autoupdate up -d
 
 Uploaded photos — and the listing images generated for offers — are stored in the `stamporama-data` Docker volume (mounted at `/data`) by default. Back it up alongside your database — losing the volume loses the images.
 
+The full-resolution photos of a copy that has left the collection — sold, traded away or marked no longer held — are reduced to a thumbnail and a smaller photo 90 days after it left; each collection can change or switch that off under Settings → Photos & storage, and `STAMPORAMA_DEPARTED_COPY_PHOTO_TTL_DAYS` sets the instance default.
+
 If you put the app **behind a reverse proxy** — nginx, Caddy, a Cloudflare tunnel — there is one
 thing worth knowing: a stockbook card scanned at 1200 dpi is 100–200 MB, and card scans are
 therefore uploaded in **chunks** so no single request carries the whole file. The proxy has to pass

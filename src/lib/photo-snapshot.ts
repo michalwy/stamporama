@@ -82,6 +82,7 @@ export async function saveAnnotatedSnapshot(
       height: true,
       originalWidth: true,
       originalHeight: true,
+      reducedAt: true,
       item: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       stamp: { select: { collectionId: true, collection: { select: { ownerId: true } } } },
       tile: {

@@ -21,6 +21,9 @@
 //   - the retained-scan sweep (#578) — an hourly pass deleting the card scans of batches finished
 //     with longer than the collection's own period. Ships **off**: a scan is a source, not output,
 //     so nothing is swept until a collector asks for it;
+//   - the departed-copy photo reduction (#2547) — an hourly pass replacing the full-resolution photos
+//     of a copy that left longer ago than its collection's period (90 days by default) with a
+//     smaller one;
 //   - the storage cache sweep (#591) — an hourly pass over the local cache of remote objects. The
 //     cap itself is kept on every populating write, not here: an hourly-only pass would leave disk
 //     bounded by how much was written in an hour, which for card scans is the whole problem. This
@@ -73,6 +76,9 @@ import { purgeClosedOfferPhotos } from "@/lib/offer-photo-generation";
 import { describeScanSheetTtl } from "@/lib/scan-sheet-cleanup-rules";
 import { instanceScanSheetTtlMs } from "@/lib/scan-sheet-retention";
 import { purgeFinishedScanSheets } from "@/lib/scan-sheets";
+import { reduceDepartedCopyPhotos } from "@/lib/departed-copy-photos";
+import { describeDepartedCopyPhotoTtl } from "@/lib/departed-copy-photo-rules";
+import { instanceDepartedCopyPhotoTtlMs } from "@/lib/departed-copy-photo-retention";
 import { startOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { describeMailConfig, readMailConfig } from "@/lib/mail/config";
 import { startMailWorker } from "@/lib/mail/worker";
@@ -248,6 +254,35 @@ export async function start(): Promise<void> {
   const scanInterval = setInterval(sweepScans, SWEEP_INTERVAL_MS);
   scanInitial.unref?.();
   scanInterval.unref?.();
+
+  // The departed-copy photo reduction (#2547). The same shape again, offset once more. It replaces
+  // the full-resolution photos of a copy that left — sold, given away in a trade, or marked no longer
+  // held — longer ago than its collection's period with a smaller one, keeping the thumbnail. On by
+  // default (90 days): the collector asked for it, which is what lets these source bytes go.
+  const reduceCopyPhotos = async () => {
+    try {
+      const reduced = await reduceDepartedCopyPhotos();
+      if (reduced.photos > 0) {
+        console.log(
+          `[copy-photos] reduced ${reduced.photos} photo(s) of ${reduced.copies} copy(ies) that have left, ` +
+            `freeing ${formatBytes(reduced.bytes)}`
+        );
+      }
+    } catch (err) {
+      console.error("[copy-photos] departed-copy reduction failed", err);
+    }
+  };
+
+  console.log(
+    `[copy-photos] departed-copy photo reduction, instance default: ` +
+      `${describeDepartedCopyPhotoTtl(instanceDepartedCopyPhotoTtlMs())} — ` +
+      `collections may set their own period in Settings`
+  );
+
+  const reduceInitial = setTimeout(reduceCopyPhotos, 105_000);
+  const reduceInterval = setInterval(reduceCopyPhotos, SWEEP_INTERVAL_MS);
+  reduceInitial.unref?.();
+  reduceInterval.unref?.();
 
   // The storage cache sweep (#591). Offset again so a boot does not run four passes at once. It
   // deletes nothing of the collector's: every object it touches is a copy of something that still

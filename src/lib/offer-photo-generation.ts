@@ -334,6 +334,9 @@ export interface SourcePhoto {
   height: number;
   originalWidth: number | null;
   originalHeight: number | null;
+  /** When the photo was reduced, its copy having left (#2547) — which takes away the frame a photo
+   *  with no recorded original otherwise has. See `photo-measure-frame.ts`. */
+  reducedAt?: Date | null;
   /** The copy the photo belongs to; null for an image uploaded straight to the offer (#313). */
   itemId: string | null;
   /** `front` / `back`, or null for an extra (whose `title` names it). */
@@ -376,6 +379,7 @@ export const SOURCE_PHOTO_SELECT = {
   height: true,
   originalWidth: true,
   originalHeight: true,
+  reducedAt: true,
   itemId: true,
   role: true,
   title: true,

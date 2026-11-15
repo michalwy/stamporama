@@ -194,6 +194,10 @@ interface SettingsScreenProps {
    * it defers to the instance — whose own answer, in words, is the second field. */
   scanSheetTtl: string | null;
   instanceScanSheetTtlLabel: string;
+  /** How long this collection's copies that have left keep their full-resolution photos (#2547), or
+   * null while it defers to the instance — whose own answer, in words, is the second field. */
+  departedCopyPhotoTtl: string | null;
+  instanceDepartedCopyPhotoTtlLabel: string;
   /** The collection's scanning profiles (#1443), each with what uses it. */
   initialScanningProfiles: ScanningProfileListRow[];
   duplicateCatalogMode: DuplicateCatalogMode;
@@ -793,6 +797,8 @@ function SettingsEntryBody({
   instanceClosedOfferPhotoTtlLabel,
   scanSheetTtl,
   instanceScanSheetTtlLabel,
+  departedCopyPhotoTtl,
+  instanceDepartedCopyPhotoTtlLabel,
   initialScanningProfiles,
   duplicateCatalogMode,
   valuationMethod,
@@ -818,6 +824,8 @@ function SettingsEntryBody({
           instanceClosedOfferPhotoTtlLabel={instanceClosedOfferPhotoTtlLabel}
           scanSheetTtl={scanSheetTtl}
           instanceScanSheetTtlLabel={instanceScanSheetTtlLabel}
+          departedCopyPhotoTtl={departedCopyPhotoTtl}
+          instanceDepartedCopyPhotoTtlLabel={instanceDepartedCopyPhotoTtlLabel}
           photoStorageBytes={photoStorageBytes}
           storageCache={storageCache}
         />
