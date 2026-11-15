@@ -179,6 +179,18 @@ right, from *which copies* to *how they are shown*.
   filter on the copies. Other ways into the same search — the copy pickers and quick-jump — keep
   searching every field.
 
+  **Text in double quotes is matched exactly.** The box normally finds any field that *contains*
+  what you type, so `A111` also finds the copies under `A1110` and `A1112`. Typed as `"A111"`, it
+  finds only what **equals** `A111` as a whole value, in each field the box searches — with only
+  *Location ref* ticked, exactly the copies filed under `A111`. Letter case still does not matter
+  (`"a111"` finds `A111`). A catalogue number has to equal the number, so `"200"` finds 200 and not
+  200a or 1200, and a vendor prefix inside the quotes (`"Mi 200"`) still names the catalogue.
+  `"#123"` is copy `#123`, as `#123` is. The quotes must hold the whole search: text only partly in
+  quotes, or with an opening quote and no closing one, is searched as plain text, quotes included.
+  Hovering the fields control beside the box says so. The same holds on every list whose search box
+  has that control — Stamps, Issues, Wants, Offers, Sales and the auction lots and sales — while the
+  pickers and quick-jump read quotes as ordinary characters.
+
   While *Catalogue number* is ticked, a second control after it picks **which catalogues** a
   number is searched in — one choice for the whole collection, shared by every list and picker
   ([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)). The copy pickers read it too.

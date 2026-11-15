@@ -6,8 +6,7 @@ import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listStampAreaFacets } from "@/lib/stamps";
 import { stampAttributeFiltersFromParams } from "@/lib/stamp-attribute-kinds";
 import { tagFilterFromParams } from "@/lib/tag-filter";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { STAMP_SEARCH_FIELD_KEYS } from "@/lib/stamp-search-fields";
 
 /** The area rail's counts (#843) — the mirror of `../years`: same filters, except that this one
@@ -23,7 +22,7 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
-  const search = readSearchParam(sp);
+  const { search, searchExact } = readListSearchParams(sp);
   // The fields the search box was narrowed to beside it (#2240); absent is every field.
   const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), STAMP_SEARCH_FIELD_KEYS);
   const catalogVendorId = sp.get("catalogVendorId") || undefined;
@@ -34,6 +33,7 @@ export async function GET(
   try {
     const areas = await listStampAreaFacets(session.user.id, collectionId, {
       search,
+      searchExact,
       searchFields,
       catalogVendorId,
       catalogScope,

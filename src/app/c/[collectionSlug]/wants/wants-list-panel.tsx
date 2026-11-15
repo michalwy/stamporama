@@ -43,6 +43,7 @@ import {
   useCatalogSearchScope,
 } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { WANT_SEARCH_FIELDS, WANT_SEARCH_FIELD_KEYS } from "@/lib/want-search-fields";
+import { readQuotedSearch } from "@/lib/search-fields";
 import { WantFormDialog } from "./want-form-dialog";
 import { useToast } from "@/app/toast-provider";
 import { WantRow, type WantDictionaries } from "./want-row";
@@ -186,8 +187,9 @@ export function WantsListPanel({
   // picker shares; a typed prefix still wins over it.
   const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
   const searchText = debouncedQuery.trim();
+  // Read without the double quotes of an exact search (#2545), which the server takes off too.
   const parsedSearch = useMemo(
-    () => parseCatalogSearch(searchText, catalogVendors),
+    () => parseCatalogSearch(readQuotedSearch(searchText).text, catalogVendors),
     [searchText, catalogVendors]
   );
   const searchCatalogNumber = (searchText && parsedSearch.number) || undefined;

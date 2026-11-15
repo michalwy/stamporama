@@ -6,9 +6,8 @@ import { faultFilterFromParams } from "@/lib/fault-filter";
 import { asMultiStampFilter, asPieceFilter } from "@/lib/multi-stamp";
 import { asCompletenessFilter } from "@/lib/completeness-filter";
 import { asHeldFilter, readHeldSplit } from "@/lib/held-filter";
-import { readSearchParam } from "@/lib/text-input";
 import { readYearFilter } from "@/lib/list-area-year-filter";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { COPY_SEARCH_FIELD_KEYS } from "@/lib/copy-search-fields";
 import { isHoldingState, type HoldingState } from "@/lib/copy-card-states";
 import { ISSUE_FORMAT_FILTER_PARAM } from "@/lib/issue-format-filter";
@@ -68,7 +67,8 @@ export function readItemFilters(sp: URLSearchParams): ItemListFiltersPaginated {
     issueFormatIds: readCsvParam(sp, ISSUE_FORMAT_FILTER_PARAM),
     deliveryStates: readDeliveryStates(sp),
     areaIds: areaIdsParam ? areaIdsParam.split(",") : undefined,
-    search: readSearchParam(sp),
+    // The text, unquoted, and whether it was typed in double quotes to match exactly (#2545).
+    ...readListSearchParams(sp),
     catalogVendorId: sp.get("catalogVendorId") || undefined,
     catalogNumber: sp.get("catalogNumber") || undefined,
     catalogScope: parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM)),

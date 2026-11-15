@@ -66,6 +66,7 @@ import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-pe
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
 import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-search-scope";
 import { COPY_SEARCH_FIELDS, COPY_SEARCH_FIELD_KEYS } from "@/lib/copy-search-fields";
+import { readQuotedSearch } from "@/lib/search-fields";
 import { formatItemNo, parseItemNoOnlySearch } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
 import {
@@ -612,8 +613,9 @@ export function InventoryListPanel({
   // with a search, so an empty box asks the request it always did; a typed prefix still wins.
   const { vendors: catalogVendors, scope: catalogScope } = useCatalogSearchScope();
   const sentCatalogScope = search ? catalogScope : undefined;
+  // Read without the double quotes of an exact search (#2545), which the server takes off too.
   const parsedCatalog = useMemo(
-    () => parseCatalogSearch(search, catalogVendors),
+    () => parseCatalogSearch(readQuotedSearch(search).text, catalogVendors),
     [search, catalogVendors]
   );
 
@@ -1236,7 +1238,7 @@ export function InventoryListPanel({
   // A `#123` search (#2136) is one copy, so an empty answer is worth explaining: the copy does not
   // exist, or the filters — the default that hides sold and written-off copies among them — hide
   // it. Read only once the list has come back empty, and whatever the grouping.
-  const onlyItemNo = parseItemNoOnlySearch(search);
+  const onlyItemNo = parseItemNoOnlySearch(readQuotedSearch(search).text);
   const { data: copyBehindFilters } = useCopyByNumber(
     collectionId,
     onlyItemNo,

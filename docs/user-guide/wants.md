@@ -227,6 +227,11 @@ names the one field ticked, or how many are (*2 fields*). A catalogue number typ
 abbreviation is still narrowed to that catalog within *Catalogue number*. The choice is remembered
 for this list in each collection, apart from the filters, which are not.
 
+**Text in double quotes is matched exactly**, as on the [Copies](inventory.md) list: `"3637"` with
+*Catalogue number* ticked finds the wants for stamps numbered 3637 and not 3637a, and `"Mi SU 3637"`
+still names the catalogue. Letter case does not matter, and a search only partly in quotes is plain
+text.
+
 While *Catalogue number* is ticked, a second control after it picks **which catalogues** a number
 is searched in — one choice for the whole collection, shared by every list and picker
 ([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)).

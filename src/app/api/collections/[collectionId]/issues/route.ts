@@ -6,8 +6,7 @@ import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listIssuesPaginated, type IssueSortBy } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
@@ -29,7 +28,7 @@ export async function GET(
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
   const areaIdsParam = sp.get("areaIds");
   const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
-  const search = readSearchParam(sp);
+  const { search, searchExact } = readListSearchParams(sp);
   const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
   const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
   // The fields the search box was narrowed to beside it (#2239); absent is every field.
@@ -49,6 +48,7 @@ export async function GET(
       offset,
       areaIds,
       search,
+      searchExact,
       searchCatalogVendorId,
       searchCatalogNumber,
       searchFields,

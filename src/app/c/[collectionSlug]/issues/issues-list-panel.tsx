@@ -103,6 +103,7 @@ import { parseCatalogSearch } from "@/lib/catalog-number";
 import { usePersistedSearchFields } from "@/app/c/[collectionSlug]/shared/use-persisted-search-fields";
 import { SearchFieldsControl } from "@/app/c/[collectionSlug]/shared/search-fields-control";
 import { ISSUE_SEARCH_FIELDS, ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
+import { readQuotedSearch } from "@/lib/search-fields";
 import type { StampFilterQuery } from "@/lib/issue-stamp-match";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 import { formControl } from "@/app/control-style";
@@ -267,9 +268,11 @@ export function IssuesListPanel({
   // The quick search box gets the same prefix parsing (#289): "Mi PL 200" or "BL31" is
   // never stored verbatim, so alongside the plain text we send the parsed vendor (when an
   // abbreviation led the input) and the bare number, which the server ORs into the search.
+  // Read without the double quotes of an exact search (#2545), which the server takes off too.
+  const quotedSearch = useMemo(() => readQuotedSearch(search), [search]);
   const parsedSearch = useMemo(
-    () => parseCatalogSearch(search, catalogVendors),
-    [search, catalogVendors]
+    () => parseCatalogSearch(quotedSearch.text, catalogVendors),
+    [quotedSearch, catalogVendors]
   );
 
   const filters: IssueListFilters = useMemo(
@@ -298,14 +301,16 @@ export function IssuesListPanel({
   // the whole tree an Infla-shaped issue would bury them in. Area and year are the issue's own.
   const stampFilter: StampFilterQuery = useMemo(
     () => ({
-      search: search || undefined,
+      search: quotedSearch.text || undefined,
+      searchExact: quotedSearch.exact || undefined,
       searchFields: narrowedSearchFields,
       catalogNumber: effectiveCatalogNumber || undefined,
       catalogVendorId: effectiveCatalogVendorId || undefined,
       searchCatalogVendorId: parsedSearch.vendorId ?? undefined,
+      searchCatalogNumber: parsedSearch.number || undefined,
       catalogScope: sentCatalogScope,
     }),
-    [search, narrowedSearchFields, effectiveCatalogNumber, effectiveCatalogVendorId, parsedSearch, sentCatalogScope]
+    [quotedSearch, narrowedSearchFields, effectiveCatalogNumber, effectiveCatalogVendorId, parsedSearch, sentCatalogScope]
   );
 
   const yearFacetFilters: IssueYearFacetFilters = useMemo(

@@ -6,8 +6,7 @@ import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listIssueAreaFacets } from "@/lib/issues";
 import { tagFilterFromParams } from "@/lib/tag-filter";
 import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
-import { readSearchParam } from "@/lib/text-input";
-import { parseSearchFields, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
+import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import { ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
 
 /** The area rail's counts (#843) — the mirror of `../years`: same filters, except that this one
@@ -23,7 +22,7 @@ export async function GET(
 
   const { collectionId } = await params;
   const sp = request.nextUrl.searchParams;
-  const search = readSearchParam(sp);
+  const { search, searchExact } = readListSearchParams(sp);
   const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
   const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
   // The fields the search box was narrowed to beside it (#2239); absent is every field.
@@ -35,6 +34,7 @@ export async function GET(
   try {
     const areas = await listIssueAreaFacets(session.user.id, collectionId, {
       search,
+      searchExact,
       searchCatalogVendorId,
       searchCatalogNumber,
       searchFields,

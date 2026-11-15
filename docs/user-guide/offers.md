@@ -3290,6 +3290,12 @@ remembered for this list in each collection, apart from the phrase in the box: c
 leaves it as it is, since it is how the box reads what you type, not a filter on the offers. An offer
 opened from the searched list steps through it read the same way.
 
+**Text in double quotes is matched exactly**, as on the [Copies list](inventory.md): `"A111"` with
+*Location ref* ticked finds the offers holding a copy filed under `A111` and not `A1110`, and
+`"200"` with *Catalogue number* ticked finds number 200 and not 200a or 1200. A title has to equal
+the whole text, letter case aside; a listing URL is compared as an address either way; `"#200"` is
+still offer #200; and a search only partly in quotes is plain text.
+
 While *Catalogue number* is ticked, a second control after it picks **which catalogues** a number
 is searched in — one choice for the whole collection, shared by every list and picker
 ([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)). Stepping from an offer to the next one

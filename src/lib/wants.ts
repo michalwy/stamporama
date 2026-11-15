@@ -1,4 +1,5 @@
 import "server-only";
+import { searchTextFilter } from "./search-fields";
 import { catalogVendorWhere } from "./catalog-search-scope";
 import { SERIES_FLAG_SELECT, stampCountsTowardsSeries } from "./issue-format-series";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
@@ -373,6 +374,9 @@ export interface WantListFilters {
   /** The fields {@link search} matches, when the collector has narrowed it beside the Want list's
    *  box (#2241); absent is every field. Only that box sends it. */
   searchFields?: WantSearchField[];
+  /** {@link search} was typed in double quotes (#2545): a field must **equal** it rather than contain
+   * it, letter case aside. Only the list's own routes set it. */
+  searchExact?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -440,7 +444,8 @@ function buildWantListWhere(
 
   const text = filters.search?.trim();
   if (text) {
-    const contains = { contains: text, mode: "insensitive" as const };
+    // Contained in a field, or — typed in double quotes (#2545) — equal to it.
+    const contains = searchTextFilter(text, filters.searchExact);
     // The fields the collector ticked beside the box (#2241); absent is every one.
     const ticked = filters.searchFields ? new Set(filters.searchFields) : null;
     const on = (field: WantSearchField) => !ticked || ticked.has(field);
@@ -465,7 +470,7 @@ function buildWantListWhere(
           stamp: {
             catalogNumbers: {
               some: {
-                number: { contains: filters.searchCatalogNumber, mode: "insensitive" },
+                number: searchTextFilter(filters.searchCatalogNumber, filters.searchExact),
                 ...catalogVendorWhere(filters.searchCatalogVendorId, filters.searchCatalogScope),
               },
             },

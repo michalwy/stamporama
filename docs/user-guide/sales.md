@@ -1195,6 +1195,11 @@ choice is remembered for this list in each collection, apart from the phrase its
 box leaves it as it is, and a link to the list does not carry it. It works the same way as on the
 [Copies list](inventory.md).
 
+**Text in double quotes is matched exactly**, as on the Copies list: `"200"` with *Catalogue number*
+ticked finds the sales of a stamp numbered 200 and not 200a or 1200, and `"Anna"` with *Buyer* ticked
+finds the buyer named *Anna* and not *Annabel*. Letter case does not matter, and a search only partly
+in quotes is plain text.
+
 While *Catalogue number* is ticked, a second control after it picks **which catalogues** a number
 is searched in — one choice for the whole collection, shared by every list and picker
 ([Which catalogues a number is searched in](collections.md#which-catalogues-a-number-is-searched-in)). **Add a line** and **Add copies** read
