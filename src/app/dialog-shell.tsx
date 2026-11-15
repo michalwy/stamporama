@@ -489,6 +489,9 @@ type DialogActionsProps = {
   beforeAction?: ReactNode;
   /** The action button, for a dialog whose Tab walk ends on it rather than on Cancel (#726, #1223). */
   actionRef?: Ref<HTMLButtonElement>;
+  /** The action takes the focus as the dialog opens (the shell's `data-autofocus`), so Enter picks it
+   *  — a question asked from a keystroke whose answer is to carry on (#2540). Cancel otherwise has it. */
+  actionAutoFocus?: boolean;
 };
 
 export function DialogActions({
@@ -503,6 +506,7 @@ export function DialogActions({
   leading,
   beforeAction,
   actionRef,
+  actionAutoFocus,
 }: DialogActionsProps) {
   // Two groups, by role: the other ways out on the left, cancel and the action on the right. Each
   // group is spaced tightly within itself and pushed apart by the gap between them, so a footer of
@@ -516,6 +520,7 @@ export function DialogActions({
       type={onAction ? "button" : "submit"}
       onClick={onAction}
       disabled={disabled}
+      data-autofocus={actionAutoFocus ? "" : undefined}
     >
       {actionLabel}
     </ActionButton>
@@ -585,6 +590,10 @@ export interface ConfirmDialogProps {
   title: string;
   message: ReactNode;
   actionLabel: string;
+  /** The way back, where "Cancel" would not say it (#2540's *Go back*). */
+  cancelLabel?: string;
+  /** As {@link DialogActions}'s — Enter picks the action rather than the way back. */
+  actionAutoFocus?: boolean;
   pendingLabel?: string;
   variant?: "primary" | "destructive";
   isPending?: boolean;
@@ -599,6 +608,8 @@ export function ConfirmDialog({
   title,
   message,
   actionLabel,
+  cancelLabel,
+  actionAutoFocus,
   pendingLabel,
   variant = "destructive",
   isPending,
@@ -623,6 +634,8 @@ export function ConfirmDialog({
       </DialogBody>
       <DialogActions
         actionLabel={isPending && pendingLabel ? pendingLabel : actionLabel}
+        cancelLabel={cancelLabel}
+        actionAutoFocus={actionAutoFocus}
         variant={variant}
         onCancel={onClose}
         onAction={onConfirm}

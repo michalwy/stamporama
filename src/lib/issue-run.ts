@@ -727,13 +727,53 @@ export function runValueKeys(
   slots: readonly RunValueSlot[],
   hasField: (key: string) => boolean
 ): string[] {
-  return slots.flatMap((slot, i) => {
-    if (!slot.key || slot.entryIndex !== i) return [];
-    if (slot.variants) {
-      return slot.variants.flatMap((v) => (v.entryIndex === i && hasField(v.key) ? [v.key] : []));
-    }
-    return hasField(slot.key) ? [slot.key] : [];
-  });
+  return slots.flatMap((slot, i) => runRowValueKeys(slot, i, hasField));
+}
+
+/** The editable fields one row of the run carries — `runValueKeys` for the row at `index` alone. */
+export function runRowValueKeys(
+  slot: RunValueSlot,
+  index: number,
+  hasField: (key: string) => boolean
+): string[] {
+  if (!slot.key || slot.entryIndex !== index) return [];
+  if (slot.variants) {
+    return slot.variants.flatMap((v) =>
+      v.entryIndex === index && hasField(v.key) ? [v.key] : []
+    );
+  }
+  return hasField(slot.key) ? [slot.key] : [];
+}
+
+/**
+ * What Enter in a value field of the run does (#2540): **identify**, as clicking *Identify* would —
+ * or first **ask**, when rows still have no value, since Enter can follow the last figure typed
+ * where a click is a deliberate choice. With identifying not possible (a blocker, a tile without a
+ * condition, a write in flight) **nothing**, as the disabled button does nothing.
+ */
+export function runValueEnter(canConfirm: boolean, rowsMissing: number): "identify" | "ask" | "nothing" {
+  if (!canConfirm) return "nothing";
+  return rowsMissing > 0 ? "ask" : "identify";
+}
+
+/**
+ * Where *Go back* from the missing-values question puts the cursor (#2540): the first empty field of
+ * the first row counted as missing, in run order — on an umbrella's row, its first empty variant. A
+ * row whose fields are all filled is skipped, and null means there is no such field.
+ */
+export function firstMissingValueKey(
+  slots: readonly RunValueSlot[],
+  missingRows: readonly number[],
+  hasField: (key: string) => boolean,
+  amountOf: (key: string) => string
+): string | null {
+  for (const i of [...missingRows].sort((a, b) => a - b)) {
+    const slot = slots[i];
+    if (!slot) continue;
+    const empty = runRowValueKeys(slot, i, hasField).find((key) => amountOf(key).trim() === "");
+    if (empty) return empty;
+  }
+  return null;
 }
 
 /**

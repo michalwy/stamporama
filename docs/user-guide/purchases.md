@@ -1890,9 +1890,17 @@ so you can copy a column of numbers off the catalogue page without selecting any
   enlarged, but leaves the cursor where you are typing.
 - **The rows follow the run**, which is the order the tiles take the checklist's stamps in — the
   order you read the values off the page.
+- **The cursor starts in the first value field**, in run order, with what it holds selected — so you
+  can start typing at once. If the values are still being read as the dialog opens, the cursor moves
+  there as soon as the field appears, unless you have already clicked or typed somewhere else.
 - **Type straight into the field and press Tab for the next value**, Shift+Tab for the previous one.
   Nothing else is visited between two values, and **Tab from the last value goes to *Identify***,
   never to *Back*.
+- **Enter in any value field identifies the run**, as clicking *Identify* does. **If some rows still
+  have no value, Enter asks first**, saying how many: *Identify anyway* (or Enter again) goes ahead,
+  *Go back* (or Escape) puts the cursor in the first empty value field. Clicking *Identify* does not
+  ask — the footer already says how many values are missing. While the run cannot be identified
+  yet — a tile without a stamp or a condition — Enter does nothing, as the button does nothing.
 - **The row you are typing on is the tile in hand.** Moving into a row's value — Tab, Shift+Tab or a
   click in the field, and the same for a variant's price or a chip on the row — highlights that row,
   shows its tile in the viewer on the left and its stamp on the right, so each value is checked

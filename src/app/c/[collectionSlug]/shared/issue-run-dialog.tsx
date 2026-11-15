@@ -1,10 +1,11 @@
 "use client";
 
 import type { ScanningSetup } from "@/lib/scanning-profile";
-import { Fragment, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ConfirmDialog,
   DialogActions,
   DialogSecondaryButton,
   DialogShell,
@@ -36,10 +37,12 @@ import {
   runPriceSubjects,
   runSubjectsToRead,
   emptyRunValues,
+  firstMissingValueKey,
   mergeRunValues,
   refreshRunValues,
   runStart,
   runTileTags,
+  runValueEnter,
   runValueKeys,
   runValueSlots,
   runValueTabTarget,
@@ -618,8 +621,8 @@ export function IssueRunDialog({
   const [savingPrices, setSavingPrices] = useState(false);
   const [priceError, setPriceError] = useState<string | undefined>();
   /** The field for one subject, or null where there is none — no primary catalogue, or the read for
-   * it not in yet. */
-  const priceField = (key: string | null) => {
+   * it not in yet. `typed` is what was typed, for a submit that cannot wait for the state (#2540). */
+  const priceField = (key: string | null, typed: ReadonlyMap<string, string> = typedPrices) => {
     if (!key) return null;
     const row = runValues.rows.get(key);
     if (!row?.primaryCatalogNameId) return null;
@@ -629,7 +632,7 @@ export function IssueRunDialog({
       catalog,
       value: {
         catalogNameId: row.primaryCatalogNameId,
-        amount: typedPrices.get(key) ?? recorded ?? "",
+        amount: typed.get(key) ?? recorded ?? "",
         recorded,
         loading: !runValues.fresh.has(key),
       },
@@ -696,8 +699,74 @@ export function IssueRunDialog({
     input?.focus();
     input?.select();
   }
+  /** The missing-values question Enter asks (#2540), open or not. */
+  const [askingMissing, setAskingMissing] = useState(false);
+  /**
+   * Enter in a value field (#2540): identifies, as *Identify* does — or asks first while rows have no
+   * value — and does nothing while identifying is not possible. The field settles its amount on
+   * Enter before this runs, so what it now holds is passed on rather than read from a state that has
+   * not caught up.
+   */
+  function enterInValue(e: React.KeyboardEvent<HTMLInputElement>, key: string) {
+    if (e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    const typed = new Map(typedPrices).set(key, e.currentTarget.value);
+    switch (runValueEnter(canConfirm && !isPending, valuesMissing)) {
+      case "identify":
+        void submit(typed);
+        return;
+      case "ask":
+        setTypedPrices(typed);
+        setAskingMissing(true);
+        return;
+      case "nothing":
+        return;
+    }
+  }
+  /** *Go back*: the question closes and the cursor goes to the first value still missing. */
+  function backToMissing() {
+    setAskingMissing(false);
+    const key = firstMissingValueKey(
+      valueSlots,
+      missingRows,
+      (k) => priceField(k) != null,
+      (k) => priceField(k)?.value.amount ?? ""
+    );
+    // After the question has gone, or its shell would take the focus back on the way out.
+    requestAnimationFrame(() => {
+      const input = key ? priceInputs.current.get(key) : null;
+      input?.focus();
+      input?.select();
+    });
+  }
+  /**
+   * The cursor starts in the first value field, its content selected (#2540) — once it is there:
+   * the values may still be being read as the dialog opens. A press or a key anywhere before that
+   * means the collector has put the focus somewhere of their own, and it is left there.
+   */
+  const initialFocus = useRef<"waiting" | "done">("waiting");
+  useEffect(() => {
+    const stop = () => {
+      initialFocus.current = "done";
+    };
+    document.addEventListener("pointerdown", stop, true);
+    document.addEventListener("keydown", stop, true);
+    return () => {
+      document.removeEventListener("pointerdown", stop, true);
+      document.removeEventListener("keydown", stop, true);
+    };
+  }, []);
+  const firstValueKey = valueKeys[0] ?? null;
+  useEffect(() => {
+    if (initialFocus.current === "done" || !firstValueKey) return;
+    const input = priceInputs.current.get(firstValueKey);
+    if (!input || input.disabled) return;
+    initialFocus.current = "done";
+    input.focus();
+    input.select();
+  }, [firstValueKey]);
   /** What every value field of the run is wired with — a row's own, or a variant's under an
-   * umbrella's row: typed by subject, walked by Tab. */
+   * umbrella's row: typed by subject, walked by Tab, confirmed by Enter. */
   const fieldProps = (key: string | null): RunFieldProps => ({
     disabled: isPending || savingPrices,
     inputRef: (el) => {
@@ -707,7 +776,9 @@ export function IssueRunDialog({
       if (key) setTypedPrices((prev) => new Map(prev).set(key, v));
     },
     onKeyDown: (e) => {
-      if (key) tabThroughValues(e, key);
+      if (!key) return;
+      if (e.key === "Enter") enterInValue(e, key);
+      else tabThroughValues(e, key);
     },
   });
   const subjectFields = priceSubjects.map((s) => priceField(s.key));
@@ -716,15 +787,16 @@ export function IssueRunDialog({
     runCatalogs.size === 1 ? subjectFields.find((f) => f != null)?.catalog : undefined;
   /** The rows still without a value — on an umbrella's row, while none of its variants is priced
    * (#2161); a row whose fields are not read yet is not counted. */
-  const valuesMissing = valueSlots.filter((slot, i) => {
-    if (slot.entryIndex !== i) return false;
+  const missingRows = valueSlots.flatMap((slot, i) => {
+    if (slot.entryIndex !== i) return [];
     const stampId = assignments[i].stampId;
     if (slot.variants && stampId) {
       const asked = slot.variants.some((v) => v.entryIndex !== null && priceField(v.key));
-      return asked && umbrellaValue(stampId, stampId, resolved[i])?.value == null;
+      return asked && umbrellaValue(stampId, stampId, resolved[i])?.value == null ? [i] : [];
     }
-    return valueFields[i]?.value.amount.trim() === "";
-  }).length;
+    return valueFields[i]?.value.amount.trim() === "" ? [i] : [];
+  });
+  const valuesMissing = missingRows.length;
   /** Whether any row asks for an umbrella's variants — what the note above the run then says. */
   const asksForVariants = valueSlots.some((slot) => slot.variants && slot.variants.length > 0);
 
@@ -824,11 +896,11 @@ export function IssueRunDialog({
     });
   }
 
-  async function submit() {
+  async function submit(typed: ReadonlyMap<string, string> = typedPrices) {
     // The prices go **first** and on their own (#593's rule): a figure read off the paper catalogue
     // must not be dropped in silence, so a failed write stops here and nothing is created. A retry
     // after a later refusal writes nothing twice — the fields now prefill from what is on file.
-    const changed = changedRunPrices(priceSubjects, (key) => priceField(key)?.value ?? null);
+    const changed = changedRunPrices(priceSubjects, (key) => priceField(key, typed)?.value ?? null);
     if (changed.length > 0) {
       setSavingPrices(true);
       setPriceError(undefined);
@@ -1059,8 +1131,9 @@ export function IssueRunDialog({
         // and since #1920 by the run rows' second picture.
         maxWidth="min(98vw, 142rem)"
         height="92vh"
-        // A stamp being created over this dialog owns Escape, as the picker hands it over.
-        dismissable={!addingStamp}
+        // A stamp being created over this dialog owns Escape, as the picker hands it over — and so
+        // does the missing-values question, whose Escape is *Go back*.
+        dismissable={!addingStamp && !askingMissing}
       >
         <div
           style={{ display: "flex", flex: 1, minHeight: 0, gap: "1rem", padding: "1rem 1.25rem" }}
@@ -2008,6 +2081,22 @@ export function IssueRunDialog({
           }
         />
       </DialogShell>
+
+      {askingMissing && (
+        <ConfirmDialog
+          title="Some values are missing"
+          message={`${valuesMissing} ${valuesMissing === 1 ? "row has" : "rows have"} no catalogue value yet.`}
+          actionLabel="Identify anyway"
+          cancelLabel="Go back"
+          variant="primary"
+          actionAutoFocus
+          onConfirm={() => {
+            setAskingMissing(false);
+            void submit();
+          }}
+          onClose={backToMissing}
+        />
+      )}
 
       {addingStamp && (
         <StampFormDialog
