@@ -26,19 +26,15 @@ function rememberedSet(keys: readonly string[], namespace: string): RememberedPa
   }));
 }
 
-/** The area and the year every list rail shares (#143) — `useListAreaYearFilter`. */
-const AREA_YEAR: RememberedParam[] = [
-  {
-    name: "areaId",
-    store: { key: "stamporama:list-filters:{c}", format: "json", field: "areaId" },
-    sentinel: "all",
-  },
-  {
-    name: "year",
-    store: { key: "stamporama:list-filters:{c}", format: "json", field: "year" },
-    sentinel: "all",
-  },
-];
+/**
+ * What is chosen in the panel on a list's left — the area, the years (the structure screen's decade
+ * among them, #1401) — which **no preset holds** (#2535): a preset applies to whatever area the
+ * collector is in. They are parameters that are not view state, so a preset neither captures them nor
+ * changes them when applied, and moving through them never marks a preset modified. The sub-area
+ * switch goes with them and is in no spec's `stored`; the Wants list's area and year, kept in the
+ * shared memory alone, likewise.
+ */
+const LEFT_PANEL_PARAMS = ["areaId", "year", "decade"] as const;
 
 /** `usePersistedSort(list, …)` — global per list rather than per collection, as the hook keeps it. */
 function sort(list: string): RememberedParam[] {
@@ -47,13 +43,6 @@ function sort(list: string): RememberedParam[] {
     store: { key: `stamporama:sort:${list}`, format: "json", field },
   }));
 }
-
-/** Whether a picked area brings its sub-areas (#385) — part of what the area selection means. */
-const SUB_AREAS: StoredValue = {
-  name: "subAreas",
-  key: "stamporama:filter-include-descendants:area",
-  defaultValue: "1",
-};
 
 /** A search box's ticked fields (#2238). */
 function searchFields(namespace: string): StoredValue {
@@ -74,7 +63,6 @@ const CATALOG_VENDOR_ALONE = ["catalogVendorId"] as const;
 const TAG_MODE = [TAG_MODE_PARAM] as const;
 
 const CATALOGUE_REFS = {
-  areaId: "area",
   issueId: "issue",
   tagIds: "tag",
   issueFormatIds: "issueFormat",
@@ -86,9 +74,9 @@ const CATALOGUE_REFS = {
 
 export const COPIES_VIEW: ListViewSpec = {
   list: "copies",
+  ignoreParams: LEFT_PANEL_PARAMS,
   notNarrowing: TAG_MODE,
   remembered: [
-    ...AREA_YEAR,
     ...sort("inventory"),
     ...rememberedSet(REMEMBERED_FILTER_KEYS, "inventory-filters"),
     rememberedRaw("notOfferedPlatform", "inventory-not-offered-platform"),
@@ -98,12 +86,10 @@ export const COPIES_VIEW: ListViewSpec = {
     flag("groupByCondition", "stamporama:inventory:groupByCondition:{c}"),
     flag("groupByFormat", "stamporama:inventory:groupByFormat:{c}"),
     flag("groupByCertificate", "stamporama:inventory:groupByCertificate:{c}"),
-    SUB_AREAS,
     { name: "subLocations", key: "stamporama:filter-include-descendants:location", defaultValue: "1" },
     searchFields("inventory-search-fields"),
   ],
   refs: {
-    areaId: "area",
     issueId: "issue",
     tagIds: "tag",
     faultIds: "fault",
@@ -120,42 +106,29 @@ export const COPIES_VIEW: ListViewSpec = {
 
 export const STAMPS_VIEW: ListViewSpec = {
   list: "stamps",
+  ignoreParams: LEFT_PANEL_PARAMS,
   notNarrowing: CATALOG_VENDOR_ALONE,
-  remembered: [
-    ...AREA_YEAR,
-    ...sort("stamps"),
-  ],
-  stored: [SUB_AREAS, searchFields("stamps-search-fields")],
+  remembered: sort("stamps"),
+  stored: [searchFields("stamps-search-fields")],
   refs: CATALOGUE_REFS,
 };
 
 export const ISSUES_VIEW: ListViewSpec = {
   list: "issues",
+  ignoreParams: LEFT_PANEL_PARAMS,
   notNarrowing: CATALOG_VENDOR_ALONE,
-  remembered: [
-    ...AREA_YEAR,
-    ...sort("issues"),
-  ],
-  stored: [SUB_AREAS, searchFields("issues-search-fields")],
+  remembered: sort("issues"),
+  stored: [searchFields("issues-search-fields")],
   refs: CATALOGUE_REFS,
 };
 
-/** The Wants list keeps its filters as screen state (#844) and reads the area and the year from the
- *  shared memory alone, never the address — so the memory is captured whole, as a stored value. Its
- *  status, priorities, conditions, issue formats and search are the control's `local` view. */
+/** The Wants list keeps its filters as screen state (#844) — its status, priorities, conditions,
+ *  issue formats and search are the control's `local` view. Its area and year live in the shared
+ *  memory alone and belong to the left panel, which no preset holds (#2535). */
 export const WANTS_VIEW: ListViewSpec = {
   list: "wants",
-  stored: [
-    {
-      name: "areaYear",
-      key: "stamporama:list-filters:{c}",
-      defaultValue: JSON.stringify({ areaId: null, year: null }),
-      narrows: true,
-    },
-    flag("groupByIssue", "stamporama:wants:groupByIssue:{c}"),
-    SUB_AREAS,
-    searchFields("wants-search-fields"),
-  ],
+  ignoreParams: LEFT_PANEL_PARAMS,
+  stored: [flag("groupByIssue", "stamporama:wants:groupByIssue:{c}"), searchFields("wants-search-fields")],
   refs: { stampId: "stamp", conditionIds: "condition", issueFormatIds: "issueFormat" },
 };
 

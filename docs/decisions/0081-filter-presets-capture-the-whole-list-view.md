@@ -49,6 +49,16 @@ its own way.
    the button leaves alone no longer keeps the name on the chip marked *modified*. The button clears
    what it always cleared; the detach rides beside it (`useDetachListPreset`). Clearing the filters
    one by one keeps the rule above.
+   **Amended by #2535 (2026-11-15):** a preset **does not hold the list's left panel** — the area,
+   the years (the Copies list's decade from the structure screen among them) and the *+ sub-areas*
+   switch. They are where the collector is, and a preset such as *for sale on Colnect, grouped by
+   issue* applies to whatever area that is. Each list with the panel names `areaId`, `year` and
+   `decade` among its `ignoreParams`, so they are neither captured nor changed on apply, and moving
+   through them never marks the preset modified; the sub-area switch and the Wants list's remembered
+   area and year are in no spec's `stored`. Since they are not view state, they no longer count when
+   the list decides it is back to its plain view (#2499): an area chosen and nothing else is the
+   plain list. Presets saved before were stripped of them by a data migration, so applying one leaves
+   the list where it is. Point 4 holds for the rest of the view.
 6. **A record deleted since is dropped, and named.** The list declares which parameters reference
    which kind of record; the server stores the names those records had at each save, and when
    listing presets drops the ids that no longer exist (a switched-off platform for the filters that

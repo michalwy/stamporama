@@ -1,7 +1,9 @@
 /**
- * The **whole view of a list** as one value, for filter presets (#2487): every filter — the area
- * tree, the years and the search with its fields included — plus the sort and the grouping, captured
- * from wherever the list keeps each of them and laid back down in one go.
+ * The **whole view of a list** as one value, for filter presets (#2487): every filter — the search
+ * with its fields included — plus the sort and the grouping, captured from wherever the list keeps
+ * each of them and laid back down in one go. **The left panel is not part of it** (#2535): the area
+ * and the years are where the collector is, and a preset applies to whatever area that is — each
+ * list names them among its `ignoreParams`.
  *
  * Pure: no React, no `localStorage`, no Prisma. The browser half (`use-list-view.ts`) hands it the
  * address and a storage reader; the server half (`list-presets.ts`) uses {@link cleanListView} to
@@ -12,14 +14,15 @@
  * 1. **The address.** Every filter the URL carries is captured **wholesale** — the list's spec does
  *    not enumerate them, so a filter added to a list later is in its presets without anyone
  *    remembering to add it. A spec names only the parameters that are *not* view state
- *    (`ignoreParams`: a dialog's target, a one-off hand-off), which are left as they are on apply.
+ *    (`ignoreParams`: a dialog's target, a one-off hand-off, the left panel's area and years), which
+ *    are left as they are on apply.
  * 2. **The address, falling back to a remembered value** (`remembered`) — the filters the lists
  *    remember per collection (#693, #325): the URL wins when it names one, the stored value fills in
  *    otherwise. The view holds the value *in force*, whichever side answered, and applying writes it
  *    to **both**: the URL so the list shows it now, the store so the next visit opens on it too and a
  *    cleared value does not come back from memory.
  * 3. **Storage alone** (`stored`) — the preferences that never travel in the URL: the grouping and
- *    its axes, a search box's ticked fields, the sub-area switch.
+ *    its axes, a search box's ticked fields.
  * 4. **The screen's own state** (`local`) — a list whose filters are component state by design (the
  *    Wants list, #844) hands its control the values and a way to set them; nothing here reads them.
  *
@@ -148,16 +151,17 @@ export interface StoredValue {
   /** What the preference reads with nothing stored, so a stored default and none compare equal. */
   defaultValue?: string;
   /**
-   * Whether it changes which rows the list holds (#2499) — the Wants list's remembered area and
-   * year, the Offers list's *include closed*. Most stored values do not: a grouping arranges the
-   * rows, ticked search fields say what the search reads, the sub-area switch qualifies an area.
+   * Whether it changes which rows the list holds (#2499) — the Offers list's *include closed*. Most
+   * stored values do not: a grouping arranges the rows, ticked search fields say what the search
+   * reads.
    */
   narrows?: boolean;
 }
 
 export interface ListViewSpec {
   list: ListKey;
-  /** URL parameters that are not view state, left as they are on apply. */
+  /** URL parameters that are not view state, left as they are on apply — the left panel's area and
+   *  years among them (#2535). */
   ignoreParams?: readonly string[];
   /**
    * View parameters that never narrow the list on their own (#2499), beyond the sort
@@ -345,8 +349,9 @@ function isClearStored(value: string, defaultValue: string | undefined): boolean
 }
 
 /**
- * Whether **nothing narrows the list** (#2499): every filter cleared — the area, the years and the
- * search included — whatever the sort and the grouping. Returning to such a view detaches the preset
+ * Whether **nothing narrows the list** (#2499): every filter cleared — the search included —
+ * whatever the sort, the grouping and the left panel's area and years (#2535: not view state, so a
+ * list with an area chosen and nothing else is the plain list). Returning to such a view detaches the preset
  * that was applied. The sort and the grouping are left out on purpose: *Reset filters* leaves them
  * as they are, and a reset is the way back to the plain list (settled with the collector on
  * 2026-11-13).
