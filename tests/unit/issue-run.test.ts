@@ -6,6 +6,7 @@ import {
   changedRunPrices,
   clearedAssignments,
   emptyRunValues,
+  firstMissingValueKey,
   mergeRunValues,
   refreshRunValues,
   runSubjectsToRead,
@@ -21,6 +22,7 @@ import {
   runPriceSubjects,
   runStart,
   runTileTags,
+  runValueEnter,
   runValueKeys,
   runValueSlots,
   runValueTabTarget,
@@ -659,6 +661,17 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
         assert.deepEqual(runValueKeys(slots, () => true), []);
       });
 
+      it("sends Go back to the umbrella row's first empty variant (#2540)", () => {
+        const run = assignInTurn(["t1", "t2"], ["s1", "u"]);
+        const resolved = resolvedFor(run);
+        const slots = runValueSlots(run, resolved, variantsOf);
+        const subjects = runPriceSubjects(run, resolved, variantsOf);
+        const keyOf = (stampId: string) => subjects.find((s) => s.stampId === stampId)!.key;
+        const filled = new Set([keyOf("s1"), keyOf("u1")]);
+        const key = firstMissingValueKey(slots, [1], () => true, (k) => (filled.has(k) ? "3" : ""));
+        assert.equal(key, keyOf("u2a"));
+      });
+
       it("leaves out a variant with nothing to record on", () => {
         const run = assignInTurn(["t1"], ["u2"]);
         const slots = runValueSlots(run, resolvedFor(run), variantsOf);
@@ -684,6 +697,35 @@ describe("a checklist's stamps, in turn (#1220, #1225)", () => {
       it("leaves Shift+Tab off the first value, and a key it does not know, to the browser", () => {
         assert.equal(runValueTabTarget(keys, "a", true, true), null);
         assert.equal(runValueTabTarget(keys, "zz", false, true), null);
+      });
+    });
+
+    describe("Enter (#2540)", () => {
+      it("identifies with every value filled, and asks first while rows have none", () => {
+        assert.equal(runValueEnter(true, 0), "identify");
+        assert.equal(runValueEnter(true, 2), "ask");
+      });
+
+      it("does nothing while the run cannot be identified, values or not", () => {
+        assert.equal(runValueEnter(false, 0), "nothing");
+        assert.equal(runValueEnter(false, 2), "nothing");
+      });
+
+      it("sends Go back to the first empty field of the first row missing a value", () => {
+        const run = assignInTurn(["t1", "t2", "t3", "t4"], ["s1", "s2", "s1", "s3"]);
+        const slots = runValueSlots(
+          run,
+          run.map(() => resolveRunCopyDetails(shared, undefined))
+        );
+        const [k1, k2, , k4] = slots.map((s) => s.key!);
+        const amounts = new Map([[k1, "2"], [k2, " "], [k4, ""]]);
+        const amountOf = (k: string) => amounts.get(k) ?? "";
+        // Rows 2 and 4 are missing, handed in any order; the third row shares the first's field.
+        assert.equal(firstMissingValueKey(slots, [3, 1], () => true, amountOf), k2);
+        assert.equal(firstMissingValueKey(slots, [3], () => true, amountOf), k4);
+        // A row with no field to type in sends it nowhere.
+        assert.equal(firstMissingValueKey(slots, [1], (k) => k !== k2, amountOf), null);
+        assert.equal(firstMissingValueKey(slots, [], () => true, amountOf), null);
       });
     });
   });
