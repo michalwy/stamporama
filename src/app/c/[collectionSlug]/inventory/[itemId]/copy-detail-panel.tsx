@@ -123,6 +123,7 @@ export function CopyDetailPanel({
   sale,
   otherCopies,
   locationMoves,
+  photosReducedAt,
 }: {
   collectionId: string;
   collectionSlug: string;
@@ -136,6 +137,8 @@ export function CopyDetailPanel({
   otherCopies: OtherCopiesGroup[];
   /** Where the copy has been, newest first (#2277). */
   locationMoves: LocationMoveEntry[];
+  /** When the copy's photos were reduced, it having left (#2547), or null. */
+  photosReducedAt: string | null;
 }) {
   const maps = useAreaVendorMaps(areas, collectionId);
   const vendorMap = maps.vendorMapFor(item.areaId, item.issueId);
@@ -547,7 +550,7 @@ export function CopyDetailPanel({
               <div style={{ fontSize: "0.875rem", whiteSpace: "pre-wrap" }}>{item.notes}</div>
             </DetailCard>
 
-            <CopyPhotosCard collectionId={collectionId} itemId={item.id} photos={item.photos} />
+            <CopyPhotosCard collectionId={collectionId} itemId={item.id} photos={item.photos} reducedAt={photosReducedAt} />
 
             <CatalogPricesCard target={{ kind: "stamp", stampId: item.stampId }} />
           </DetailColumn>

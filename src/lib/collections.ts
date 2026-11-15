@@ -7,6 +7,7 @@ import { normalizeMarketCode } from "./market-anchoring";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "./bid-recommendation";
 import { parseClosedOfferPhotoTtlSetting } from "./offer-photo-cleanup-rules";
 import { parseScanSheetTtlSetting } from "./scan-sheet-cleanup-rules";
+import { parseDepartedCopyPhotoTtlSetting } from "./departed-copy-photo-rules";
 import {
   createFirstScanningProfile,
   SCANNING_SETUP_SELECT,
@@ -213,6 +214,35 @@ export async function setCollectionScanSheetTtl(
   });
 }
 
+/**
+ * Set how long this collection's copies that have left keep their full-resolution photos (#2547), or
+ * clear the setting so the collection defers to the instance again. The same grammar as the two
+ * retentions above, its own column.
+ */
+export async function setCollectionDepartedCopyPhotoTtl(
+  ownerId: string,
+  collectionId: string,
+  raw: string | null
+): Promise<void> {
+  const value = parseDepartedCopyPhotoTtlSetting(raw);
+  if (value === undefined) {
+    throw new Error(
+      'Retention must be a number of days (0 or more), or "off" to keep the photos for ever.'
+    );
+  }
+  const col = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { ownerId: true },
+  });
+  if (!col || col.ownerId !== ownerId) {
+    throw new Error("Collection not found or access denied.");
+  }
+  await prisma.collection.update({
+    where: { id: collectionId },
+    data: { departedCopyPhotoTtlDays: value },
+  });
+}
+
 /** The three percentages a bid recommendation is built from (#508). Every one optional, so the
  * settings form can save the field that changed rather than rewriting all three. */
 export interface BidPercentPatch {
@@ -283,6 +313,7 @@ export async function getCollectionBySlug(ownerId: string, slug: string) {
       bidFallbackPercent: true,
       closedOfferPhotoTtlDays: true,
       scanSheetTtlDays: true,
+      departedCopyPhotoTtlDays: true,
       ...SCANNING_SETUP_SELECT,
     },
   });

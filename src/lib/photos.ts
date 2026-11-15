@@ -98,6 +98,7 @@ export const PHOTO_FRAME_SELECT = {
   height: true,
   originalWidth: true,
   originalHeight: true,
+  reducedAt: true,
 } as const;
 
 /** A summary's measuring frame from its row, at this pipeline's cap. */

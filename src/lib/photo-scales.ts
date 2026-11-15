@@ -70,6 +70,7 @@ export async function readCopyPhotoScales(ownerId: string, itemId: string): Prom
           height: true,
           originalWidth: true,
           originalHeight: true,
+          reducedAt: true,
         },
       },
     },

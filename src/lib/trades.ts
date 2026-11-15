@@ -715,10 +715,16 @@ export async function setTradeStatus(
 
   // `agreedAt` (#1813) moves with the status in one write, so no read ever sees an agreed trade
   // without the moment it was agreed.
-  const agreedAt = agreedAtOnTransition(status, new Date());
+  // `closedAt` (#2547) the same way: `closed` is terminal, so it is stamped once and never cleared.
+  const now = new Date();
+  const agreedAt = agreedAtOnTransition(status, now);
   await prisma.trade.update({
     where: { id: tradeId },
-    data: { status, ...(agreedAt !== undefined ? { agreedAt } : {}) },
+    data: {
+      status,
+      ...(agreedAt !== undefined ? { agreedAt } : {}),
+      ...(status === "closed" ? { closedAt: now } : {}),
+    },
   });
 
   // After the write, so a trade that failed to move is never left carrying the new state's

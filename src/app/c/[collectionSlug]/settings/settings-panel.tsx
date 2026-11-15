@@ -9,6 +9,7 @@ import {
   updateCollectionDefaultLanguageAction,
   updateCollectionHomeMarketAction,
   updateCollectionScanSheetTtlAction,
+  updateCollectionDepartedCopyPhotoTtlAction,
   type ClearStorageCacheState,
 } from "@/app/actions/collections";
 import {
@@ -16,6 +17,7 @@ import {
   describeClosedOfferPhotoTtl,
 } from "@/lib/offer-photo-cleanup-rules";
 import { describeScanSheetTtl, scanSheetTtlMs } from "@/lib/scan-sheet-cleanup-rules";
+import { describeDepartedCopyPhotoTtl, departedCopyPhotoTtlMs } from "@/lib/departed-copy-photo-rules";
 import { RETENTION_FOREVER, parseRetentionSetting } from "@/lib/retention-ttl";
 import type { BidPercentPatch } from "@/lib/collections";
 import { MAX_BID_PERCENT, MIN_BID_PERCENT, parseBidPercent } from "@/lib/bid-recommendation";
@@ -51,6 +53,10 @@ interface StorageSettingsPanelProps {
    * null while the collection defers to the instance — whose answer, in words, is the second. */
   scanSheetTtl: string | null;
   instanceScanSheetTtlLabel: string;
+  /** How long a copy that has left keeps its full-resolution photos (#2547), or null while the
+   * collection defers to the instance — whose answer, in words, is the second. */
+  departedCopyPhotoTtl: string | null;
+  instanceDepartedCopyPhotoTtlLabel: string;
   photoStorageBytes: number;
   /** The local cache of remote storage objects (#591) — instance-wide, with this collection's
    * share broken out. Inactive on the filesystem backend, where the bytes are already local. */
@@ -443,8 +449,8 @@ export function CollectionSettingsPanel({ collectionId, baseCurrency, defaultLan
   );
 }
 
-/** Settings → Photos & storage (#1469): the storage figures and the two retention periods. */
-export function StorageSettingsPanel({ collectionId, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, photoStorageBytes, storageCache }: StorageSettingsPanelProps) {
+/** Settings → Photos & storage (#1469): the storage figures and the three retention periods. */
+export function StorageSettingsPanel({ collectionId, closedOfferPhotoTtl, instanceClosedOfferPhotoTtlLabel, scanSheetTtl, instanceScanSheetTtlLabel, departedCopyPhotoTtl, instanceDepartedCopyPhotoTtlLabel, photoStorageBytes, storageCache }: StorageSettingsPanelProps) {
   const [isPending, startTransition] = useTransition();
 
   // The two retention periods (#577, #578). One hook, used twice: they are separate settings with
@@ -462,6 +468,13 @@ export function StorageSettingsPanel({ collectionId, closedOfferPhotoTtl, instan
     instanceLabel: instanceScanSheetTtlLabel,
     describe: (setting) => describeScanSheetTtl(scanSheetTtlMs(setting)),
     save: (setting) => updateCollectionScanSheetTtlAction(collectionId, setting),
+    startTransition,
+  });
+  const copyRetention = useRetentionSetting({
+    initial: departedCopyPhotoTtl,
+    instanceLabel: instanceDepartedCopyPhotoTtlLabel,
+    describe: (setting) => describeDepartedCopyPhotoTtl(departedCopyPhotoTtlMs(setting)),
+    save: (setting) => updateCollectionDepartedCopyPhotoTtlAction(collectionId, setting),
     startTransition,
   });
 
@@ -511,6 +524,25 @@ export function StorageSettingsPanel({ collectionId, closedOfferPhotoTtl, instan
         }
         daysLabel="Days a finished batch keeps its card scans"
         state={scanRetention}
+        disabled={isPending}
+      />
+
+      {/* The third period (#2547): a copy that has left keeps a thumbnail and a smaller photo. The
+          hint is the sentence that prevents the costly mistake — a reduced photo cannot be brought
+          back to full resolution. */}
+      <RetentionCard
+        title="Keep full photos of copies that have left"
+        hint="A reduced photo cannot be brought back to full resolution."
+        tooltip={
+          <>
+            A copy has left when it is sold, given away in a trade or marked no longer held. After
+            this many days its photos are replaced by a smaller one, about 1000 pixels on the long
+            side, and its thumbnail stays — enough to open it and see the stamp. A copy whose sale is
+            cancelled before then keeps its full photos. 0 reduces at the next sweep.
+          </>
+        }
+        daysLabel="Days a copy that has left keeps its full photos"
+        state={copyRetention}
         disabled={isPending}
       />
     </SettingsFieldGrid>

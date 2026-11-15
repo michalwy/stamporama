@@ -2027,7 +2027,7 @@ rather be told than guess — and every reading it gives you names the profile i
 
 ### How long closed listings keep their images
 
-Beside the storage figures, **Settings → Photos & storage** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are the only thing Stamporama ever deletes on a schedule.
+Beside the storage figures, **Settings → Photos & storage** has **Keep closed listings' images** — the setting that decides how fast that figure comes back down. It is the answer to what the total above it is made of: generated listing images are what Stamporama deletes on a schedule, and the two settings below it are the only other things it ever lets go of — a [card scan](#how-long-finished-batches-keep-their-card-scans) only if you ask, and the [full-size photos of a copy that has left](#how-long-copies-that-have-left-keep-their-full-photos).
 
 There are three answers:
 
@@ -2054,6 +2054,20 @@ If you do switch it on, the batch itself stays exactly where it is: the tiles, t
 To get rid of a finished card now rather than on a schedule — the scan and the batch line together, keeping the copies — delete it yourself: see [deleting the scan of a finished card](purchases.md#deleting-the-scan-of-a-finished-card).
 
 Worth knowing before you pick a number: the mistake this protects against is a box that clipped a stamp's perforation by a few pixels, which is easy to miss while reviewing the cut and usually noticed later, looking at the copy's own photo — while the parcel is still on the desk. A period measured in weeks covers that. After it, the answer is to re-photograph that one stamp, which is cheap, because the copy's ref says which box it is in.
+
+### How long copies that have left keep their full photos
+
+Last comes **Keep full photos of copies that have left**. A copy has left when it is **sold**, **given away in a trade**, or **marked no longer held**. Once it has been gone long enough, its photos are **reduced**: the thumbnail stays as it was, and each full-size photo is replaced by a smaller one, about 1000 pixels on its long side — large enough to open and see the stamp and its perforation, and a small part of a scan's size. Everything that showed the photo — the copy's page, the sale, an earlier offer, a trade — then shows the smaller one.
+
+The same three answers again, with **90 days** as the default when neither you nor the person running this Stamporama has set another:
+
+- **Follow this instance** — 90 days unless the instance says otherwise.
+- **Delete after a number of days** — your own period, counted from the day the copy left: the sale's date, the trade's closing, or the day you marked it no longer held. **0** reduces at the next sweep.
+- **Keep for ever** — nothing is ever reduced.
+
+A copy that comes back before the period ends — its sale cancelled, say — is yours again and keeps its full photos. One that comes back later keeps the smaller photo: **a reduced photo cannot be brought back to full resolution.** Only the copy's own photos are reduced — its scans and the pictures uploaded to it; a listing's own images follow the setting above, and a photo something else still uses keeps its full size.
+
+The copy's page says when its photos were reduced, under its Photos card.
 
 
 ## Catalog prices

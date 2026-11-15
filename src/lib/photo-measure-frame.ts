@@ -35,6 +35,10 @@ export interface PhotoPixels {
   /** The upload's size before the downscale, or null on rows that predate the columns. */
   originalWidth: number | null;
   originalHeight: number | null;
+  /** When the photo was reduced (#2547), if it was. A reduced photo with no recorded original has
+   * lost the one clue the derivative's own size gave — being under the cap no longer means it is the
+   * upload — so it has no frame. */
+  reducedAt?: Date | string | null;
 }
 
 export interface MeasureFrame {
@@ -68,7 +72,8 @@ export function photoMeasureFrame(photo: PhotoPixels, maxEdge: number): MeasureF
   }
 
   // No recorded original. Under the cap on both edges the derivative is the upload; at the cap it
-  // may be a downscale by an unknown factor.
+  // may be a downscale by an unknown factor. A reduced photo (#2547) is a downscale whatever its size.
+  if (photo.reducedAt != null) return null;
   if (Math.max(width, height) >= maxEdge) return null;
   return { width, height };
 }

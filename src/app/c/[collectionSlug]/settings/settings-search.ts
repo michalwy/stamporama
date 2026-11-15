@@ -44,6 +44,7 @@ export const SETTINGS_FIELDS: Readonly<Record<SettingsEntryKey, readonly Setting
     { label: "Local cache" },
     { label: "Keep closed listings' images", words: ["retention"] },
     { label: "Keep card scans of finished batches", words: ["retention"] },
+    { label: "Keep full photos of copies that have left", words: ["retention", "reduce", "sold photos"] },
   ],
   // The dictionaries and templates show only their rows until a page's own issue gives it a detail
   // (#1471, #1474): nothing on them is a field yet, and their names are the entries'.

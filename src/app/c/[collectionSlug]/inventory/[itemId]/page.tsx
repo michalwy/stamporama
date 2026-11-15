@@ -8,6 +8,7 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { getItemListItem, listItemsPaginated } from "@/lib/items";
 import { getItemSaleRecord } from "@/lib/sales";
+import { getCopyPhotosReducedAt } from "@/lib/departed-copy-photos";
 import { getCopyLocationMoves } from "@/lib/location-moves";
 import { loadStampFamilies } from "@/lib/stamp-family";
 import { otherCopiesStampIds } from "@/lib/other-copies-rules";
@@ -56,7 +57,7 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
   if (!item) notFound();
 
   const otherCopiesStamps = otherCopiesStampIds(item);
-  const [areas, locations, sale, families, locationMoves] = await Promise.all([
+  const [areas, locations, sale, families, locationMoves, photosReducedAt] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     getLocations(session.user.id, collection.id),
     getItemSaleRecord(session.user.id, itemId),
@@ -65,6 +66,8 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
     loadStampFamilies(collection.id, otherCopiesStamps),
     // Where it has been (#2277) — read with the page, so a save's refresh re-reads it too.
     getCopyLocationMoves(session.user.id, collection.id, itemId),
+    // When its photos were reduced, the copy having left (#2547).
+    getCopyPhotosReducedAt(collection.id, itemId),
   ]);
 
   return (
@@ -92,6 +95,7 @@ export default async function CopyDetailPage({ params }: CopyDetailPageProps) {
           familyStampIds: families.get(stampId) ?? [stampId],
         }))}
         locationMoves={locationMoves}
+        photosReducedAt={photosReducedAt}
       />
     </Screen>
   );
