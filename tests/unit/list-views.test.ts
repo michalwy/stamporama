@@ -18,6 +18,7 @@ import {
 import {
   AUCTION_LOTS_VIEW,
   COPIES_VIEW,
+  ISSUES_VIEW,
   OFFERS_VIEW,
   STAMPS_VIEW,
   SUPPLIES_VIEW,
@@ -167,11 +168,9 @@ describe("writeListView", () => {
 });
 
 describe("the lists' own specs", () => {
-  it("Copies: area, years, several dropdowns, sort and grouping come back exactly", () => {
+  it("Copies: several dropdowns, sort and grouping come back exactly", () => {
     const view: ListView = {
       params: {
-        areaId: "area1",
-        year: "1950-1959",
         conditionIds: "c1,c2",
         forSale: "true",
         tagIds: "t1",
@@ -186,7 +185,6 @@ describe("the lists' own specs", () => {
         groupByCondition: "1",
         groupByFormat: "0",
         groupByCertificate: "0",
-        subAreas: "0",
         subLocations: "1",
         searchFields: "name",
       },
@@ -201,8 +199,8 @@ describe("the lists' own specs", () => {
 
   it("Copies: after clearing everything, the preset brings the view back", () => {
     const view: ListView = {
-      params: { areaId: "area1", conditionIds: "c1", sortBy: "name", sortDir: "asc" },
-      stored: { groupMode: "duplicates", groupByCondition: "0", groupByFormat: "0", groupByCertificate: "0", subAreas: "1", subLocations: "1" },
+      params: { conditionIds: "c1", sortBy: "name", sortDir: "asc" },
+      stored: { groupMode: "duplicates", groupByCondition: "0", groupByFormat: "0", groupByCertificate: "0", subLocations: "1" },
       local: {},
     };
     const cleared = roundTrip(COPIES_VIEW, { params: {}, stored: {}, local: {} });
@@ -231,25 +229,70 @@ describe("the lists' own specs", () => {
     assert.ok(sameListView(off, absent));
   });
 
-  it("Wants: the area and the year are captured from the memory the screen reads, never the address", () => {
+  it("Wants: the area and the year are captured neither from the memory nor from the address", () => {
     const store = storage({
       "stamporama:list-filters:col1": JSON.stringify({ areaId: "a1", year: "1960" }),
+      "stamporama:filter-include-descendants:area": "0",
     });
     const view = readListView(WANTS_VIEW, url("areaId=zz"), store.read, C);
-    assert.equal(view.params.areaId, "zz");
-    assert.equal(view.stored.areaYear, JSON.stringify({ areaId: "a1", year: "1960" }));
-    // Nothing chosen, stored or not, reads the same.
-    assert.ok(
-      sameListView(
-        readListView(WANTS_VIEW, url(""), () => null, C),
-        readListView(
-          WANTS_VIEW,
-          url(""),
-          storage({ "stamporama:list-filters:col1": JSON.stringify({ areaId: null, year: null }) }).read,
-          C
-        )
-      )
+    assert.deepEqual(view.params, {});
+    assert.deepEqual(view.stored, { groupByIssue: "0" });
+  });
+});
+
+// #2535: the left panel — the area, the years, the sub-area switch — is where the collector is, and
+// no preset holds it.
+describe("the left panel", () => {
+  const AREA_MEMORY = "stamporama:list-filters:col1";
+  const SUB_AREAS = "stamporama:filter-include-descendants:area";
+  const before = {
+    qs: "areaId=prl&year=1960&conditionIds=c9",
+    stored: { [AREA_MEMORY]: JSON.stringify({ areaId: "prl", year: "1960" }), [SUB_AREAS]: "0" },
+  };
+
+  for (const spec of [COPIES_VIEW, STAMPS_VIEW, ISSUES_VIEW]) {
+    it(`${spec.list}: is not captured`, () => {
+      const view = readListView(spec, url(before.qs), storage(before.stored).read, C);
+      assert.equal(view.params.areaId, undefined);
+      assert.equal(view.params.year, undefined);
+      assert.equal(view.stored.subAreas, undefined);
+      assert.equal(view.params.conditionIds, "c9");
+    });
+
+    it(`${spec.list}: is left as it is by applying a preset — one saved before the change included`, () => {
+      const old: ListView = {
+        params: { areaId: "gdr", year: "1950", decade: "1950s", search: "x" },
+        stored: { subAreas: "1" },
+        local: {},
+      };
+      const { url: written, store, read } = roundTrip(spec, old, before);
+      assert.equal(written.get("areaId"), "prl");
+      assert.equal(written.get("year"), "1960");
+      assert.equal(written.get("decade"), null);
+      assert.equal(written.get("search"), "x");
+      assert.equal(written.get("conditionIds"), null);
+      assert.equal(store.map.get(AREA_MEMORY), before.stored[AREA_MEMORY]);
+      assert.equal(store.map.get(SUB_AREAS), "0");
+      assert.equal(read.params.search, "x");
+    });
+  }
+
+  it("copies: the structure screen's decade is the years too", () => {
+    const { url: written } = roundTrip(COPIES_VIEW, { params: {}, stored: {}, local: {} }, {
+      qs: "decade=1960s&tagIds=t1",
+    });
+    assert.equal(written.toString(), "decade=1960s");
+  });
+
+  it("moving to another area or other years leaves the view the same, so no preset is modified", () => {
+    const a = readListView(COPIES_VIEW, url("areaId=prl&year=1960&forSale=true"), () => null, C);
+    const b = readListView(
+      COPIES_VIEW,
+      url("areaId=gdr&decade=1970s&forSale=true"),
+      storage({ [SUB_AREAS]: "0" }).read,
+      C
     );
+    assert.ok(sameListView(a, b), JSON.stringify([a, b]));
   });
 });
 
@@ -320,19 +363,30 @@ describe("stored values", () => {
 describe("isUnnarrowedListView", () => {
   const view = (v: Partial<ListView>): ListView => ({ params: {}, stored: {}, local: {}, ...v });
 
-  it("is the plain list with every filter cleared, the area and the years included", () => {
+  it("is the plain list with every filter cleared", () => {
     assert.equal(isUnnarrowedListView(COPIES_VIEW, view({})), true);
-    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { areaId: "a1" } })), false);
-    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { year: "1960" } })), false);
     assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { search: "x" } })), false);
     // A filter only the address carries counts the same, named in no spec.
-    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { decade: "1960" } })), false);
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, view({ params: { held: "2" } })), false);
+  });
+
+  it("is the plain list with an area and years chosen and nothing else (#2535)", () => {
+    const read = (qs: string) => readListView(COPIES_VIEW, url(qs), () => null, C);
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, read("areaId=a1&year=1960")), true);
+    assert.equal(isUnnarrowedListView(COPIES_VIEW, read("decade=1960s")), true);
+    const wants = readListView(
+      WANTS_VIEW,
+      url(""),
+      storage({ "stamporama:list-filters:col1": JSON.stringify({ areaId: "a1", year: null }) }).read,
+      C
+    );
+    assert.equal(isUnnarrowedListView(WANTS_VIEW, wants), true);
   });
 
   it("leaves the sort and the grouping out", () => {
     const sortedAndGrouped = view({
       params: { sortBy: "price", sortDir: "desc" },
-      stored: { groupMode: "issue", groupByCondition: "1", searchFields: "name", subAreas: "0" },
+      stored: { groupMode: "issue", groupByCondition: "1", searchFields: "name" },
     });
     assert.equal(isUnnarrowedListView(COPIES_VIEW, sortedAndGrouped), true);
     assert.equal(isUnnarrowedListView(SUPPLIES_VIEW, view({ params: { month: "1" } })), true);
@@ -350,10 +404,6 @@ describe("isUnnarrowedListView", () => {
   it("counts a stored value that changes the rows, at its default or not", () => {
     assert.equal(isUnnarrowedListView(OFFERS_VIEW, view({ stored: { includeClosed: "0" } })), true);
     assert.equal(isUnnarrowedListView(OFFERS_VIEW, view({ stored: { includeClosed: "1" } })), false);
-    const areaYear = (v: object) => view({ stored: { areaYear: JSON.stringify(v) } });
-    assert.equal(isUnnarrowedListView(WANTS_VIEW, areaYear({ year: null, areaId: null })), true);
-    assert.equal(isUnnarrowedListView(WANTS_VIEW, areaYear({})), true);
-    assert.equal(isUnnarrowedListView(WANTS_VIEW, areaYear({ areaId: "a1", year: null })), false);
   });
 
   it("counts a list's own screen state", () => {

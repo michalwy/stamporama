@@ -38,9 +38,9 @@ import { usePersistedCollectionValue } from "./use-persisted-collection-value";
 //
 // **What a preset holds** is the list's whole view, and the rules for capturing and laying it down
 // are `list-views.ts`: the address wholesale, the values each list remembers, its stored preferences
-// (grouping, search fields, sub-area switch). This file is the control and nothing else: it reads the
-// view the list is showing, compares it with the preset last applied, and writes a preset's view back
-// — storage first, then the address, so the list's own hooks read the new view as one change.
+// (grouping, search fields) — never the left panel's area and years (#2535). This file is the control
+// and nothing else: it reads the view the list is showing, compares it with the preset last applied,
+// and writes a preset's view back — storage first, then the address, so the list's own hooks read the new view as one change.
 //
 // **The applied preset is remembered per list and collection**, not carried in the address: the
 // view is the navigation state and the preset only the name it arrived under (#773's reasoning for
@@ -460,8 +460,8 @@ export function ListPresetsControl({
                   color: "var(--color-text-secondary)",
                 }}
               >
-                Keeps every filter on this list — the area, the years and the search with its fields
-                included — with the sort and the grouping.
+                Keeps every filter on this list — the search with its fields included — with the sort
+                and the grouping. The area and the years stay as they are.
               </p>
             )}
           </DialogBody>
