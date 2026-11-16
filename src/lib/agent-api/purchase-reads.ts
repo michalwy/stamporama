@@ -329,10 +329,76 @@ export interface AgentPurchaseLot {
   /** `open` while copies are still being identified; `closed` once its cost is frozen onto them. */
   readonly status: string;
   readonly copies: number;
+  /** Its copies (#2551), in the order they were added — at most {@link MAX_LOT_COPIES_LISTED};
+   *  `copies` is the full count. Absent on an empty lot. */
+  readonly copyList?: readonly AgentLotCopy[];
   /** Whether `remove_purchase_lot` would take it: open, empty, and on nothing else's record. */
   readonly removable: boolean;
   /** The lot's price and its share of the order's shipping, in both currencies. */
   readonly spend: AgentSpend;
+}
+
+/** How many of a lot's copies `get_purchase` lists; the lot's `copies` states the full count. An
+ *  order email names a lot's stamps one by one, so a lot past this is the collector's own intake. */
+export const MAX_LOT_COPIES_LISTED = 100;
+
+/** The *to review* marker as an answer states it (#1626's shape, on a copy since #2551). */
+export interface AgentToReview {
+  readonly at: string;
+  readonly created: boolean;
+  readonly changed: readonly string[];
+}
+
+/** One copy of a purchase lot (#2551) — what an assistant filling the lot needs to see it added. */
+export interface AgentLotCopy {
+  readonly copyId: string;
+  readonly itemNo: number;
+  readonly stampId: string;
+  /** The stamp's short number (`st 123`), its name and its catalogue numbers, primary first. */
+  readonly stampNo: number;
+  readonly stamp?: string;
+  readonly catalogNumbers: readonly string[];
+  /** Absent on a piece, which has no condition (#2383). */
+  readonly condition?: string;
+  /** Absent on a single, which is what no format means. */
+  readonly format?: string;
+  /** `ordered` until the order arrives; only an ordered copy is corrected or removed here. */
+  readonly state: string;
+  /** What the agent API wrote that the collector has not confirmed yet. */
+  readonly toReview?: AgentToReview;
+}
+
+/** The fields one lot copy is projected from. */
+export interface LotCopyRow {
+  readonly id: string;
+  readonly itemNo: number;
+  readonly stampId: string;
+  readonly stampNo: number;
+  readonly stampName: string | null;
+  readonly catalogNumbers: readonly string[];
+  readonly conditionName: string | null;
+  readonly formatName: string | null;
+  readonly deliveryState: string;
+  readonly apiReviewAt: Date | null;
+  readonly apiReviewCreated: boolean;
+  readonly apiReviewFields: readonly string[];
+}
+
+export function lotCopy(row: LotCopyRow): AgentLotCopy {
+  return compact({
+    copyId: row.id,
+    itemNo: row.itemNo,
+    stampId: row.stampId,
+    stampNo: row.stampNo,
+    stamp: row.stampName ?? undefined,
+    catalogNumbers: [...row.catalogNumbers],
+    condition: row.conditionName ?? undefined,
+    format: row.formatName ?? undefined,
+    state: row.deliveryState,
+    toReview: row.apiReviewAt
+      ? { at: row.apiReviewAt.toISOString(), created: row.apiReviewCreated, changed: [...row.apiReviewFields] }
+      : undefined,
+  }) as AgentLotCopy;
 }
 
 /** One non-inventory line. */
@@ -428,6 +494,8 @@ export function purchase(
     readonly path: string;
     /** Lots another record points at (a won auction lot, a trade line) — never removable here. */
     readonly linkedLotIds: ReadonlySet<string>;
+    /** Each lot's copies, as listed (#2551); a lot absent here lists none. */
+    readonly copiesByLot?: ReadonlyMap<string, readonly AgentLotCopy[]>;
   }
 ): AgentPurchase {
   const fromTrade = row.trade !== null;
@@ -455,6 +523,7 @@ export function purchase(
         price: lot.price ?? "0.00",
         status: lot.status,
         copies: lot.itemCount,
+        copyList: extra.copiesByLot?.get(lot.id)?.length ? extra.copiesByLot.get(lot.id) : undefined,
         removable:
           !fromTrade && lot.status === "open" && lot.itemCount === 0 && !extra.linkedLotIds.has(lot.id),
         spend: spend(lot.spend),

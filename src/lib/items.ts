@@ -8,6 +8,8 @@ import {
 import { catalogVendorWhere } from "./catalog-search-scope";
 import "server-only";
 import { COUNTING_CHECKLIST_MEMBER } from "./issue-format-series";
+import type { ApiReviewMark, StoredApiReview } from "./auction-review";
+import { readCopyApiReview } from "./copy-review";
 import { Prisma } from "@/generated/prisma/client";
 import type { TilePhotoRole } from "./tile-photo-roles";
 import { prisma, type DbTransaction } from "./db";
@@ -841,7 +843,11 @@ export async function updateItem(
   itemId: string,
   data: ItemUpdateInput,
   // What a change of the copy's location or ref is recorded as moved by (#2277).
-  move: MoveSource = { source: "copy_form" }
+  move: MoveSource = { source: "copy_form" },
+  // The *to review* marker as it stands after this write (#2551), when the agent API makes it —
+  // written in the same update, so the correction is never visible unmarked. Only
+  // `lot-copies-api.ts` passes it; every other caller leaves the marker alone.
+  apiReview?: StoredApiReview
 ): Promise<UpdateItemResult> {
   const current = await prisma.item.findUnique({
     where: { id: itemId },
@@ -920,7 +926,7 @@ export async function updateItem(
 
   const item = await prisma.$transaction(async (tx) => {
     await setMoveSourceTx(tx, move);
-    await tx.item.update({ where: { id: itemId }, data: updateData });
+    await tx.item.update({ where: { id: itemId }, data: { ...updateData, ...(apiReview ?? {}) } });
     if (excludedPlatformIds) {
       // A replace, expressed as a delete of what is no longer ticked plus a create of what is:
       // `skipDuplicates` leaves the rows that survive untouched, so an exclusion keeps the date it
@@ -2022,6 +2028,9 @@ export interface ItemListItem {
   /** Internal copy number (#268): per-collection, assigned on creation, never editable.
    *  Rendered through `formatItemNo` (`#123`). */
   itemNo: number;
+  /** The *to review* marker (#2551): the agent API added this copy to its lot, or corrected it,
+   *  and the collector has not confirmed it yet. Null when there is nothing to review. */
+  apiReview: ApiReviewMark | null;
   stampId: string;
   stampName: string | null;
   /** True when the copy links to a base stamp (parentId === null) that has variants,
@@ -2207,6 +2216,10 @@ export interface PaginatedItemsResult {
 const ITEM_LIST_SELECT = {
   id: true,
   itemNo: true,
+  // The *to review* marker (#2551).
+  apiReviewAt: true,
+  apiReviewCreated: true,
+  apiReviewFields: true,
   stampId: true,
   // How many variant trees the copy's candidate set spans (#1651) — 0 for none.
   candidateTrees: true,
@@ -2478,6 +2491,7 @@ function toItemListItem(
   return {
     id: row.id,
     itemNo: row.itemNo,
+    apiReview: readCopyApiReview(row),
     stampId: row.stampId,
     stampName: row.stamp.name,
     unknownVariant:
@@ -4418,6 +4432,9 @@ export interface LotIntakeSummary {
   blockingCount: number;
   /** Copies with no attached photos (#177) — the "no photos" filter's target count. */
   noPhotoCount: number;
+  /** Copies the agent API added or corrected and the collector has not confirmed (#2551) — the lot
+   *  header's *to review* chip and what its *Confirm* reaches. */
+  apiReviewCount: number;
   /** Σ positive base-currency catalog weight over staying copies; the denominator for the
    * per-copy live cost estimate (`poolBase * weight / estimateWeightBase`). */
   estimateWeightBase: number;
@@ -4470,6 +4487,7 @@ export async function getLotIntakeSummary(
     unsortedCount: all.filter((i) => UNSORTED_DELIVERY_STATES.has(i.deliveryState)).length,
     blockingCount: staying.filter((i) => i.value.baseAmount == null).length,
     noPhotoCount: all.filter((i) => i.photos.length === 0).length,
+    apiReviewCount: all.filter((i) => i.apiReview !== null).length,
     estimateWeightBase: weightBase,
     derivedLabel: deriveLotLabel(all, maps),
     groupTree: buildGroupTree(matching, filters, areas),

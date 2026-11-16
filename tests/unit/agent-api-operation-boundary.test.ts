@@ -1002,6 +1002,10 @@ describe("the agent API's operation modules (#1539)", () => {
  * `CONFIRMED_API_REVIEW` is on it because it is what a confirm writes: a handler importing it is
  * clearing the marker by hand rather than through a function on this list.
  *
+ * **A copy's marker (#2551) is on it too**: the lot-copy writes mark the copies they add or correct,
+ * and only the collector's *Confirm* on the purchase's screen — `confirmCopyApiReviews` — clears it.
+ * `CONFIRMED_API_REVIEW`, already here, is what that confirm writes.
+ *
  * **A sale's marker (#1948) is on it too**, on the same terms: the sale writes #1949 opens mark the
  * sale through `markSaleWrittenByApi`, and only the collector's *Confirm* — `confirmSaleReview`, or
  * `CONFIRMED_SALE_API_REVIEW` written by hand — takes the mark off.
@@ -1012,6 +1016,7 @@ const REVIEW_CLEARERS = new Map<string, string>([
   ["CONFIRMED_API_REVIEW", "src/lib/auction-review.ts"],
   ["confirmSaleReview", "src/lib/sales.ts"],
   ["CONFIRMED_SALE_API_REVIEW", "src/lib/sale-review.ts"],
+  ["confirmCopyApiReviews", "src/lib/lot-copies-api.ts"],
 ]);
 
 describe("the agent API's operation modules (#1626)", () => {

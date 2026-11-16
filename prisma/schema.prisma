@@ -3861,6 +3861,13 @@ model Item {
   locationId          String?
   locationRef         String?
   createdAt           DateTime @default(now())
+  // The *to review* marker (#2551), exactly as on `AuctionLot` (#1626): set when the agent API adds
+  // this copy to a purchase lot or corrects it there, cleared only by the collector's *Confirm* on
+  // the purchase's screen. `apiReviewAt` null is no marker; `apiReviewCreated` says the API added the
+  // copy, `apiReviewFields` what it corrected (`copy-review.ts`). Editing in the app leaves all three.
+  apiReviewAt         DateTime?
+  apiReviewCreated    Boolean  @default(false)
+  apiReviewFields     String[] @default([])
 
   collection        Collection           @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   stamp             Stamp                @relation("ItemStamp", fields: [stampId], references: [id], onDelete: Cascade)

@@ -232,6 +232,8 @@ import {
   type PendingSelection,
 } from "@/app/c/[collectionSlug]/shared/intake-condition-dialog";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
+import { CopyApiReviewChip } from "@/app/c/[collectionSlug]/shared/copy-api-review-chip";
+import { describeLotCopiesToReview } from "@/lib/copy-review";
 import { useUmbrellaPricesQuestion, withUmbrellaAnswer } from "@/app/c/[collectionSlug]/shared/umbrella-prices-question";
 import { CaretCell, CheckCell } from "@/app/c/[collectionSlug]/shared/cell-target";
 
@@ -2460,6 +2462,15 @@ function useCopyEditing(ctx: {
     setCopyError(undefined);
   }
 
+  /** The collector's *Confirm* on one copy the agent API added or corrected (#2551). */
+  function confirmCopyReview(item: ItemListItem) {
+    run(async () => {
+      const { confirmCopyApiReviewsAction } = await import("@/app/actions/purchases");
+      const r = await confirmCopyApiReviewsAction({ itemIds: [item.id] });
+      return { ...r, refresh: { lotIds: item.lotId ? [item.lotId] : [], orderChanged: false } };
+    });
+  }
+
   function removeCopy(item: ItemListItem) {
     run(async () => {
       const { removeLotItemAction } = await import("@/app/actions/purchases");
@@ -2716,6 +2727,7 @@ function useCopyEditing(ctx: {
     setCopyError,
     runBulk,
     removeCopy,
+    confirmCopyReview,
     editCopyRow,
     setBulkMove,
     setBulkStore,
@@ -2836,6 +2848,18 @@ function CopyRow({
                     target: { kind: "ids", ids: [item.id] },
                     fromLotId: item.lotId,
                   }),
+              },
+            ] satisfies RowAction[])
+          : []),
+        // What the agent API added or corrected waits for the collector (#2551); confirming it is the
+        // only thing that takes the marker off.
+        ...(item.apiReview
+          ? ([
+              {
+                key: "confirm-review",
+                label: "Confirm review",
+                icon: "check",
+                onSelect: () => copy.confirmCopyReview(item),
               },
             ] satisfies RowAction[])
           : []),
@@ -3539,6 +3563,8 @@ function LotCard({
   // Copies with no attached photo yet — surfaced so the collector can find what still needs
   // photographing (#177). Relevant on open and closed lots alike.
   const noPhotoCount = summary?.noPhotoCount ?? 0;
+  // Copies the agent API added or corrected and nobody has confirmed (#2551).
+  const apiReviewCount = summary?.apiReviewCount ?? 0;
   // Denominator for the live per-copy cost estimate (Σ positive base weight over staying copies).
   const weightBase = summary?.estimateWeightBase ?? 0;
   const groupTree = summary?.groupTree ?? [];
@@ -3626,6 +3652,25 @@ function LotCard({
   }
 
   const actions: RowAction[] = [
+    // The collector's *Confirm* on every copy here the agent API added or corrected (#2551) — open
+    // or closed, since closing a lot reviews nothing. One copy at a time is the row's own ⋮.
+    ...(apiReviewCount > 0
+      ? ([
+          {
+            key: "confirm-review",
+            label: `Confirm ${apiReviewCount} cop${apiReviewCount === 1 ? "y" : "ies"} to review`,
+            icon: "check",
+            hint: "Added or corrected through the agent API",
+            onSelect: () =>
+              onRun(async () => {
+                const { confirmCopyApiReviewsAction } = await import("@/app/actions/purchases");
+                const r = await confirmCopyApiReviewsAction({ lotId: lot.id });
+                if (r.status === "error") setCopyError(r.message);
+                return { ...r, refresh: { lotIds: [lot.id], orderChanged: false } };
+              }),
+          },
+        ] satisfies RowAction[])
+      : []),
     ...(open
       ? ([
           // "Add stamps" is surfaced as a standalone quick-access button in the header, not here.
@@ -3821,6 +3866,15 @@ function LotCard({
         {noPhotoCount > 0 && (
           <Tooltip content="Copies of this lot with no photo attached">
             <span style={tintChip("accent", "").style}>{noPhotoCount} no photos</span>
+          </Tooltip>
+        )}
+        {/* What the agent API added or corrected here, waiting for the collector (#2551) — on a
+            closed lot too, since closing does not review anything. */}
+        {apiReviewCount > 0 && (
+          <Tooltip content={describeLotCopiesToReview(apiReviewCount)}>
+            <span style={{ ...tintChip("warning", "").style, fontWeight: 600 }}>
+              {apiReviewCount} to review · API
+            </span>
           </Tooltip>
         )}
         <span style={{ flex: 1 }} />
@@ -4997,6 +5051,8 @@ function LotCopyChips({
 
   return (
     <>
+      {/* Added or corrected through the agent API and not yet confirmed (#2551). */}
+      <CopyApiReviewChip mark={item.apiReview} chipStyle={CHIP} />
       {onSetDeliveryState ? (
         <Tooltip content="Set this copy's delivery status">
           <select

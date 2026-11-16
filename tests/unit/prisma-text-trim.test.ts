@@ -174,8 +174,9 @@ describe("the schema this rule was reasoned about", () => {
 
   it("holds no String[] column that could carry prose", () => {
     // An array under a column's name is left alone, because it is either a `Json` array or one of
-    // these. All of them hold ids, which have no whitespace to remove — and `apiReviewFields` (twice:
-    // an auction sale's and a lot's, #1626) holds field keys the code writes, never typed text.
+    // these. All of them hold ids, which have no whitespace to remove — and `apiReviewFields` (three
+    // times: an auction sale's and a lot's, #1626, and a copy's, #2551) holds field keys the code
+    // writes, never typed text.
     // `anchorMarkets` (#1634) holds two-letter country codes, normalised by the domain on write.
     // `customSettings` (#1661) holds a Facebook group's setting keys, filtered to the known ones.
     // `issueFormatIds` (a lot-builder preset's, #2440) holds ids, and the literal `stamp` the code writes.
@@ -185,6 +186,7 @@ describe("the schema this rule was reasoned about", () => {
     assert.deepEqual(found, [
       "anchorMarkets",
       "apiReviewActions",
+      "apiReviewFields",
       "apiReviewFields",
       "apiReviewFields",
       "conditionIds",

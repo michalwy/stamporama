@@ -1437,6 +1437,12 @@ export async function intakeStamps(
      * the same cover — every copy gets the same list, because that is what ticking them asserted.
      */
     stamps?: readonly ItemStampEntryInput[] | null;
+    /**
+     * Set when the agent API adds the copies (#2551): they are written already carrying the *to
+     * review* marker (`copy-review.ts`), in the same write that creates them, so no copy the
+     * assistant added is ever visible unmarked. Only `lot-copies-api.ts` passes it.
+     */
+    apiReviewAt?: Date | null;
   }
 ): Promise<ArrivingCopy[]> {
   const { lotId } = target;
@@ -1569,6 +1575,7 @@ export async function intakeStamps(
     forTrade: input.forTrade ?? false,
     lotId,
     deliveryState,
+    ...(input.apiReviewAt ? { apiReviewAt: input.apiReviewAt, apiReviewCreated: true } : {}),
   });
 
   // A single-stamp intake may carry photos for the one created copy (#148). Create that copy

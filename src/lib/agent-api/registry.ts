@@ -45,8 +45,8 @@
 // is entered: the lot, its corrections, its contents, its ceiling, and its sale's terms — then the realised prices
 // read off other people's auctions (#1635), in the order a results page is entered: what is already recorded, the
 // page, a correction, a deletion — then purchases (#1390), in the order an order confirmation
-// is entered: is it already here, who sold it, the purchase, its lots, its expenses, its packing
-// supplies (#1910) — then the shipping and packing data (#1910), in the order it is set up: the
+// is entered: is it already here, who sold it, the purchase, its lots, what is in them (#2551), its
+// expenses, its packing supplies (#1910) — then the shipping and packing data (#1910), in the order it is set up: the
 // carriers and their rate lists, the platforms' options that link to them, the supplies with their
 // stock and history, and the uses without a sale — then the
 // catalogue (#1438), in the order a catalogue page is entered: the issue, the stamps added to it,
@@ -180,6 +180,11 @@ import {
   updatePurchaseLotOperation,
   updatePurchaseOperation,
 } from "./operations/purchases";
+import {
+  addPurchaseLotCopiesOperation,
+  removePurchaseLotCopyOperation,
+  updatePurchaseLotCopyOperation,
+} from "./operations/lot-copies";
 import {
   addIssueStampsOperation,
   addStampVariantsOperation,
@@ -349,6 +354,9 @@ export const OPERATIONS: readonly Operation[] = [
   addPurchaseLotOperation,
   updatePurchaseLotOperation,
   removePurchaseLotOperation,
+  addPurchaseLotCopiesOperation,
+  updatePurchaseLotCopyOperation,
+  removePurchaseLotCopyOperation,
   addPurchaseExpenseOperation,
   updatePurchaseExpenseOperation,
   removePurchaseExpenseOperation,
