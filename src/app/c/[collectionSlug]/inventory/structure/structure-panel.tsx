@@ -430,7 +430,7 @@ export function StructurePanel({
         yearsLoading={yearsLoading}
         selectedYear={railYear}
         onSelectYear={(y) => update({ year: y ?? "", decade: "" })}
-        yearSpan={decade !== null ? { label: `${decade}–${decade + 9}` } : null}
+        yearSpan={decade !== null ? { label: `${decade}–${decade + 9}`, from: decade, to: decade + 9 } : null}
       />
 
       <div style={MAIN_STYLE}>

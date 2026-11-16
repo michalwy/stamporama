@@ -1490,7 +1490,7 @@ export function InventoryListPanel({
           yearsLoading={yearsLoading}
           selectedYear={railYear || null}
           onSelectYear={(y) => updateParams({ year: y ?? "all", decade: "" })}
-          yearSpan={decade !== null ? { label: `${decade}–${decade + 9}` } : null}
+          yearSpan={decade !== null ? { label: `${decade}–${decade + 9}`, from: decade, to: decade + 9 } : null}
         />
 
         <div

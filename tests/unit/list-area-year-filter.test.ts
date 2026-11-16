@@ -4,9 +4,13 @@ import {
   ALL_SENTINEL,
   areaYearMemoryKey,
   areaYearUrlUpdates,
+  decadeStretchEnd,
+  groupYearsByDecade,
   readYearFilter,
   readYearSelection,
   resolveAreaYearFilter,
+  selectionTouchesDecade,
+  selectsWholeDecade,
   shouldRememberAreaYear,
   singleYear,
   yearRangeLabel,
@@ -285,5 +289,61 @@ describe("a range of years on the rail (#2258)", () => {
       year: "1945-1960",
     });
     assert.deepEqual(resolveAreaYearFilter(sources({ storedYear: "1945-1960" })).year, "1945-1960");
+  });
+});
+
+describe("year rail decades (#2553)", () => {
+  it("groups years into calendar decades with summed counts, No year left outside", () => {
+    const facets = [
+      { year: 1944, count: 2 },
+      { year: 1945, count: 3 },
+      { year: 1950, count: 1 },
+      { year: 1976, count: 4 },
+      { year: 1979, count: 5 },
+      { year: null, count: 7 },
+    ];
+    const { decades, noYear } = groupYearsByDecade(facets);
+    assert.deepEqual(
+      decades.map((d) => [d.start, d.count, d.years.map((y) => y.year)]),
+      [
+        [1940, 5, [1944, 1945]],
+        [1950, 1, [1950]],
+        [1970, 9, [1976, 1979]],
+      ]
+    );
+    assert.deepEqual(noYear, { year: null, count: 7 });
+  });
+
+  it("draws no decade for years without items, and none at all for an empty rail", () => {
+    assert.deepEqual(groupYearsByDecade([]), { decades: [], noYear: null });
+    const { decades } = groupYearsByDecade([{ year: 1944, count: 1 }, { year: 2025, count: 1 }]);
+    assert.deepEqual(decades.map((d) => d.start), [1940, 2020]);
+  });
+
+  it("recognises a decade selected whole, however it is spelled", () => {
+    assert.equal(selectsWholeDecade(readYearSelection("1970-1979"), 1970), true);
+    assert.equal(selectsWholeDecade(readYearSelection("1970s"), 1970), true);
+    assert.equal(selectsWholeDecade(readYearSelection("1970-1978"), 1970), false);
+    assert.equal(selectsWholeDecade(readYearSelection("1976"), 1970), false);
+    assert.equal(selectsWholeDecade(readYearSelection(null), 1970), false);
+  });
+
+  it("finds the decades a year or any part of a span falls in", () => {
+    assert.equal(selectionTouchesDecade(readYearSelection("1976"), 1970), true);
+    assert.equal(selectionTouchesDecade(readYearSelection("1976"), 1960), false);
+    assert.equal(selectionTouchesDecade(readYearSelection("1965-1972"), 1960), true);
+    assert.equal(selectionTouchesDecade(readYearSelection("1965-1972"), 1970), true);
+    assert.equal(selectionTouchesDecade(readYearSelection("1965-1972"), 1980), false);
+    assert.equal(selectionTouchesDecade(readYearSelection("1975-"), 2020), true);
+    assert.equal(selectionTouchesDecade(readYearSelection("-1918"), 1910), true);
+    assert.equal(selectionTouchesDecade(readYearSelection("-1918"), 1920), false);
+    assert.equal(selectionTouchesDecade(readYearSelection("none"), 1970), false);
+    assert.equal(selectionTouchesDecade(readYearSelection(null), 1970), false);
+  });
+
+  it("stretches a Shift-click on a decade to its near end, or not at all from inside it", () => {
+    assert.equal(decadeStretchEnd(1945, 1970), 1970);
+    assert.equal(decadeStretchEnd(1995, 1970), 1979);
+    assert.equal(decadeStretchEnd(1974, 1970), null);
   });
 });

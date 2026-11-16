@@ -136,6 +136,60 @@ export function singleYear(value: string | null | undefined): number | null {
   return selection.kind === "year" ? selection.year : null;
 }
 
+/**
+ * The year rail's rows gathered into calendar decades (#2553): each decade its first year, the sum
+ * of its years' counts and the years themselves in the order given. **Only years that have items
+ * make a decade**, so a decade with none is not drawn, and the *No year* bucket stays outside every
+ * decade, as it stays outside every span.
+ */
+export function groupYearsByDecade<T extends { year: number | null; count: number }>(
+  facets: readonly T[]
+): { decades: { start: number; count: number; years: T[] }[]; noYear: T | null } {
+  const byStart = new Map<number, { start: number; count: number; years: T[] }>();
+  let noYear: T | null = null;
+  for (const facet of facets) {
+    if (facet.year === null) {
+      noYear = facet;
+      continue;
+    }
+    const start = decadeOf(facet.year);
+    let decade = byStart.get(start);
+    if (!decade) {
+      decade = { start, count: 0, years: [] };
+      byStart.set(start, decade);
+    }
+    decade.count += facet.count;
+    decade.years.push(facet);
+  }
+  return { decades: [...byStart.values()].sort((a, b) => a.start - b.start), noYear };
+}
+
+/** Whether `selection` is the decade starting at `start`, whole — *1970–1979*, however spelled. */
+export function selectsWholeDecade(selection: YearSelection, start: number): boolean {
+  return selection.kind === "range" && selection.from === start && selection.to === start + 9;
+}
+
+/** Whether any year of the decade starting at `start` is inside `selection`. */
+export function selectionTouchesDecade(selection: YearSelection, start: number): boolean {
+  if (selection.kind === "year") return decadeOf(selection.year) === start;
+  if (selection.kind !== "range") return false;
+  return (
+    (selection.from === null || selection.from <= start + 9) &&
+    (selection.to === null || selection.to >= start)
+  );
+}
+
+/**
+ * Where a Shift-click on a decade's name stretches a span from `anchor` to (#2553): the decade's
+ * **near end** — its first year from below, its last from above. Null with the anchor inside the
+ * decade, which has no near end; the click then selects the decade whole.
+ */
+export function decadeStretchEnd(anchor: number, start: number): number | null {
+  if (anchor < start) return start;
+  if (anchor > start + 9) return start + 9;
+  return null;
+}
+
 /** A span as it is written for the collector: *1945–1960*, *1945 onwards*, *up to 1918*. */
 export function yearRangeLabel(from: number | null, to: number | null): string {
   if (from !== null && to !== null) return `${from}–${to}`;
