@@ -891,8 +891,9 @@ It goes out two ways:
   dialog.
 - **Generate link** makes a link the buyer opens **without an account**. As with an offer's
   specification link, the dialog has **Copy link**, **Open as the buyer sees it**, **New link** (the
-  old address stops working) and **Withdraw**, and says when the link was made and last opened. A post
-  has one link.
+  old address stops working) and **Withdraw**, and says when the link was made, when it was last
+  opened and how often; **Visit history** lists every opening ([Who opened a share link](share-links.md)).
+  A post has one link.
 
 **The link stays live.** Once the group approves the post, the page gains a link to the post in the
 group (a pending post's own link opens only for you, so it is never shown). A lot that sells — an

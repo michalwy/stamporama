@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
+import { recordShareLinkPageVisit } from "@/lib/share-link-page-visit";
 import { readSharedProposalDocument, verifyProposalShareToken } from "@/lib/proposal-handout";
 import {
   PROPOSAL_SHARE_REFUSAL,
@@ -55,6 +56,9 @@ export default async function ProposalSharePage({ params }: SharePageProps) {
     return <Notice message="Too many requests. Please wait a moment and reload the page." />;
   }
 
+  // Every opening is a visit (#2557), recorded before the link is checked so a replaced or withdrawn
+  // link's is too.
+  await recordShareLinkPageVisit("proposal", token);
   const access = await verifyProposalShareToken(token);
   if (!access) return <Notice message={PROPOSAL_SHARE_REFUSAL} />;
 

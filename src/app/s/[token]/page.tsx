@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
+import { recordShareLinkPageVisit } from "@/lib/share-link-page-visit";
 import { verifySaleShareToken } from "@/lib/sale-share";
 import { readSaleShareView, type SaleShareLineView } from "@/lib/sale-share-choice";
 import { SALE_SHARE_REFUSAL_MESSAGE, type SaleShareRefusal } from "@/lib/sale-share-rules";
@@ -52,6 +53,9 @@ export default async function SaleSharePage({ params }: SharePageProps) {
     return <Refusal message="Too many requests. Please wait a moment and reload the page." />;
   }
 
+  // Every opening is a visit (#2557), recorded before the link is checked so a replaced or withdrawn
+  // link's is too.
+  await recordShareLinkPageVisit("sale", token);
   const verified = await verifySaleShareToken(token);
   if (!verified.ok) return <Refusal message={refusalMessage(verified.reason)} />;
 

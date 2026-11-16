@@ -238,6 +238,8 @@ model Collection {
   // still goes with the collection.
   facebookPostPreviewTokens FacebookPostPreviewToken[]
   proposalShareTokens       ProposalShareToken[]
+  // Every share link it has handed out, with who opened them (#2557).
+  shareLinks                ShareLink[]
   proposals       Proposal[]
   platformCategoryLessons PlatformCategoryLesson[]
   allegroCategoryParameterMemories AllegroCategoryParameterMemory[]
@@ -7281,6 +7283,67 @@ model TradeShareToken {
   trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
   @@map("trade_share_token")
+}
+
+// **Every share link handed out, and every time it was opened** (#2557). A link's own row (the five
+// `*ShareToken` / `FacebookPostPreviewToken` tables) says only whether it works now: a new link
+// replaces it in place and withdrawing deletes it. The collector also wants to know who opened a link
+// they sent, how often and when — and that question outlives the link, since *New link* must not wipe
+// the record of who read the old one.
+//
+// So one history, beside the five tables rather than inside them: a row here per link ever minted,
+// written by the mint in the same transaction, with the same `tokenHash` the live row is looked up by.
+// **The hash is how a visit finds its link**, live or not: the buyer pages record a visit before
+// asking whether the link still works, so an opening of a replaced or withdrawn link — which shows the
+// buyer only a notice — is recorded under the link that was opened. This row authorises nothing: no
+// read goes through it, it is never consulted to decide what a page shows, and so keeping the hash of a
+// withdrawn link does not un-revoke it.
+//
+// `kind` + `subjectId` name what the link was to (`share-link-visit-rules.ts` holds the five kinds),
+// with no foreign key, because the five subjects are five tables and a link's history is read only
+// from its subject's own dialog. `endedAt`/`endReason` are written when a new link replaces this one
+// (`replaced`) or it is withdrawn (`withdrawn`); a link whose live row went another way (its subject
+// deleted) reads as withdrawn. The hourly sweep removes visits after 90 days, and then a link that has
+// ended with nothing left to show.
+model ShareLink {
+  id           String    @id @default(cuid())
+  collectionId String
+  // post_preview | offer_specification | proposal | sale | trade
+  kind         String
+  // The post, offer, proposal, sale or trade the link was to.
+  subjectId    String
+  // SHA-256 hex of the raw token — equal to the live row's `tokenHash` while the link works.
+  tokenHash    String    @unique
+  createdAt    DateTime  @default(now())
+  endedAt      DateTime?
+  // replaced | withdrawn; null while the link is the subject's current one.
+  endReason    String?
+
+  collection Collection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  visits     ShareLinkVisit[]
+
+  @@index([collectionId, kind, subjectId])
+  @@map("share_link")
+}
+
+// **One opening of a share link's page** (#2557): a load or a reload of the page itself, never the
+// photos or files it loads. The IP address and the browser are stored as they arrived — no lookup of
+// who or where — and are a buyer's personal data, which is why the sweep removes a visit after 90 days.
+// `own` marks an opening by the collection's owner, signed in (*Open as the buyer sees it* included),
+// so the collector's own checks are not mistaken for a buyer.
+model ShareLinkVisit {
+  id          String   @id @default(cuid())
+  shareLinkId String
+  at          DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  own         Boolean  @default(false)
+
+  shareLink ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+
+  @@index([shareLinkId, at])
+  @@index([at])
+  @@map("share_link_visit")
 }
 
 // **What the partner said back** (#641; ADR-0039 §10).

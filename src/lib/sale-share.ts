@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
+import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import {
   isSaleShareTokenShape,
   resolveSaleShareAccess,
@@ -46,14 +47,15 @@ function hashesEqual(a: string, b: string): boolean {
 
 /** The sale is the caller's, or this throws. The sales module's own check, asked the same way from
  *  every entry point here rather than folded into each query. */
-async function assertSaleOwner(ownerId: string, saleId: string): Promise<void> {
+async function assertSaleOwner(ownerId: string, saleId: string): Promise<{ collectionId: string }> {
   const sale = await prisma.sale.findUnique({
     where: { id: saleId },
-    select: { collection: { select: { ownerId: true } } },
+    select: { collectionId: true, collection: { select: { ownerId: true } } },
   });
   if (!sale || sale.collection.ownerId !== ownerId) {
     throw new Error("Sale not found or access denied.");
   }
+  return { collectionId: sale.collectionId };
 }
 
 // ── The seller's side ───────────────────────────────────────────────────────────────────────────
@@ -126,25 +128,29 @@ export async function createSaleShareToken(
   saleId: string,
   options: SaleShareOptions
 ): Promise<{ token: string; record: SaleShareLinkData }> {
-  await assertSaleOwner(ownerId, saleId);
+  const { collectionId } = await assertSaleOwner(ownerId, saleId);
   const rawToken = SALE_SHARE_TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const tokenHash = hashToken(rawToken);
   const tokenSealed = sealShareToken(rawToken);
-  const row = await prisma.saleShareToken.upsert({
-    where: { saleId },
-    create: { saleId, tokenHash, tokenSealed, expiresAt: options.expiresAt },
-    update: {
-      tokenHash,
-      // Written on every regeneration, null included: a stale seal would show the seller the address
-      // of the link they have just replaced.
-      tokenSealed,
-      expiresAt: options.expiresAt,
-      // A regenerated link has never been opened. Carrying the old receipt over would have the
-      // dialog report that a buyer had read a question they cannot reach.
-      lastUsedAt: null,
-      createdAt: new Date(),
-    },
-    select: LINK_SELECT,
+  const row = await prisma.$transaction(async (tx) => {
+    // The history (#2557) in the same transaction: the previous link ends as replaced.
+    await recordShareLinkMinted(tx, { collectionId, kind: "sale", subjectId: saleId, tokenHash });
+    return tx.saleShareToken.upsert({
+      where: { saleId },
+      create: { saleId, tokenHash, tokenSealed, expiresAt: options.expiresAt },
+      update: {
+        tokenHash,
+        // Written on every regeneration, null included: a stale seal would show the seller the address
+        // of the link they have just replaced.
+        tokenSealed,
+        expiresAt: options.expiresAt,
+        // A regenerated link has never been opened. Carrying the old receipt over would have the
+        // dialog report that a buyer had read a question they cannot reach.
+        lastUsedAt: null,
+        createdAt: new Date(),
+      },
+      select: LINK_SELECT,
+    });
   });
   return { token: rawToken, record: toLinkData(row) };
 }
@@ -179,7 +185,10 @@ export async function setSaleShareOptions(
  *  credential someone can un-revoke, and there is nothing here worth an audit trail. */
 export async function revokeSaleShareToken(ownerId: string, saleId: string): Promise<void> {
   await assertSaleOwner(ownerId, saleId);
-  await prisma.saleShareToken.deleteMany({ where: { saleId } });
+  await prisma.$transaction(async (tx) => {
+    await recordShareLinkWithdrawn(tx, { kind: "sale", subjectId: saleId });
+    await tx.saleShareToken.deleteMany({ where: { saleId } });
+  });
 }
 
 // ── The buyer's side ────────────────────────────────────────────────────────────────────────────

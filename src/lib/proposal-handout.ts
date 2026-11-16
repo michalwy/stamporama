@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
+import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import { zip, type ZipEntry } from "./zip";
 import {
   OfferPhotoGenerationError,
@@ -379,17 +380,21 @@ export async function createProposalShareToken(ownerId: string, proposalId: stri
   const tokenHash = sha256(rawToken);
   const tokenSealed = sealShareToken(rawToken);
   const language = head.language;
-  await prisma.proposalShareToken.upsert({
-    where: { proposalId },
-    create: { collectionId, proposalId, tokenHash, tokenSealed, language },
-    update: {
-      tokenHash,
-      // Written on every regeneration, null included: a stale seal would show the replaced address.
-      tokenSealed,
-      language,
-      lastUsedAt: null,
-      createdAt: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    // The history (#2557) in the same transaction: the previous link ends as replaced.
+    await recordShareLinkMinted(tx, { collectionId, kind: "proposal", subjectId: proposalId, tokenHash });
+    await tx.proposalShareToken.upsert({
+      where: { proposalId },
+      create: { collectionId, proposalId, tokenHash, tokenSealed, language },
+      update: {
+        tokenHash,
+        // Written on every regeneration, null included: a stale seal would show the replaced address.
+        tokenSealed,
+        language,
+        lastUsedAt: null,
+        createdAt: new Date(),
+      },
+    });
   });
   return { token: rawToken };
 }
@@ -398,7 +403,10 @@ export async function createProposalShareToken(ownerId: string, proposalId: stri
  *  credential someone can un-revoke. */
 export async function revokeProposalShareToken(ownerId: string, proposalId: string): Promise<void> {
   await assertProposalOwner(ownerId, proposalId);
-  await prisma.proposalShareToken.deleteMany({ where: { proposalId } });
+  await prisma.$transaction(async (tx) => {
+    await recordShareLinkWithdrawn(tx, { kind: "proposal", subjectId: proposalId });
+    await tx.proposalShareToken.deleteMany({ where: { proposalId } });
+  });
 }
 
 // ── The buyer's side ────────────────────────────────────────────────────────────────────────────

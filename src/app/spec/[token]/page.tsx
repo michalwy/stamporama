@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
+import { recordShareLinkPageVisit } from "@/lib/share-link-page-visit";
 import {
   readSharedOfferSpecification,
   verifyOfferSpecificationShareToken,
@@ -72,6 +73,9 @@ export default async function OfferSpecificationSharePage({ params }: SharePageP
     return <Refusal message="Too many requests. Please wait a moment and reload the page." />;
   }
 
+  // Every opening is a visit (#2557), recorded before the link is checked so a replaced or withdrawn
+  // link's is too.
+  await recordShareLinkPageVisit("offer_specification", token);
   const access = await verifyOfferSpecificationShareToken(token);
   if (!access) return <Refusal message={OFFER_SPECIFICATION_SHARE_REFUSAL} />;
 

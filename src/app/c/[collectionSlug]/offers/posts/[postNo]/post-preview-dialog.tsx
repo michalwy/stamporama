@@ -23,6 +23,7 @@ import {
   revokeFacebookPostPreviewLinkAction,
 } from "@/app/actions/facebook";
 import { formControl, multiLineFormControl } from "@/app/control-style";
+import { ShareLinkVisitsLine } from "@/app/c/[collectionSlug]/shared/share-link-visits";
 
 // **Preview for a buyer…** (#2212) — the collector's end of a post's preview: the page to print or
 // save as a PDF, and the link a buyer opens without an account, managed as a specification's link is
@@ -67,10 +68,6 @@ const STANDING_MESSAGE: Record<Exclude<FacebookPostPreviewStanding, "shown">, st
     "The post is being prepared again, so a buyer opening the link is told it is being updated and asked for a current one. Once it is Ready, the link shows it again.",
   gone: "The post is withdrawn, so a buyer opening the link is told the offer is no longer current.",
 };
-
-function dateText(iso: string): string {
-  return new Date(iso).toLocaleDateString();
-}
 
 function previewLinkKey(postId: string) {
   return ["facebook-post-preview-link", postId] as const;
@@ -208,12 +205,12 @@ export function PostPreviewDialog({
             </p>
           )}
 
-          {share && (
-            <p style={META}>
-              Created {dateText(share.createdAt)}
-              {share.lastUsedAt ? ` · last opened ${dateText(share.lastUsedAt)}` : " · not opened yet"}
-            </p>
-          )}
+          <ShareLinkVisitsLine
+            collectionId={collectionId}
+            kind="post_preview"
+            subjectId={postId}
+            createdAt={share?.createdAt ?? null}
+          />
 
           {hasLink && data && data.standing !== "shown" && (
             <p style={{ ...META, color: "var(--color-warning)" }}>{STANDING_MESSAGE[data.standing]}</p>

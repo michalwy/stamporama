@@ -23,6 +23,7 @@ import {
   revokeOfferSpecificationShareLinkAction,
 } from "@/app/actions/offers";
 import { formControl, multiLineFormControl } from "@/app/control-style";
+import { ShareLinkVisitsLine } from "@/app/c/[collectionSlug]/shared/share-link-visits";
 
 // The collector's end of the specification link (#1760) — the sale buyer link's dialog (#699) with
 // less in it: no expiry date, because a link lives as long as the specification it was made from,
@@ -66,10 +67,6 @@ const UNREADABLE_MESSAGE: Record<ShareAddressRefusal, string> = {
   unconfigured:
     "This link cannot be shown because this install has no STAMPORAMA_SECRET_KEY set. The buyer's copy still works, and a new link would be just as unreadable — set the key first.",
 };
-
-function dateText(iso: string): string {
-  return new Date(iso).toLocaleDateString();
-}
 
 /** What a link that no longer shows its specification means, ending in what to do about it. */
 const STANDING_MESSAGE: Record<Exclude<OfferSpecificationShareStanding, "current">, string> = {
@@ -189,12 +186,12 @@ export function SpecificationShareDialog({
             </div>
           )}
 
-          {share && (
-            <p style={META}>
-              Created {dateText(share.createdAt)}
-              {share.lastUsedAt ? ` · last opened ${dateText(share.lastUsedAt)}` : " · not opened yet"}
-            </p>
-          )}
+          <ShareLinkVisitsLine
+            collectionId={collectionId}
+            kind="offer_specification"
+            subjectId={offerId}
+            createdAt={share?.createdAt ?? null}
+          />
 
           {share && !minted && share.standing !== "current" && (
             <p style={{ ...META, color: "var(--color-warning)" }}>{STANDING_MESSAGE[share.standing]}</p>

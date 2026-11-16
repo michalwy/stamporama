@@ -673,6 +673,7 @@ export function TradeDetailPanel({
 
       {dialog.kind === "share" && (
         <TradeShareDialog
+          collectionId={collectionId}
           tradeId={tradeId}
           share={trade.share}
           onClose={closeDialog}
