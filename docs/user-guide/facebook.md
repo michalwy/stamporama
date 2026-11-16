@@ -850,6 +850,13 @@ taken out, since it already is one. Once the post is up, its lots stay as they w
 lot's offer works the same way, except that the offer goes with it; a post left with no lot is
 removed, and its number is not used again.
 
+To delete a lot's offer without leaving the post, choose **Delete offer…** from the lot's `⋮`, offered
+until the post is up. It asks first, naming the lot and its offer, and then deletes the offer as its
+own **Delete** would: the lot leaves the post, the lots after it move up, and the copies are unlisted
+again. An offer with a sold set cannot be deleted, and the dialog says so. Deleting the only lot of a
+post removes the post too, and you are taken to the list of posts. Once the post is up, a lot is
+withdrawn instead.
+
 A lot cannot be moved to another group while it is in a post of several; take it out first. An offer
 alone in its post moves to another group with its post, until it is up. Nor can it change
 from auction to quick buy, or back, while it is in a post whose lots share one type.

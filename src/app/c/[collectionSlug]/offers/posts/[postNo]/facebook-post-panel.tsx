@@ -92,7 +92,9 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 //   price — an auction's current bid once one is recorded, else its starting price — its state, its
 //   listing link, its sale once sold, and, captioned (#1841), its caption with its *Copy*. Each lot's
 //   own actions stay the offer's (*Sell*, withdrawing one lot of a post that is up) and are reached
-//   from its row's `⋮`, as is *Take this lot out of the post* while the post is not up.
+//   from its row's `⋮`, as is *Take this lot out of the post* while the post is not up — and, beside
+//   it, *Delete offer…* (#2555): the offer's own *Delete*, so the lot leaves the post and the offer goes
+//   in one step rather than three. The only lot of a post may be deleted too, and the post goes with it.
 // - **Add lots…** (#1870), beside the lots' heading while the post is not up: offers picked from those
 //   that could join become its next lots, and any the server turns away is named under the heading.
 // - **New lot…** and **New lot from a new item…** (#2291), beside it: a new offer made as the post's
@@ -185,6 +187,7 @@ type Dialog =
   | { kind: "withdrawPost" }
   | { kind: "withdrawLot"; lot: FacebookKitLot }
   | { kind: "takeOut"; lot: FacebookKitLot }
+  | { kind: "deleteLot"; lot: FacebookKitLot }
   | { kind: "addLots" }
   | { kind: "newLot"; source: NewLotSource }
   | { kind: "sell"; lots: FacebookKitLot[] }
@@ -465,6 +468,20 @@ export function FacebookPostPanel({
     );
   }
 
+  function deleteLot(lot: FacebookKitLot) {
+    // The offer's own *Delete* (#2555): the server takes the lot out of the post first, so the lots after
+    // it move up, and a post left with no lot goes — the screen then has no post to show.
+    const last = lots.length === 1;
+    run(
+      async () => {
+        const { deleteOfferAction } = await import("@/app/actions/offers");
+        return deleteOfferAction(lot.offerId);
+      },
+      last ? `Offer #${lot.offerNo} deleted, and post #${postNo} with it` : `Offer #${lot.offerNo} deleted`,
+      last ? () => router.push(`/c/${collectionSlug}/offers/posts`) : undefined
+    );
+  }
+
   // The picked offers join as the post's next lots (#1870); the ones that cannot are named under the
   // lots' heading, the rest added — or, when none can, the dialog keeps the reason.
   function addLots(offerIds: string[]) {
@@ -583,6 +600,18 @@ export function FacebookPostPanel({
               label: "Take this lot out of the post",
               icon: "remove",
               onSelect: () => setDialog({ kind: "takeOut", lot }),
+            } as RowAction,
+          ]
+        : []),
+      ...(moves.deleteLot
+        ? [
+            {
+              key: "delete-offer",
+              label: "Delete offer…",
+              icon: "delete",
+              danger: true,
+              separatorBefore: true,
+              onSelect: () => setDialog({ kind: "deleteLot", lot }),
             } as RowAction,
           ]
         : []),
@@ -1004,6 +1033,28 @@ export function FacebookPostPanel({
           error={error}
           onClose={close}
           onConfirm={() => takeOut(dialog.lot)}
+        />
+      )}
+
+      {dialog.kind === "deleteLot" && (
+        <ConfirmDialog
+          title={dialog.lot.lotNo === null ? `Delete offer #${dialog.lot.offerNo}` : `Delete lot ${dialog.lot.lotNo} — offer #${dialog.lot.offerNo}`}
+          message={
+            <>
+              <strong>{dialog.lot.title}</strong> is deleted with its sets, permanently.{" "}
+              {lots.length > 1
+                ? "The lots after it move up one."
+                : `It is the post's only lot, so post #${postNo} goes with it.`}{" "}
+              The copies stay in your inventory, no longer listed. This cannot be undone.
+            </>
+          }
+          actionLabel="Delete offer"
+          pendingLabel="Deleting…"
+          variant="destructive"
+          isPending={isPending}
+          error={error}
+          onClose={close}
+          onConfirm={() => deleteLot(dialog.lot)}
         />
       )}
 
