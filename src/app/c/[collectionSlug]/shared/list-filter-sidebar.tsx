@@ -30,7 +30,7 @@ interface ListFilterSidebarProps {
   selectedYear: string | null;
   onSelectYear: (year: string | null) => void;
   /** A span of years in force instead of one (#1401) — see `YearFilterPanel`. */
-  yearSpan?: { label: string } | null;
+  yearSpan?: { label: string; from: number; to: number } | null;
 
   /** "page" (default): panels manage their own full-height / sticky layout.
    *  "dialog": each panel is wrapped in a bounded scroll box so long trees scroll
