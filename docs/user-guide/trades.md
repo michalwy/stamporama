@@ -557,7 +557,8 @@ composing, and after it is closed, when it is the record of what was actually ex
 link does **not** move the trade to *Shared*; that stays your own decision on the ⋮ menu.
 
 While a link is out there, the trade's screen says **Shared link**, with the date your partner last
-opened it.
+opened it. The partner link's dialog says how often it was opened, and **Visit history** lists every
+opening with its time, IP address and browser — see [Who opened a share link](share-links.md).
 
 Your partner can arrange the page themselves with the same **Group by** chips you have on your own
 screen, and the whole list is on the page — not just what has been scrolled to. They have no filters

@@ -1282,8 +1282,9 @@ of the specification it shows the offer's number and a message, in the offer's l
 offer has changed and the buyer should contact you for a current specification. Changes the
 specification doesn't show, such as the price or the listing's texts, don't affect the link.
 
-An offer has **one link**. Reopening the dialog shows it again, with when it was created and when a
-buyer last opened it. If the specification has changed since the link was made, or the offer has
+An offer has **one link**. Reopening the dialog shows it again, with when it was created, when a
+buyer last opened it and how many times, and **Visit history** lists every opening with its time, IP
+address and browser — see [Who opened a share link](share-links.md). If the specification has changed since the link was made, or the offer has
 closed, the dialog says so. If the offer's language is one the page has no headings in, the dialog
 says that the buyer will see them in English.
 
@@ -3572,7 +3573,8 @@ press **Mark sent** once it has gone to the buyer.
 
 A proposal starts **Preparing**: lots come and go and their titles and prices change. **Mark sent**
 once it has gone to the buyer — it needs at least one lot. Nothing else marks it sent (above). When the
-buyer opens the link, the document's window shows it as *last opened*; that changes nothing either.
+buyer opens the link, the document's window shows it as *last opened*, with the number of visits and a
+**Visit history** ([Who opened a share link](share-links.md)); that changes nothing either.
 
 **A sent proposal stays as the buyer saw it.** It takes no new lots, none is taken out, and no lot's
 title or price changes — not on the proposal's screen, and not on the lot's own offer screen either,

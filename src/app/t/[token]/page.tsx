@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
+import { recordShareLinkPageVisit } from "@/lib/share-link-page-visit";
 import {
   readTradeShareView,
   verifyTradeShareToken,
@@ -83,6 +84,9 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
     );
   }
 
+  // Every opening is a visit (#2557), recorded before the link is checked so a replaced or withdrawn
+  // link's is too.
+  await recordShareLinkPageVisit("trade", token);
   const verified = await verifyTradeShareToken(token);
   if (!verified.ok) return <Refusal message={refusalMessage(verified.reason)} />;
 

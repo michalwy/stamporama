@@ -708,7 +708,8 @@ copies' numbers or where they are filed.
   sale packed is worth doing when you actually pack it.
 - **You always have the last word.** Opening **Choose set** and picking something else replaces
   their answer with yours, and the *Buyer chose* chip goes with it.
-- The dialog shows the link's address whenever it can, says when the buyer last opened it, and
+- The dialog shows the link's address whenever it can, says when the buyer last opened it and how
+  often — **Visit history** lists every opening ([Who opened a share link](share-links.md)) — and
   carries **New link** (the old address stops working) and **Withdraw**. An optional expiry date is
   there if you want one; left blank, the link lives until you withdraw it.
 

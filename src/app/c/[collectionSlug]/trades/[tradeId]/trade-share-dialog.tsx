@@ -17,6 +17,7 @@ import {
   setTradeShareOptionsAction,
 } from "@/app/actions/trades";
 import { formControl, multiLineFormControl } from "@/app/control-style";
+import { ShareLinkVisitsLine } from "@/app/c/[collectionSlug]/shared/share-link-visits";
 
 // The collector's end of the partner's link (#640; ADR-0039 §9).
 //
@@ -94,16 +95,14 @@ function dayValue(iso: string | null): string {
   return iso ? iso.slice(0, 10) : "";
 }
 
-function dateText(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString() : "";
-}
-
 export function TradeShareDialog({
+  collectionId,
   tradeId,
   share,
   onClose,
   onChanged,
 }: {
+  collectionId: string;
   tradeId: string;
   /** The link this trade already has, or null. */
   share: TradeShareState | null;
@@ -215,14 +214,12 @@ export function TradeShareDialog({
               </div>
             )}
 
-            {share && (
-              <p style={META}>
-                Created {dateText(share.createdAt)}
-                {share.lastUsedAt
-                  ? ` · last opened ${dateText(share.lastUsedAt)}`
-                  : " · not opened yet"}
-              </p>
-            )}
+            <ShareLinkVisitsLine
+              collectionId={collectionId}
+              kind="trade"
+              subjectId={tradeId}
+              createdAt={share?.createdAt ?? null}
+            />
 
             <div>
               <label style={CHECK_ROW}>

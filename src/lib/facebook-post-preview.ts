@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
+import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import { getFacebookOfferKit, type FacebookOfferKit } from "./facebook-auctions";
 import { syncFacebookPostLotPhotos } from "./facebook-lot-photos";
 import { readOfferUploadPlans } from "./offer-photo-generation";
@@ -284,17 +285,21 @@ export async function createFacebookPostPreviewToken(ownerId: string, postId: st
   const tokenHash = sha256(rawToken);
   const tokenSealed = sealShareToken(rawToken);
   const language = head?.language ?? null;
-  await prisma.facebookPostPreviewToken.upsert({
-    where: { postId },
-    create: { collectionId, postId, tokenHash, tokenSealed, language },
-    update: {
-      tokenHash,
-      // Written on every regeneration, null included: a stale seal would show the replaced address.
-      tokenSealed,
-      language,
-      lastUsedAt: null,
-      createdAt: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    // The history (#2557) in the same transaction: the previous link ends as replaced.
+    await recordShareLinkMinted(tx, { collectionId, kind: "post_preview", subjectId: postId, tokenHash });
+    await tx.facebookPostPreviewToken.upsert({
+      where: { postId },
+      create: { collectionId, postId, tokenHash, tokenSealed, language },
+      update: {
+        tokenHash,
+        // Written on every regeneration, null included: a stale seal would show the replaced address.
+        tokenSealed,
+        language,
+        lastUsedAt: null,
+        createdAt: new Date(),
+      },
+    });
   });
   return { token: rawToken };
 }
@@ -303,7 +308,10 @@ export async function createFacebookPostPreviewToken(ownerId: string, postId: st
  *  credential someone can un-revoke. */
 export async function revokeFacebookPostPreviewToken(ownerId: string, postId: string): Promise<void> {
   await assertPostOwner(ownerId, postId);
-  await prisma.facebookPostPreviewToken.deleteMany({ where: { postId } });
+  await prisma.$transaction(async (tx) => {
+    await recordShareLinkWithdrawn(tx, { kind: "post_preview", subjectId: postId });
+    await tx.facebookPostPreviewToken.deleteMany({ where: { postId } });
+  });
 }
 
 // ── The buyer's side ────────────────────────────────────────────────────────────────────────────

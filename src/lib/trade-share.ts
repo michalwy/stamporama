@@ -3,6 +3,7 @@ import { candidateSetLabel } from "./candidate-set-rules";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
 import { assertTradeOwner } from "./trade-access";
+import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import { listTradeLinePage, type TradeLinePageItem } from "./trade-lines";
 import { readTradeBalance, type TradeLineValueRead, type TradeRateRead } from "./trade-valuation";
 import { isTradeSide, TRADE_STATUS_LABEL, type TradeSide, type TradeStatus } from "./trade-rules";
@@ -140,32 +141,36 @@ export async function createTradeShareToken(
   tradeId: string,
   options: TradeShareOptions
 ): Promise<{ token: string; record: TradeShareLinkData }> {
-  await assertTradeOwner(ownerId, tradeId);
+  const { collectionId } = await assertTradeOwner(ownerId, tradeId);
   const rawToken = TRADE_SHARE_TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const tokenHash = hashToken(rawToken);
   const tokenSealed = sealShareToken(rawToken);
-  const row = await prisma.tradeShareToken.upsert({
-    where: { tradeId },
-    create: {
-      tradeId,
-      tokenHash,
-      tokenSealed,
-      showValues: options.showValues,
-      expiresAt: options.expiresAt,
-    },
-    update: {
-      tokenHash,
-      // Written on every regeneration, null included: a stale seal would show the collector the
-      // address of the link they have just replaced.
-      tokenSealed,
-      showValues: options.showValues,
-      expiresAt: options.expiresAt,
-      // A regenerated link has never been opened. Carrying the old receipt over would have the
-      // dialog report that a partner had read a list they cannot reach.
-      lastUsedAt: null,
-      createdAt: new Date(),
-    },
-    select: LINK_SELECT,
+  const row = await prisma.$transaction(async (tx) => {
+    // The history (#2557) in the same transaction: the previous link ends as replaced.
+    await recordShareLinkMinted(tx, { collectionId, kind: "trade", subjectId: tradeId, tokenHash });
+    return tx.tradeShareToken.upsert({
+      where: { tradeId },
+      create: {
+        tradeId,
+        tokenHash,
+        tokenSealed,
+        showValues: options.showValues,
+        expiresAt: options.expiresAt,
+      },
+      update: {
+        tokenHash,
+        // Written on every regeneration, null included: a stale seal would show the collector the
+        // address of the link they have just replaced.
+        tokenSealed,
+        showValues: options.showValues,
+        expiresAt: options.expiresAt,
+        // A regenerated link has never been opened. Carrying the old receipt over would have the
+        // dialog report that a partner had read a list they cannot reach.
+        lastUsedAt: null,
+        createdAt: new Date(),
+      },
+      select: LINK_SELECT,
+    });
   });
   return { token: rawToken, record: toLinkData(row) };
 }
@@ -200,7 +205,10 @@ export async function setTradeShareOptions(
  *  credential someone can un-revoke, and there is nothing here worth an audit trail. */
 export async function revokeTradeShareToken(ownerId: string, tradeId: string): Promise<void> {
   await assertTradeOwner(ownerId, tradeId);
-  await prisma.tradeShareToken.deleteMany({ where: { tradeId } });
+  await prisma.$transaction(async (tx) => {
+    await recordShareLinkWithdrawn(tx, { kind: "trade", subjectId: tradeId });
+    await tx.tradeShareToken.deleteMany({ where: { tradeId } });
+  });
 }
 
 // ── The partner's side ──────────────────────────────────────────────────────────────────────────

@@ -1458,6 +1458,7 @@ export function SaleDetailPanel({
           share dialog's shape, minus the figures switch a sale page has no figures for. */}
       {dialog.kind === "share" && (
         <SaleShareDialog
+          collectionId={collectionId}
           saleId={sale.id}
           share={sale.share}
           pendingCount={pendingSetCount}

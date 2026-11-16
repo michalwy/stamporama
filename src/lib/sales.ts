@@ -216,6 +216,7 @@ import {
   type CancelOfferOutcome,
 } from "./sale-cancel-rules";
 import { SALE_SEARCH_FIELD_KEYS, type SaleSearchField } from "./sale-search-fields";
+import { recordShareLinkWithdrawn } from "./share-link-visits";
 
 // ── Ownership helpers ───────────────────────────────────────────────────────
 
@@ -4136,6 +4137,8 @@ async function cancelSaleIn(
       tx,
       sale.supplyLines.map((l) => l.supplyId)
     );
+    // The buyer's link goes with the order; its visits stay, under a link marked withdrawn (#2557).
+    await recordShareLinkWithdrawn(tx, { kind: "sale", subjectId: saleId });
     await tx.saleShareToken.deleteMany({ where: { saleId } });
     const now = new Date();
     await tx.sale.update({

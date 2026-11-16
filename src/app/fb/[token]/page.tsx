@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { clientAddress, rateLimit } from "@/lib/rate-limit";
+import { recordShareLinkPageVisit } from "@/lib/share-link-page-visit";
 import { readSharedFacebookPostPreview, verifyFacebookPostPreviewToken } from "@/lib/facebook-post-preview";
 import {
   FACEBOOK_POST_PREVIEW_REFUSAL,
@@ -56,6 +57,9 @@ export default async function FacebookPostPreviewSharePage({ params }: SharePage
     return <Notice message="Too many requests. Please wait a moment and reload the page." />;
   }
 
+  // Every opening is a visit (#2557), recorded before the link is checked so a replaced or withdrawn
+  // link's is too.
+  await recordShareLinkPageVisit("post_preview", token);
   const access = await verifyFacebookPostPreviewToken(token);
   if (!access) return <Notice message={FACEBOOK_POST_PREVIEW_REFUSAL} />;
 

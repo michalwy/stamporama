@@ -17,6 +17,7 @@ import { languageLabel } from "@/lib/languages";
 import { createProposalShareLinkAction, revokeProposalShareLinkAction } from "@/app/actions/proposals";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 import { proposalKeys } from "../use-proposals-query";
+import { ShareLinkVisitsLine } from "@/app/c/[collectionSlug]/shared/share-link-visits";
 
 // **Document…** (#2288) — the collector's end of a proposal's document: the page to print or save as a
 // PDF, and the link a buyer opens without an account, managed as a post's preview link is (#2212) —
@@ -55,10 +56,6 @@ const UNREADABLE_MESSAGE: Record<ShareAddressRefusal, string> = {
   unconfigured:
     "This link cannot be shown because this install has no STAMPORAMA_SECRET_KEY set. The buyer's copy still works, and a new link would be just as unreadable — set the key first.",
 };
-
-function dateText(iso: string): string {
-  return new Date(iso).toLocaleDateString();
-}
 
 export function ProposalDocumentDialog({
   collectionId,
@@ -193,12 +190,12 @@ export function ProposalDocumentDialog({
             </p>
           )}
 
-          {share && (
-            <p style={META}>
-              Created {dateText(share.createdAt)}
-              {share.lastUsedAt ? ` · last opened ${dateText(share.lastUsedAt)}` : " · not opened yet"}
-            </p>
-          )}
+          <ShareLinkVisitsLine
+            collectionId={collectionId}
+            kind="proposal"
+            subjectId={proposalId}
+            createdAt={share?.createdAt ?? null}
+          />
 
           {data && data.standing !== "shown" && (
             <p style={{ ...META, color: "var(--color-warning)" }}>

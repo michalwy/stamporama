@@ -17,6 +17,7 @@ import {
   setSaleShareOptionsAction,
 } from "@/app/actions/sales";
 import { formControl, multiLineFormControl } from "@/app/control-style";
+import { ShareLinkVisitsLine } from "@/app/c/[collectionSlug]/shared/share-link-visits";
 
 // The seller's end of the buyer's link (#699; ADR-0013 §7) — the trade share dialog's shape (#640,
 // #681), one screen over, and the differences are the interesting part.
@@ -80,17 +81,15 @@ function dayValue(iso: string | null): string {
   return iso ? iso.slice(0, 10) : "";
 }
 
-function dateText(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleDateString() : "";
-}
-
 export function SaleShareDialog({
+  collectionId,
   saleId,
   share,
   pendingCount,
   onClose,
   onChanged,
 }: {
+  collectionId: string;
   saleId: string;
   /** The link this sale already has, or null. */
   share: SaleShareState | null;
@@ -205,14 +204,12 @@ export function SaleShareDialog({
               </div>
             )}
 
-            {share && (
-              <p style={META}>
-                Created {dateText(share.createdAt)}
-                {share.lastUsedAt
-                  ? ` · last opened ${dateText(share.lastUsedAt)}`
-                  : " · not opened yet"}
-              </p>
-            )}
+            <ShareLinkVisitsLine
+              collectionId={collectionId}
+              kind="sale"
+              subjectId={saleId}
+              createdAt={share?.createdAt ?? null}
+            />
 
             <div>
               <LabelWithError htmlFor="sale-share-expires">Expires (optional)</LabelWithError>

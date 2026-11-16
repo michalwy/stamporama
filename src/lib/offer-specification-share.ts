@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
+import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import { soldItemIds } from "./sales";
 import { readOfferSpecification, type OfferSpecification } from "./offer-specification";
 import { specificationContentsKey } from "./offer-specification-rules";
@@ -47,12 +48,17 @@ function contentsHashOf(spec: OfferSpecification): string {
 }
 
 /** The offer is the caller's — and in `collectionId`, where one is named — or this throws. */
-async function assertOfferOwner(ownerId: string, offerId: string, collectionId?: string): Promise<void> {
+async function assertOfferOwner(
+  ownerId: string,
+  offerId: string,
+  collectionId?: string
+): Promise<{ collectionId: string }> {
   const offer = await prisma.offer.findFirst({
     where: { id: offerId, collection: { ownerId }, ...(collectionId ? { collectionId } : {}) },
-    select: { id: true },
+    select: { collectionId: true },
   });
   if (!offer) throw new Error("Offer not found or access denied.");
+  return offer;
 }
 
 // ── The collector's side ────────────────────────────────────────────────────────────────────────
@@ -131,26 +137,30 @@ export async function createOfferSpecificationShareToken(
   ownerId: string,
   offerId: string
 ): Promise<{ token: string }> {
-  await assertOfferOwner(ownerId, offerId);
+  const { collectionId } = await assertOfferOwner(ownerId, offerId);
   const spec = await readOfferSpecification(ownerId, offerId);
   if (!spec) throw new Error("Offer not found or access denied.");
   const rawToken = OFFER_SPECIFICATION_SHARE_TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const tokenHash = sha256(rawToken);
   const tokenSealed = sealShareToken(rawToken);
   const contentsHash = contentsHashOf(spec);
-  await prisma.offerSpecificationShareToken.upsert({
-    where: { offerId },
-    create: { offerId, tokenHash, tokenSealed, contentsHash },
-    update: {
-      tokenHash,
-      // Written on every regeneration, null included: a stale seal would show the address of the
-      // link just replaced.
-      tokenSealed,
-      contentsHash,
-      // A new link has never been opened.
-      lastUsedAt: null,
-      createdAt: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    // The history (#2557) in the same transaction: the previous link ends as replaced.
+    await recordShareLinkMinted(tx, { collectionId, kind: "offer_specification", subjectId: offerId, tokenHash });
+    await tx.offerSpecificationShareToken.upsert({
+      where: { offerId },
+      create: { offerId, tokenHash, tokenSealed, contentsHash },
+      update: {
+        tokenHash,
+        // Written on every regeneration, null included: a stale seal would show the address of the
+        // link just replaced.
+        tokenSealed,
+        contentsHash,
+        // A new link has never been opened.
+        lastUsedAt: null,
+        createdAt: new Date(),
+      },
+    });
   });
   return { token: rawToken };
 }
@@ -162,7 +172,10 @@ export async function revokeOfferSpecificationShareToken(
   offerId: string
 ): Promise<void> {
   await assertOfferOwner(ownerId, offerId);
-  await prisma.offerSpecificationShareToken.deleteMany({ where: { offerId } });
+  await prisma.$transaction(async (tx) => {
+    await recordShareLinkWithdrawn(tx, { kind: "offer_specification", subjectId: offerId });
+    await tx.offerSpecificationShareToken.deleteMany({ where: { offerId } });
+  });
 }
 
 // ── The buyer's side ────────────────────────────────────────────────────────────────────────────
