@@ -294,7 +294,11 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   (`removeFacebookLot`) detaches it and writes it a new post of one in the same transaction; the only
   lot of a post is not taken out (`facebookPostMoves().takeOut` is `!posted && lots > 1`, and the
   server returns early) — the post screen's row ⋮ reads its *Withdraw this lot…* and *Back to
-  preparing* gates off `notUp`, not `takeOut`, for that reason. **The title follows the offer**:
+  preparing* gates off `notUp`, not `takeOut`, for that reason. Its *Delete offer…* (#2555) is the
+  offer's own `deleteOfferAction`, gated by `facebookPostMoves().deleteLot` (`!posted`, the only lot
+  included): `deleteOffer` already detaches the lot first, renumbering the rest and dropping a post left
+  with none, so nothing post-specific runs on the server; the screen goes to the posts list when the
+  deleted lot was the last. **The title follows the offer**:
   `FacebookPost.titleFollowsOffer`, true on a post of one from `writePostOfOne`, false for good once
   `setFacebookPostTitle` renames it by hand or `addFacebookLots` gives it a second lot (a post left with
   one lot by a take-out never starts following; the #1998 split copies the flag). The one writer of a

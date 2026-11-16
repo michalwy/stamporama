@@ -868,6 +868,9 @@ export function isFacebookLotPosted(state: string): boolean {
  *    taken back to Preparing, as each offer's own *Back to preparing* would;
  *  - `takeOut` — a lot may leave the post only until the post is up, and only a post of several lots:
  *    a lot taken out is a post of one (#2116), which the only lot of a post already is;
+ *  - `deleteLot` — a lot's offer may be deleted from the post's screen until the post is up (#2555),
+ *    the only lot of a post included: the post then goes, as it does when its last offer is deleted
+ *    elsewhere. Once the post is up a lot is withdrawn instead;
  *  - `addLots` — offers may join the post as further lots only until it is up, too (#1870);
  *  - `waiting` — the lots still short of Ready before anything has gone up, by lot number. */
 export interface FacebookPostMoves {
@@ -879,6 +882,7 @@ export interface FacebookPostMoves {
   backToReady: boolean;
   backToPreparing: boolean;
   takeOut: boolean;
+  deleteLot: boolean;
   addLots: boolean;
   waiting: number[];
 }
@@ -897,6 +901,7 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
     backToReady: !pending && lots.some((l) => isFacebookLotUp(l.state)),
     backToPreparing: !posted && ready,
     takeOut: !posted && lots.length > 1,
+    deleteLot: !posted && lots.length > 0,
     addLots: !posted,
     waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),
   };

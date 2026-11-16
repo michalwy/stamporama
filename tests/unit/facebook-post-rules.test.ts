@@ -919,6 +919,15 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(facebookPostMoves(lots("active", "sold")).backToPreparing, false);
   });
 
+  it("offers deleting a lot's offer only while the post is not up, its only lot included (#2555)", () => {
+    assert.equal(facebookPostMoves(lots("ready", "preparing")).deleteLot, true);
+    assert.equal(facebookPostMoves(lots("preparing")).deleteLot, true, "the post goes with its last lot");
+    assert.equal(facebookPostMoves(lots("pending", "pending")).deleteLot, false);
+    assert.equal(facebookPostMoves(lots("active", "ready")).deleteLot, false);
+    assert.equal(facebookPostMoves(lots("active", "sold")).deleteLot, false);
+    assert.equal(facebookPostMoves([]).deleteLot, false, "no lot, nothing to delete");
+  });
+
   it("names the lots that stay and the bids Back to Ready clears (#1998)", () => {
     const lot = (lotNo: number, state: string, listingType: "auction" | "fixed", price: string) => ({
       lotNo,
