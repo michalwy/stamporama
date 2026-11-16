@@ -49,6 +49,7 @@ import {
   type LotCopyRowFields,
 } from "@/lib/lots";
 import type { ArrivingCopy } from "@/lib/want-rules";
+import { confirmCopyApiReviews } from "@/lib/lot-copies-api";
 import { addPurchasePhotos, parsePhotoChangeSet, removePurchasePhoto } from "@/lib/photos";
 import { normalizeDecimalInput, roundAmount } from "@/lib/decimal-input";
 import { parseFaultReductionInput } from "@/lib/fault-reduction";
@@ -393,6 +394,25 @@ export async function deletePurchaseExpenseAction(expenseId: string): Promise<Pu
     return {
       status: "error",
       message: e instanceof Error ? e.message : "Failed to delete expense. Please try again.",
+    };
+  }
+}
+
+/**
+ * The collector's *Confirm* on copies the agent API added or corrected (#2551): the named copies, or
+ * every marked copy of a lot. The only door that takes the marker off.
+ */
+export async function confirmCopyApiReviewsAction(
+  scope: { itemIds: string[] } | { lotId: string }
+): Promise<PurchaseActionState> {
+  const session = await getSession();
+  try {
+    await confirmCopyApiReviews(session.user.id, scope);
+    return { status: "success" };
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Failed to confirm. Please try again.",
     };
   }
 }

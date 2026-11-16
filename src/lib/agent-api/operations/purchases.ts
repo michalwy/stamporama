@@ -41,6 +41,7 @@ import {
 } from "../purchase-reads";
 import { readCollectionVocabulary } from "./vocabulary";
 import { resolveSupplyParam } from "./shipping";
+import { loadLotCopies } from "./lot-copies";
 import { normalizeMarketCode } from "../../market-anchoring";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import type {
@@ -69,11 +70,11 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // same rules hold for it — not on the incoming half of a trade, not on an opening balance (the
 // collector's call on #1910, 2026-10-14), and never corrected or removed through this surface.
 //
-// **No copies, and nothing irreversible.** No operation identifies, adds, moves or removes a copy;
-// none closes or reopens a lot (closing freezes the cost basis onto the copies, ADR-0009 §3.5), marks
-// an order arrived (which moves its copies to *to sort*), changes the delivery status, or deletes a
-// purchase. Copies enter the collection's counts, wants and values, and the collector deliberately
-// kept that step. `tests/unit/agent-api-operation-boundary.test.ts` holds it as a fact about what
+// **No copies here, and nothing irreversible.** No operation in this module identifies, adds, moves
+// or removes a copy — #2551 opened that for purchase lots in `lot-copies.ts`, through its own narrow
+// door, and only for an open lot's copies still ordered. None closes or reopens a lot (closing
+// freezes the cost basis onto the copies, ADR-0009 §3.5), marks an order arrived (which moves its
+// copies to *to sort*), changes the delivery status, or deletes a purchase. `tests/unit/agent-api-operation-boundary.test.ts` holds it as a fact about what
 // this module imports: `deleteLot` is on its list because it deletes a lot's copies with it, which
 // is why removal goes through `deleteEmptyLot` instead.
 //
@@ -283,6 +284,10 @@ async function loadPurchase(
     purchaseNo: ref.purchaseNo,
     path: collectionPath(header, `/purchases/${encodeURIComponent(purchaseId)}`),
     linkedLotIds: new Set(linked.map((lot) => lot.id)),
+    copiesByLot: await loadLotCopies(
+      context,
+      detail.lots.filter((lot) => lot.itemCount > 0).map((lot) => lot.id)
+    ),
   });
 }
 
@@ -305,7 +310,7 @@ export const getPurchaseOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The purchase. `spend` is what the order cost as its screen states it: `paid` in the purchase's currency, and `base` in the collection's base currency at the rate frozen on the purchase — `null`, with `baseMissing` saying why, when no rate is recorded. Each lot carries its own `spend`, its price plus its share of the shipping, which is spread over every lot and expense by price. A lot's `copies` are managed in the app, never here; `removable` says whether `remove_purchase_lot` would take it. `editable` is false on the incoming half of a trade, where only the note is written. `note` is the collector's own remark, absent when there is none.",
+      "The purchase. `spend` is what the order cost as its screen states it: `paid` in the purchase's currency, and `base` in the collection's base currency at the rate frozen on the purchase — `null`, with `baseMissing` saying why, when no rate is recorded. Each lot carries its own `spend`, its price plus its share of the shipping, which is spread over every lot and expense by price. A lot's `copies` is how many it holds and `copyList` lists them (at most 100 a lot, in the order added): each with its `copyId`, the stamp's `stampNo`, name and `catalogNumbers`, its `condition`, `format` and `state`, and `toReview` while the collector has not confirmed what the agent API wrote — `add_purchase_lot_copies` adds them, and `update_purchase_lot_copy` and `remove_purchase_lot_copy` correct and remove ones still `ordered`. `removable` says whether `remove_purchase_lot` would take the lot. `editable` is false on the incoming half of a trade, where only the note is written. `note` is the collector's own remark, absent when there is none.",
   },
   handler: async (context, params) => readPurchase(context, params),
 };
@@ -738,7 +743,7 @@ export const addPurchaseLotOperation: Operation = {
   method: "POST",
   path: "/purchases/{purchaseId}/lots",
   description:
-    "Add a lot to a purchase — one priced line of what was bought: a stamp, a set, an album, a box. It is created open and empty; the collector identifies the copies into it in the app.",
+    "Add a lot to a purchase — one priced line of what was bought: a stamp, a set, an album, a box. It is created open and empty; `add_purchase_lot_copies` says what is in it, where the order names its stamps.",
   writes: true,
   parameters: [PURCHASE_ID_PARAMETER, LOT_TITLE_PARAMETER, LOT_PRICE_PARAMETER],
   result: {

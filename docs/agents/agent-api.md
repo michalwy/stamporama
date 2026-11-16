@@ -9,10 +9,10 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer and #2532 a sale's free extras; both wrappers exist and the registry carries **one hundred and fifty operations** (measured off `OPERATIONS` when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras and #2551 a purchase lot's copies; both wrappers exist and the registry carries **one hundred and fifty-three operations** (measured off `OPERATIONS` when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #2511's `withdraw_offer`, #2531's `sell_copies`, #2532's `find_free_extras` and `add_free_extras`, #1168's bid recommendation, and #1037's catalog-number
+operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #2511's `withdraw_offer`, #2531's `sell_copies`, #2532's `find_free_extras` and `add_free_extras`, #2551's three lot-copy writes, #1168's bid recommendation, and #1037's catalog-number
 resolver. Twenty-one counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
@@ -23,7 +23,7 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
 #1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173) and *the registry carries one hundred and twenty-one operations* (from #2173 until #2169, #2171 and #2172) and *the registry carries one hundred and twenty-four operations* (from #2169, #2171 and #2172 until #2198) and *the registry carries one hundred and twenty-six operations* (from #2198 until #2204) and *the registry carries one hundred and twenty-seven operations* (from #2204 until #2303 — #2208's `follow_issue_order` made it one hundred and twenty-eight without the count here following) and *the registry carries one hundred and thirty-seven operations* (from #2303 until #2445, four behind the registry by then).
 
-**One hundred of them write** since #2532 added `add_free_extras` — its `find_free_extras` reads — (measured off the operation modules' `writes: true`); *ninety-nine of them write* was the count from #2531, which added `sell_copies`, until then; *ninety-eight of them write* was the count from #2511, which added `withdraw_offer`, until then; *ninety-seven of them write* was the count from #2500, which added `cancel_sale`, until then; *ninety-six of them write* was the count from #2445, which added three issue-format writes — its `list_stamps` reads — to the ninety-three the registry held by then; *ninety of them write* was the count from #2303, which added six proposal writes — its three reads leave the rest, and #2379's `set_sale_note` made it one more without the count following —, until then; *eighty-three of them write* was the count from #2204, which added `move_sale_sets`, until then — #2208's `follow_issue_order` made it eighty-four without the count following —; *eighty-two of them write* was the count from #2198, which added `add_sale_attachments` — its `list_sale_attachments` reads —, until then; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**One hundred and three of them write** since #2551 added its three lot-copy writes (measured off the operation modules' `writes: true`); *one hundred of them write* was the count from #2532, which added `add_free_extras` — its `find_free_extras` reads —, until then; *ninety-nine of them write* was the count from #2531, which added `sell_copies`, until then; *ninety-eight of them write* was the count from #2511, which added `withdraw_offer`, until then; *ninety-seven of them write* was the count from #2500, which added `cancel_sale`, until then; *ninety-six of them write* was the count from #2445, which added three issue-format writes — its `list_stamps` reads — to the ninety-three the registry held by then; *ninety of them write* was the count from #2303, which added six proposal writes — its three reads leave the rest, and #2379's `set_sale_note` made it one more without the count following —, until then; *eighty-three of them write* was the count from #2204, which added `move_sale_sets`, until then — #2208's `follow_issue_order` made it eighty-four without the count following —; *eighty-two of them write* was the count from #2198, which added `add_sale_attachments` — its `list_sale_attachments` reads —, until then; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -130,7 +130,7 @@ src/lib/agent-api/
   trade-reads.ts    the trade, line and balance responses and their projections (#712)
   bid-reads.ts      the bid-recommendation response and its projections (#1168)
   auction-reads.ts  the watchlist, exposure and tracked-listing responses (#1036)
-  purchase-reads.ts the purchase responses, the seller match and the close-name rule (#1390)
+  purchase-reads.ts the purchase responses, the seller match and the close-name rule (#1390); a lot's copy (#2551)
   catalog-resolve.ts  the foreign-number parse, the key set and the verdict (#1037)
   size-reads.ts     the size figure grammar, the size source, the apply report (#1415)
   catalog-edits.ts  the "key: value" entries, the date bounds, the duplicate refusal (#1438); the batch caps (#2174, #2175)
@@ -167,6 +167,7 @@ src/lib/agent-api/
     bids.ts         recommend_bid (#1168)                                ← server-side
     auctions.ts     the three auction reads (#1036)                      ← server-side
     purchases.ts    the eleven purchase operations (#1390)               ← server-side
+    lot-copies.ts   a purchase lot's copies: add, correct, remove (#2551)  ← server-side
     sizes.ts        the seven stamp-size and preset operations (#1415)  ← server-side
     stamp-refs.ts   naming a stamp by id or number, reading its labels   ← server-side
     catalog-edits.ts  the five catalogue writes (#1438), update_stamps / create_issues (#2174, #2175)  ← server-side
@@ -2183,7 +2184,8 @@ of them write.
 | `remove_purchase_lot` | yes | take off a lot that is open, empty and on no other record |
 | `add_purchase_expense` / `update_purchase_expense` / `remove_purchase_expense` | yes | the non-inventory lines |
 
-**The boundary is the collector's, set on 2026-09-26: the purchase, and nothing past it.** No copies —
+**The boundary is the collector's, set on 2026-09-26: the purchase, and nothing past it** — *no
+copies* in it narrowed by #2551 to an open lot's copies still ordered (*Filling a lot*, below). No copies —
 they enter the collection's counts, wants and values, which is the larger and riskier step — and
 nothing irreversible: no closing or reopening a lot (closing freezes the cost basis, ADR-0009 §3.5),
 no delivery status (arriving moves copies to *to sort*), no deleting a purchase. It is held the way
@@ -2260,6 +2262,61 @@ one to `in_transit` first and checks it stays there.
 read any write verb beside the word `lot` as a write to the auction watchlist, which
 `add_purchase_lot` is not. A name carrying `purchase` is now judged by its other words, so
 `add_purchase_auction_lot` would still be caught, and the test says both.
+
+### Filling a lot (#2551)
+
+**Three writes on a purchase lot's copies, settled with the collector on 2026-11-16**: an assistant
+reading an order email says what is in a lot rather than leave the collector to retype *"Mi
+1234–1236 MNH, Fi 500 used ×2"*. It lifts the 2026-09-26 *no copies* for purchase lots and for
+nothing else.
+
+| operation | what it is for |
+| --- | --- |
+| `add_purchase_lot_copies` | one stamp in a condition and quantity (and a format), or one copy of each stamp of a whole issue |
+| `update_purchase_lot_copy` | correct a copy still ordered: stamp, condition, format — only what is sent |
+| `remove_purchase_lot_copy` | delete a copy still ordered, as *Remove from lot* does |
+
+`get_purchase` lists each lot's copies as `copyList` beside the `copies` count — at most
+`MAX_LOT_COPIES_LISTED` (100) a lot, in the order added: a lot an email names stamp by stamp is far
+smaller, and a larger one is the collector's own intake, where a list the agent's context must hold
+would be spent on nothing it writes.
+
+**The writes go through `src/lib/lot-copies-api.ts`, a narrow door onto the screen's own writers**,
+never the writers themselves: `intakeStamps`, `removeLotItem` and `bulkUpdateLotItems` stay on the
+boundary test's `PURCHASE_BOUNDARY`. Adding calls `intakeStamps` with `apiReviewAt`, which writes the
+marker in the same `createManyAndReturn` as the copies; correcting calls `updateItem` with the
+marker's next columns (`nextApiReview`), written in the same `update`; removing is a `deleteMany`
+whose `where` carries every condition (ordered, open lot, a purchase, no trade), so a copy that
+arrives or a lot that closes between the check and the delete leaves the copy standing. Its
+refusals are `LotCopyRefusedError`s worded for the agent, relayed by `operations/lot-copies.ts` as
+`invalid_request` — the one shape the domain refuses in that the dispatcher would otherwise hide.
+
+**What it refuses**, each decided in writing the issue and confirmed by the collector's settling:
+a closed lot (its cost is frozen onto its copies, #122); the incoming half of a trade (its copies are
+what the partner sent); an opening balance (not reached at all); an order that has **arrived** — the
+screen would create the copies *to sort*, already in hand, and the issue's copies are created
+*ordered*, so the assistant describes only what is on its way; and, for a correction or a removal, a
+copy that is **no longer `ordered`**. A copy the collector added is corrected and removed on the same
+terms as one the assistant added — the issue says *a copy that is still ordered*, not *its own* —
+and a correction marks it, so the change is visible either way.
+
+**What it names and how.** A stamp is named as everywhere on this surface (`resolveStampRefMap`: an
+id, `st 123`, or a catalogue number naming only it; an ambiguous one is refused with the candidates
+in `accepted`). A whole issue is added by **one of its standard checklists**, as the screen's picker
+adds an issue (#531): the only one, or the one named in `checklist` — an issue with several is
+refused with their ids rather than guessed, and a specialised checklist is reached only by naming it.
+A condition is required and must not be `priceOnly` (#2374), a cover's price column being no copy's
+condition. A format goes only with one stamp, as the screen offers it. Nothing else is set: no
+certificate, location, photos or disposition flags — the copies take `intakeStamps`' defaults, and
+no price, which stays on the lot.
+
+**Every copy it adds or corrects carries #1626's marker**, three columns on `Item` read and
+accumulated by `auction-review.ts`'s pure functions (`copy-review.ts` names the fields: stamp,
+condition, format). It is drawn by `CopyApiReviewChip` on the purchase screen's copy row and on the
+copy's own page, counted in the lot header (`LotIntakeSummary.apiReviewCount`), and cleared only by
+`confirmCopyApiReviews` — the row's ⋮ *Confirm review* or the lot's ⋮ *Confirm N copies to review* —
+which is on `REVIEW_CLEARERS`. A correction after a confirm starts afresh (`changed`, not
+`created`), as on an auction lot.
 
 ## Stamp sizes and presets
 
@@ -3276,8 +3333,11 @@ exist cannot be.
   — adding, describing, capping and correcting lots and a sale's terms — and *never closes or settles
   a lot* until #1628, which opened closing and cancelling. Bidding, reopening, settling and deleting
   stay closed — see *Keeping the auction register* above.
-- **The agent never touches a copy through a purchase, never does anything to one that cannot be
-  undone, and never edits a contact it did not just create** (#1390). See *Entering purchases* above.
+- **The agent never touches a copy through a purchase but an open lot's copies still ordered, never
+  does anything to one that cannot be undone, and never edits a contact it did not just create**
+  (#1390, narrowed by #2551). *Never touches a copy through a purchase* stood here until #2551, which
+  let it add copies to an open lot and correct or remove ones still ordered. See *Entering purchases*
+  and *Filling a lot* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
 - **The agent never deletes, moves or reorders an issue, a stamp or a variant** (#1438). See
   *Building the catalogue* above. **Checklists, catalogue prices, areas, the variant tree and moves
@@ -3308,7 +3368,7 @@ exist cannot be.
   observations* above.
 
 Do not add a publish-shaped, send-shaped, bid-shaped or copy-touching operation to the
-registry, whatever it is called, nor an auction write beyond #1627's five and #1628's outcome, nor one that deletes a size preset, deletes an area, deletes a sale or moves one through payment
+registry beyond #2551's three lot-copy writes, whatever it is called, nor an auction write beyond #1627's five and #1628's outcome, nor one that deletes a size preset, deletes an area, deletes a sale or moves one through payment
 and shipping, or deletes, moves or reorders an issue or a stamp beyond moving an issue to another area, the variant tree's two writes and #2169's, #2171's and #2172's three. *Two boundaries* was this
 section's count until #1036 and *three* until #1390, and both are quoted rather than deleted.
 

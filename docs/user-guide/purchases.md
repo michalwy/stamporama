@@ -390,6 +390,19 @@ A lot's **⋮** menu lets you **Edit lot** (title and price), **Close** or **Reo
 populate the lot, so they are removed with it (you are warned how many when confirming). A
 lot's price can only be edited while it is open.
 
+#### Copies an assistant added
+
+An [AI assistant](agent-api.md) can fill a lot from an order email — adding the copies it names,
+and correcting or removing ones still ordered. Every copy it adds or corrects carries a
+**To review · API** chip, on its row here and on the copy's own page; its hint says what the
+assistant did (*Added through the agent API, then changed: condition*) and when. The lot's header
+counts them (*3 to review · API*).
+
+Look them over, then confirm: **Confirm review** in a copy's **⋮** takes the chip off that copy,
+and **Confirm N copies to review** in the lot's **⋮** takes it off every one in the lot. Editing a
+copy yourself leaves the chip on — confirming is a separate, deliberate step — and the chip changes
+nothing else: the copies count, arrive and close with the lot like any other.
+
 ### Expenses
 
 Most orders have no expenses, so the card is not shown until there is one. The header's **⋮ → Add

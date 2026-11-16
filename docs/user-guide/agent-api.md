@@ -152,6 +152,15 @@ auction invoice, a seller's email — so you do not retype it. It can:
   shipping — and **correct** any of those later;
 - **add lots**, give them a title and a price, rename or reprice one while it is open, and **remove
   a lot that is still empty**;
+- **say what is in a lot**, when the order names its stamps: add copies of a stamp in a condition
+  and a quantity — *"Fi 500 used ×2"* — or one copy of each stamp of a whole issue, as **Add stamps**
+  does on the purchase screen. It names a stamp by its catalogue number and, when a number could be
+  more than one stamp, it is told the candidates instead of guessing. The copies are created
+  *ordered*, with no price of their own (the lot carries it), and arrive when you mark the order
+  arrived. Only an open lot on an order that has not arrived yet takes them. While a copy is still
+  ordered it can **correct** its stamp, condition or format, or **remove** it. Every copy it adds or
+  corrects shows [**To review · API**](purchases.md#copies-an-assistant-added) until you confirm it.
+  A lot it cannot name stamp by stamp — *"100 Polish stamps"* — it leaves empty for you;
 - **add, change and remove expenses** — the things bought with the stamps that are not stock, like a
   magnifier or a catalogue;
 - **read, write, rewrite and remove the purchase's [note](purchases.md#a-documents-note)** — on the
@@ -166,9 +175,11 @@ auction invoice, a seller's email — so you do not retype it. It can:
   gets a name and, for a marketplace seller, their login — and, for an auction house, that it is one
   and the country it sells in — and nothing else.
 
-**What it cannot do on a purchase is anything about the stamps themselves, or anything you cannot
-take back.** It never adds, moves or removes a copy — the purchase arrives with empty lots, and you
-identify the stamps into them as you always do. It does not close or reopen a lot,
+**What it cannot do on a purchase is touch a copy that has arrived, or anything you cannot take
+back.** It never changes or removes a copy once it has arrived, nor any copy of a closed lot, and it
+never moves copies between lots or purchases. It does not set a copy's location, photos, certificate
+or whether it is for your collection, for sale or for trade — those wait for you when the order
+arrives. It does not close or reopen a lot,
 mark an order in transit or arrived, or delete a purchase, and it will not remove a lot that already
 holds copies or has closed. It does not touch the order a closed trade created beyond its note, nor an
 opening balance at all, and it never sees or

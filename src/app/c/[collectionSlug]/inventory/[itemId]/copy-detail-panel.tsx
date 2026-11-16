@@ -1,6 +1,7 @@
 "use client";
 
 import { CatalogPriceMarkText } from "@/app/c/[collectionSlug]/shared/catalog-price-mark-text";
+import { CopyApiReviewChip } from "@/app/c/[collectionSlug]/shared/copy-api-review-chip";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -92,6 +93,18 @@ const ITEM_NO: React.CSSProperties = {
   background: "var(--color-bg-page)",
   color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
+};
+
+/** {@link StateChip}'s shape untinted, for a chip that brings its own tint. */
+const STATE_CHIP_BASE: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  whiteSpace: "nowrap",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "var(--color-border)",
 };
 
 function StateChip({ label, token }: { label: string; token?: string }) {
@@ -254,6 +267,9 @@ export function CopyDetailPanel({
               </span>
             </Tooltip>
           )}
+          {/* Added to a purchase lot or corrected there through the agent API, not yet confirmed
+              (#2551) — the purchase screen's row chip, from the same columns. */}
+          <CopyApiReviewChip mark={item.apiReview} chipStyle={STATE_CHIP_BASE} />
           {item.inCollection && <StateChip label="In collection" token="disposition-collection" />}
           {item.forSale && <StateChip label="For sale" token="disposition-sale" />}
           {item.forTrade && <StateChip label="For trade" token="disposition-trade" />}

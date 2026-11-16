@@ -433,6 +433,11 @@ describe("the purchase operations (#1390)", () => {
         ["PATCH", `/purchase-expenses/${expenseId}`, { price: "1.00" }],
         ["DELETE", `/purchase-expenses/${expenseId}`, undefined],
         ["POST", `/purchases/${purchaseId}/supply-lines`, { supply: "C6 envelope", quantity: 1, price: "1.00" }],
+        // A lot's copies (#2551) — `agent-api-lot-copies.test.ts` drives them; the scope is checked
+        // before the copy is looked up, so any id answers here.
+        ["POST", `/purchase-lots/${lotId}/copies`, { stamp: "st 1", condition: "MNH" }],
+        ["PATCH", "/purchase-lot-copies/no-such-copy", { condition: "MNH" }],
+        ["DELETE", "/purchase-lot-copies/no-such-copy", undefined],
       ];
       // Every writing purchase operation is on that list — a new one cannot be added and forgotten.
       const writing = OPERATIONS.filter(
@@ -586,17 +591,22 @@ describe("the purchase operations (#1390)", () => {
 
   describe("the boundary", () => {
     it("publishes exactly these purchase operations, and nothing that closes, arrives or deletes", () => {
+      // #2551 opened a lot's copies: three operations named for them, and those three only.
+      const LOT_COPY_OPS = new Set(["add_purchase_lot_copies", "update_purchase_lot_copy", "remove_purchase_lot_copy"]);
       const purchaseOps = OPERATIONS.filter((op) => /^\/(purchases|purchase-|sellers)/.test(op.path))
         .map((op) => `${op.method} ${op.path} ${op.name}`)
         .sort();
       assert.deepEqual(purchaseOps, [
         "DELETE /purchase-expenses/{expenseId} remove_purchase_expense",
+        "DELETE /purchase-lot-copies/{copyId} remove_purchase_lot_copy",
         "DELETE /purchase-lots/{lotId} remove_purchase_lot",
         "GET /purchases list_purchases",
         "GET /purchases/{purchaseId} get_purchase",
         "PATCH /purchase-expenses/{expenseId} update_purchase_expense",
+        "PATCH /purchase-lot-copies/{copyId} update_purchase_lot_copy",
         "PATCH /purchase-lots/{lotId} update_purchase_lot",
         "PATCH /purchases/{purchaseId} update_purchase",
+        "POST /purchase-lots/{lotId}/copies add_purchase_lot_copies",
         "POST /purchases create_purchase",
         "POST /purchases/{purchaseId}/expenses add_purchase_expense",
         "POST /purchases/{purchaseId}/lots add_purchase_lot",
@@ -605,8 +615,9 @@ describe("the purchase operations (#1390)", () => {
       ]);
       const forbidden = new Set(["close", "reopen", "arrive", "arrived", "delete", "copy", "copies", "contact", "status"]);
       for (const op of OPERATIONS) {
+        const words = op.name.split("_").filter((word) => !LOT_COPY_OPS.has(op.name) || (word !== "copy" && word !== "copies"));
         assert.ok(
-          !op.name.split("_").some((word) => forbidden.has(word) && /purchase|lot|seller|contact/.test(op.name)),
+          !words.some((word) => forbidden.has(word) && /purchase|lot|seller|contact/.test(op.name)),
           `${op.name} reads as a purchase act this surface does not take`
         );
       }
