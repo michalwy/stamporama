@@ -34,14 +34,20 @@ import { facebookPostTitleRefusal, type FacebookCreateChoice } from "./facebook-
 
 // The choices ------------------------------------------------------------------------------------
 
-/** What the pass lists: every complete series, or the copies left once those are taken out. */
-export type GeneratorMode = "checklists" | "singles";
+/** What the pass lists: every complete series, the copies left once those are taken out, or both in
+ *  one run — the sets first, then the singles from what they left (#2567). */
+export type GeneratorMode = "checklists" | "singles" | "sets-then-singles";
 
 /** How identical sets are packed: one offer holding them all, an offer each, or only one of them
  *  listed and the rest left where they are (#2485). */
 export type GeneratorPackaging = "multi" | "separate" | "one";
 
-export const GENERATOR_MODES: readonly GeneratorMode[] = ["checklists", "singles"];
+export const GENERATOR_MODES: readonly GeneratorMode[] = ["checklists", "singles", "sets-then-singles"];
+
+/** Whether a mode lists complete sets — and so is sent the mixing switches, which belong to them. */
+export function listsCompleteSets(mode: GeneratorMode): boolean {
+  return mode !== "singles";
+}
 export const GENERATOR_PACKAGINGS: readonly GeneratorPackaging[] = ["multi", "separate", "one"];
 
 /**
@@ -346,7 +352,8 @@ export interface GeneratorPlanInput {
 export interface GeneratorPlan {
   lines: PlanLine[];
   /** Pool copies the other mode lists: the leftover singles in checklist mode, the copies in complete
-   *  sets in singles mode. Running both modes, in either order, lists every copy once. */
+   *  sets in singles mode. Running both modes, in either order, lists every copy once. Zero in *complete
+   *  sets, then singles*, which lists both. */
   otherModeCopies: number;
   /** With *one of each* (#2485): the identical sets beyond the first, which are not listed in this pass,
    *  and the distinct sets not listed because an identical one is already in an open offer on the
@@ -364,6 +371,8 @@ function inActiveBidding(offer: GeneratorOffer): boolean {
  *
  * **Singles are the copies left once the complete sets are taken out**, in either mode — so listing the
  * singles first never breaks up a series, and the two modes give the same result in either order.
+ * *Complete sets, then singles* (#2567) lists both halves of that one split, the sets first, each under
+ * its own mode's rules — the singles are what the sets left, mixed sets included.
  *
  * With **separate** packaging every set is a new offer of its own, even where a similar offer exists.
  * With **multi-quantity**, identical sets are one line; a line whose set matches an open offer on the
@@ -383,9 +392,15 @@ export function planOffers(input: GeneratorPlanInput): GeneratorPlan {
     input.priority,
     input.oneStampSets
   );
-  const listed = input.mode === "checklists" ? sets : singles;
+  // Both halves come out of the one `assembleSets`, so a copy is in a set or a single, never both, and
+  // the sets come first (#2567).
+  const listed = input.mode === "checklists" ? sets : input.mode === "singles" ? singles : [...sets, ...singles];
   const otherModeCopies =
-    input.mode === "checklists" ? singles.length : sets.reduce((n, set) => n + set.copies.length, 0);
+    input.mode === "checklists"
+      ? singles.length
+      : input.mode === "singles"
+        ? sets.reduce((n, set) => n + set.copies.length, 0)
+        : 0;
 
   const matchesOf = (set: GeneratedSet) =>
     collidingItemIdsByOffer(
@@ -623,6 +638,23 @@ export function keptResultingSetCount(
     .filter((other) => skip.has(other.id) && other.target.kind === "existing" && other.target.offerId === offerId)
     .reduce((n, other) => n + other.sets.length, 0);
   return line.resultingSetCount - dropped;
+}
+
+/**
+ * What *complete sets, then singles* (#2567) puts into the ticked lines, half by half: the complete
+ * sets and the offers they go into, and the singles. A piece of several stamps is offered as a single
+ * is, so it counts as one. Worded for the summary line: *42 sets in 30 offers, 83 singles*.
+ */
+export function setsThenSinglesSummary(
+  lines: readonly { id: string; kind: "series" | "single" | "carrier"; sets: readonly unknown[] }[],
+  skip: ReadonlySet<string>
+): string {
+  const kept = lines.filter((line) => !skip.has(line.id));
+  const series = kept.filter((line) => line.kind === "series");
+  const sets = series.reduce((n, line) => n + line.sets.length, 0);
+  const singles = kept.filter((line) => line.kind !== "series").reduce((n, line) => n + line.sets.length, 0);
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return `${count(sets, "set", "sets")} in ${count(series.length, "offer", "offers")}, ${count(singles, "single", "singles")}`;
 }
 
 /**

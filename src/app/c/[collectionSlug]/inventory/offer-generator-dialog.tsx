@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import type { GeneratorCombinationPart, GeneratorLineView, GeneratorOfferRef } from "@/lib/offer-generator";
 import {
+  GENERATOR_MODES,
   GENERATOR_PACKAGINGS,
   generatorLotPlaces,
   generatorPostRefusal,
@@ -11,6 +12,8 @@ import {
   generatorRequestParams,
   generatorSelection,
   keptResultingSetCount,
+  listsCompleteSets,
+  setsThenSinglesSummary,
   type GeneratorMode,
   type GeneratorPackaging,
   type GeneratorPostSplit,
@@ -69,6 +72,11 @@ import { SELECT_STRIP } from "./inventory-copy-list";
 // switches (#1265), and with one on, the collector says which sets come first. The switches belong to
 // Complete sets: Singles is sent no mixing, so it lists what it always listed.
 //
+// *Complete sets, then singles* (#2567) lists both halves of one split in one run — the sets first,
+// the sets' rules (mixing included) deciding them, then every copy they left as a single — each line
+// marked Set or Single. It is the mode the dialog first opens in; after that, the last one chosen,
+// remembered per collection like the packing.
+//
 // A checklist of a single stamp can count as a complete set (#2202), so a collector listing complete
 // series only does not lose every one-stamp issue. The switch starts on and is remembered in this
 // browser. Unlike mixing it travels with both modes: a copy it makes a set is no longer a single, so
@@ -112,6 +120,11 @@ const MODES: { value: GeneratorMode; label: string; hint: string }[] = [
     label: "Singles",
     hint: "Every copy left once the complete sets are taken out becomes a set of its own.",
   },
+  {
+    value: "sets-then-singles",
+    label: "Complete sets, then singles",
+    hint: "Both in one run: the complete sets first, then every copy left over as a single.",
+  },
 ];
 
 const PACKAGINGS: { value: GeneratorPackaging; label: string; hint: string }[] = [
@@ -147,6 +160,9 @@ const PRIORITIES: { value: MixPriority; label: string; hint: string }[] = [
 
 /** Where the one-stamp switch is remembered (#2202): a standing preference, not a pass's. */
 const ONE_STAMP_SETS_KEY = "stamporama:offer-generator:one-stamp-sets";
+
+/** Where the last mode chosen is remembered (#2567), per collection; absent, Complete sets, then singles. */
+const MODE_NAMESPACE = "offer-generator-mode";
 
 /** Where the packing of identical sets is remembered (#2485), per collection; absent, Multi-quantity. */
 const PACKAGING_NAMESPACE = "offer-generator-packaging";
@@ -292,7 +308,10 @@ export function OfferGeneratorDialog({
   onClose: () => void;
   onDone: (outcome: OfferGeneratorOutcome) => void;
 }) {
-  const [mode, setMode] = useState<GeneratorMode>("checklists");
+  const [storedMode, setMode] = usePersistedCollectionValue(MODE_NAMESPACE, collectionId);
+  const mode: GeneratorMode = GENERATOR_MODES.includes(storedMode as GeneratorMode)
+    ? (storedMode as GeneratorMode)
+    : "sets-then-singles";
   const [storedPackaging, setPackaging] = usePersistedCollectionValue(PACKAGING_NAMESPACE, collectionId);
   const packaging: GeneratorPackaging = GENERATOR_PACKAGINGS.includes(storedPackaging as GeneratorPackaging)
     ? (storedPackaging as GeneratorPackaging)
@@ -336,7 +355,7 @@ export function OfferGeneratorDialog({
       platformId,
       mode,
       packaging,
-      mixing: mode === "checklists" ? mixing : NO_MIXING,
+      mixing: listsCompleteSets(mode) ? mixing : NO_MIXING,
       priority,
       oneStampSets,
       itemIds: input.kind === "ticked" ? input.itemIds : null,
@@ -532,7 +551,7 @@ export function OfferGeneratorDialog({
                   </span>
                 </label>
               ))}
-              {mode === "checklists" && (
+              {listsCompleteSets(mode) && (
                 <MixingSwitches
                   mixing={mixing}
                   priority={priority}
@@ -677,7 +696,13 @@ export function OfferGeneratorDialog({
             <Callout tone="warning">The offers could not be planned. Close the dialog and try again.</Callout>
           ) : (
             <>
-              <Summary preview={preview} selection={selection} mode={mode} postSizes={postSizes} />
+              <Summary
+                preview={preview}
+                selection={selection}
+                mode={mode}
+                halves={mode === "sets-then-singles" ? setsThenSinglesSummary(lines, skip) : null}
+                postSizes={postSizes}
+              />
               {preview.creationBlock && <Callout tone="warning">{preview.creationBlock}</Callout>}
               <ListedElsewhereSummary
                 copies={listedElsewhere}
@@ -691,7 +716,9 @@ export function OfferGeneratorDialog({
                     ? mixesAny
                       ? "None of these copies completes a set, even with the mixing allowed."
                       : "None of these copies completes a set in one condition, certificate and format."
-                    : "Every one of these copies belongs to a complete set — generate the complete sets instead."}
+                    : mode === "singles"
+                      ? "Every one of these copies belongs to a complete set — generate the complete sets instead."
+                      : "None of these copies makes an offer."}
                 </Empty>
               ) : (
                 <div style={{ border: "1px solid var(--color-border)", borderRadius: "0.5rem", overflow: "clip" }}>
@@ -711,6 +738,7 @@ export function OfferGeneratorDialog({
                       baseCurrency={baseCurrency}
                       vendorMaps={vendorMaps}
                       line={line}
+                      markKind={mode === "sets-then-singles"}
                       ticked={!skip.has(line.id)}
                       lotPlace={intoPost ? (lotPlaces.get(line.id) ?? null) : null}
                       resultingSetCount={keptResultingSetCount(lines, skip, line.id)}
@@ -809,11 +837,15 @@ function Summary({
   preview,
   selection,
   mode,
+  halves,
   postSizes,
 }: {
   preview: NonNullable<ReturnType<typeof useOfferGeneratorPreview>["data"]>;
   selection: GeneratorSelection;
   mode: GeneratorMode;
+  /** In *complete sets, then singles* (#2567), the two halves counted — *42 sets in 30 offers, 83
+   *  singles* — in place of the plain count of sets; null in the other modes. */
+  halves: string | null;
   /** The lots of each new post (#2480); empty when the new offers go into none. */
   postSizes: readonly number[];
 }) {
@@ -826,7 +858,7 @@ function Summary({
         {selection.changedOffers > 0 &&
           `, ${plural(selection.changedOffers, "existing offer", "existing offers")} receiving sets`}
         {" · "}
-        {plural(selection.sets, "set", "sets")} · {plural(selection.copies, "copy", "copies")}
+        {halves ?? plural(selection.sets, "set", "sets")} · {plural(selection.copies, "copy", "copies")}
         {postSizes.length > 0 && ` · ${plural(postSizes.length, "new post", "new posts")}`}
       </div>
       {skippedCount > 0 && (
@@ -931,6 +963,7 @@ function Line({
   baseCurrency,
   vendorMaps,
   line,
+  markKind,
   ticked,
   lotPlace,
   resultingSetCount,
@@ -946,6 +979,8 @@ function Line({
   baseCurrency: string;
   vendorMaps: VendorMaps;
   line: GeneratorLineView;
+  /** Whether the line says it is a set or a single — when the pass lists both (#2567). */
+  markKind: boolean;
   ticked: boolean;
   /** The new offer's lot in the new post (#2030) — *lot 5*, or *post 2 · lot 5* where the limit makes
    *  several posts (#2480) — or null when there is no post or it is no lot. */
@@ -994,6 +1029,7 @@ function Line({
         </button>
         {/* The marker sits beside the title; a click on it is the line's, so it expands it (#2479). */}
         <span style={{ display: "flex", alignItems: "center", gap: "0.375rem", minWidth: 0 }}>
+          {markKind && <span style={{ ...ROW_CHIP, flexShrink: 0 }}>{line.kind === "series" ? "Set" : "Single"}</span>}
           <Tooltip content={line.title} style={{ ...CELL, flex: "0 1 auto" }}>
             <span style={{ fontWeight: 600, color: "var(--color-text-primary)" }}>{line.title}</span>
           </Tooltip>
