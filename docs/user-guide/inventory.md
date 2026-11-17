@@ -1833,11 +1833,22 @@ Two choices:
     - **Mix freely** — sets are formed in the usual order, lowest copy numbers first, whatever their
       value: whatever completes a set does, pure or mixed.
 
-    The switches belong to *Complete sets*; *Singles* lists what it always did.
+    The switches belong to *Complete sets* (and to *Complete sets, then singles*); *Singles* lists
+    what it always did.
   - **Singles** — every copy **left over** once the complete sets are taken out becomes a set of its
     own. A copy that belongs in a complete set is never offered as a single, so it does not matter
     which of the two you run first. A cover or other piece with several stamps is always an offer of
     its own.
+  - **Complete sets, then singles** — both in one run: every complete checklist becomes a set exactly
+    as *Complete sets* makes it — the mixing switches and *One-stamp series count as complete sets*
+    included — and every copy left over becomes a single exactly as *Singles* makes it. The preview
+    lists the sets first, then the singles, each line marked **Set** or **Single**, and the count
+    above the list names both halves: *42 sets in 30 offers, 83 singles*. A copy is in one proposed
+    offer only: unticking a set does not turn its copies into singles — they are simply not listed in
+    this run.
+
+  The dialog opens on *Complete sets, then singles* the first time; after that it remembers the
+  last choice for the next pass in this collection.
 - **How to pack identical sets.**
   - **Multi-quantity** — identical sets (the same stamps, in the same condition, certificate status
     and format — for a mixed set, every stamp in the same one as in the other) share one offer, with one set per copy of the set. On a platform that lists an

@@ -19,6 +19,8 @@ import {
   parsePlanFingerprint,
   planOffers,
   issueLineTitle,
+  listsCompleteSets,
+  setsThenSinglesSummary,
   skipReason,
   type GeneratorCopy,
   type GeneratorOffer,
@@ -294,6 +296,89 @@ describe("planOffers with mixing (#2102)", () => {
     });
     assert.equal(lines.length, 1);
     assert.equal(lines[0].id, plan({ copies: [copy("a1", "s1"), copy("a2", "s2"), copy("b1", "s1"), copy("b2", "s2")] }).lines[0].id);
+  });
+});
+
+describe("complete sets, then singles (#2567)", () => {
+  const trio: LotChecklist = { checklistId: "trio", stampIds: ["s3", "s4", "s5"] };
+  const one: LotChecklist = { checklistId: "one", stampIds: ["s9"] };
+  const lineIds = (lines: { sets: { copies: GeneratorCopy[] }[] }[]) => lines.map((line) => ids(line.sets));
+
+  it("proposes the complete sets, then the singles left over, every copy once", () => {
+    const copies = [
+      copy("a1", "s1"),
+      copy("a2", "s2"),
+      copy("b3", "s3"),
+      copy("b4", "s4"),
+      copy("b5", "s5"),
+      ...["s6", "s7", "s8", "s10", "s11"].map((stampId) => copy(`l-${stampId}`, stampId)),
+    ];
+    const both = plan({ copies, checklists: [pair, trio], mode: "sets-then-singles" });
+    assert.deepEqual(both.lines.map((line) => line.checklistId), ["pair", "trio", null, null, null, null, null]);
+    const listed = both.lines.flatMap((line) => line.sets.flatMap((set) => set.copies.map((c) => c.itemId)));
+    assert.deepEqual([...listed].sort(), copies.map((c) => c.itemId).sort());
+    assert.equal(both.otherModeCopies, 0);
+
+    // The two halves are exactly what the two modes propose on their own, in that order.
+    const sets = plan({ copies, checklists: [pair, trio], mode: "checklists" });
+    const singles = plan({ copies, checklists: [pair, trio], mode: "singles" });
+    assert.deepEqual(lineIds(both.lines), [...lineIds(sets.lines), ...lineIds(singles.lines)]);
+    assert.deepEqual(
+      both.lines.map((line) => line.id),
+      [...sets.lines, ...singles.lines].map((line) => line.id)
+    );
+  });
+
+  it("counts a one-stamp series as a set when the switch is on, never as a single", () => {
+    const copies = [copy("a", "s9"), copy("c", "s6")];
+    const on = plan({ copies, checklists: [pair, one], oneStampSets: true, mode: "sets-then-singles" });
+    assert.deepEqual(on.lines.map((line) => line.checklistId), ["one", null]);
+    assert.deepEqual(lineIds(on.lines), [[["a"]], [["c"]]]);
+    const off = plan({ copies, checklists: [pair, one], mode: "sets-then-singles" });
+    assert.deepEqual(off.lines.map((line) => line.checklistId), [null, null]);
+  });
+
+  it("leaves a mixed set's copies out of the singles", () => {
+    const copies = [copy("a1", "s1"), copy("a2", "s2", { conditionId: "mh" }), copy("l", "s6")];
+    const { lines } = plan({
+      copies,
+      mode: "sets-then-singles",
+      mixing: { condition: true, certificate: false, format: false },
+    });
+    assert.deepEqual(lineIds(lines), [[["a1", "a2"]], [["l"]]]);
+  });
+
+  it("is a mode that lists complete sets, as Complete sets is and Singles is not", () => {
+    assert.equal(listsCompleteSets("sets-then-singles"), true);
+    assert.equal(listsCompleteSets("checklists"), true);
+    assert.equal(listsCompleteSets("singles"), false);
+  });
+
+  it("counts both halves of the ticked lines for the summary", () => {
+    const lines = [
+      { id: "s1", kind: "series" as const, sets: [[], [], []] },
+      { id: "s2", kind: "series" as const, sets: [[]] },
+      { id: "x1", kind: "single" as const, sets: [[], []] },
+      { id: "x2", kind: "carrier" as const, sets: [[]] },
+    ];
+    assert.equal(setsThenSinglesSummary(lines, new Set()), "4 sets in 2 offers, 3 singles");
+    assert.equal(setsThenSinglesSummary(lines, new Set(["s1", "x1"])), "1 set in 1 offer, 1 single");
+    assert.equal(setsThenSinglesSummary(lines, new Set(["s1", "s2", "x1", "x2"])), "0 sets in 0 offers, 0 singles");
+  });
+
+  it("travels in the request", () => {
+    const params = generatorRequestParams({
+      platformId: "p1",
+      mode: "sets-then-singles",
+      packaging: "multi",
+      itemIds: null,
+      filters: "",
+      targets: {},
+      skip: [],
+      facebook: { facebookGroupId: null, endsAt: null },
+    });
+    assert.equal(params.get("mode"), "sets-then-singles");
+    assert.equal(parseGeneratorRequest(params)?.mode, "sets-then-singles");
   });
 });
 

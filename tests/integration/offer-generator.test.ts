@@ -216,6 +216,33 @@ describe("offer generator (#1287)", () => {
     assert.equal((await offersHolding(copies)).length, 2);
   });
 
+  it("lists the complete sets, then the singles left over, in one run — every copy once (#2567)", async () => {
+    const [s1, s2, s3, s4, s5] = await stamps(5);
+    await checklist([s1, s2]);
+    await checklist([s3, s4, s5]);
+    const series = [await copy(s1), await copy(s2), await copy(s3), await copy(s4), await copy(s5)];
+    const loose = [];
+    for (const stampId of await stamps(5)) loose.push(await copy(stampId));
+    const copies = [...series, ...loose];
+    const input = ticked(copies, { mode: "sets-then-singles" });
+
+    const preview = await previewOfferGeneration(userId, collectionId, input);
+    assert.deepEqual(
+      preview.lines.map((line) => line.kind),
+      ["series", "series", "single", "single", "single", "single", "single"],
+      "the sets first, then the singles"
+    );
+    assert.equal(preview.otherModeCopies, 0);
+    assert.deepEqual(preview.totals, { newOffers: 7, changedOffers: 0, sets: 7, copies: 10 });
+
+    const result = await commitOfferGeneration(userId, collectionId, input, preview.fingerprint);
+    assert.deepEqual(result, { createdOffers: 7, changedOffers: 0, sets: 7, copies: 10, posts: [] });
+    const made = await offersHolding(copies);
+    assert.equal(made.length, 7);
+    const listed = made.flatMap((offer) => offer.sets.flatMap((set) => set.items.map((i) => i.itemId)));
+    assert.deepEqual([...listed].sort(), [...copies].sort(), "every copy listed, and only once");
+  });
+
   it("forms no set from a checklist only mixed conditions complete, nor from one of a single stamp", async () => {
     const [s1, s2, lone] = await stamps(3);
     await checklist([s1, s2]);
