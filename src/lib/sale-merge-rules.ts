@@ -1,3 +1,4 @@
+import { foldForSearch } from "./fold-for-search";
 import { formatEntityNo } from "./quick-jump";
 import { isSaleCancelled, isSaleSent } from "./sale-status";
 import type { StoredSaleApiReview } from "./sale-review";
@@ -250,4 +251,48 @@ export function mergedSaleApiReview(
     apiReviewCreated: marked && remaining.apiReviewCreated,
     apiReviewActions: actions,
   };
+}
+
+/** A candidate sale as the merge dialog's table finds and groups it (#2565). */
+export interface SaleMergeListing {
+  saleNo: number;
+  buyerId: string | null;
+  buyerName: string | null;
+  externalRef: string | null;
+}
+
+/**
+ * Does a candidate match the merge dialog's search box (#2565): its **buyer**, its **sale number**
+ * (with or without the leading `#`) or its **order number** contains what is typed — case and
+ * diacritics folded. An empty search matches every candidate.
+ */
+export function matchesSaleMergeSearch(candidate: SaleMergeListing, search: string): boolean {
+  const q = foldForSearch(search.trim());
+  if (q === "") return true;
+  const number = q.startsWith("#") ? q.slice(1) : q;
+  return (
+    (candidate.buyerName != null && foldForSearch(candidate.buyerName).includes(q)) ||
+    (number !== "" && String(candidate.saleNo).includes(number)) ||
+    (candidate.externalRef != null && foldForSearch(candidate.externalRef).includes(q))
+  );
+}
+
+/**
+ * The merge dialog's two groups (#2565): the candidates **to this sale's buyer** first, then those
+ * to **other buyers** — each in the order given (the candidates come newest first), narrowed by
+ * {@link matchesSaleMergeSearch}. A sale with no buyer has no *same buyer*: everything is *other*.
+ */
+export function saleMergeCandidateGroups<T extends SaleMergeListing>(
+  sale: Pick<SaleMergeListing, "buyerId">,
+  candidates: readonly T[],
+  search: string
+): { sameBuyer: T[]; otherBuyers: T[] } {
+  const sameBuyer: T[] = [];
+  const otherBuyers: T[] = [];
+  for (const candidate of candidates) {
+    if (!matchesSaleMergeSearch(candidate, search)) continue;
+    if (sale.buyerId !== null && candidate.buyerId === sale.buyerId) sameBuyer.push(candidate);
+    else otherBuyers.push(candidate);
+  }
+  return { sameBuyer, otherBuyers };
 }

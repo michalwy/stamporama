@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   DialogShell,
@@ -8,26 +8,28 @@ import {
   DialogFooter,
   DialogPrimaryButton,
   DialogSecondaryButton,
-  LabelWithError,
   FORM_DIALOG_COLUMNS_WIDTH,
 } from "@/app/dialog-shell";
 import { formControl } from "@/app/control-style";
+import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import type { SaleMergeCandidate } from "@/lib/sales";
 import {
   mergedSalePreview,
   postageSumRefusal,
+  saleMergeCandidateGroups,
   type SaleMergeChoices,
   type SaleMergePick,
 } from "@/lib/sale-merge-rules";
 import { formatEntityNo } from "@/lib/quick-jump";
-import { SALE_STATUS_META, type SaleStatus } from "../sale-status";
+import { SALE_STATUS_META, saleStatusChipStyle, saleStatusMeta, type SaleStatus } from "../sale-status";
 import { saleKeys } from "../use-sales-query";
 
-const SELECT_STYLE: React.CSSProperties = {
+const SEARCH_STYLE: React.CSSProperties = {
   ...formControl,
   width: "100%",
-  maxWidth: "30rem",
+  maxWidth: "24rem",
   padding: "0.5rem 0.625rem",
   border: "1px solid var(--color-border-strong)",
   borderRadius: "0.375rem",
@@ -57,6 +59,45 @@ const MERGED_CELL: React.CSSProperties = { ...CELL, fontWeight: 600, background:
 
 const MUTED: React.CSSProperties = { color: "var(--color-text-muted)" };
 
+/** The candidates' table scrolls on its own past this height, its header held in place (#2565), so
+ *  the comparison under it stays in view however many sales are open. */
+const CANDIDATES_MAX_HEIGHT = "17rem";
+
+const STICKY_HEAD: React.CSSProperties = {
+  ...HEAD,
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  background: "var(--color-bg-elevated)",
+  whiteSpace: "nowrap",
+};
+
+const GROUP_CELL: React.CSSProperties = {
+  ...CELL,
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
+  color: "var(--color-text-muted)",
+  background: "var(--color-bg-page)",
+};
+
+const NUM_CELL: React.CSSProperties = { ...CELL, textAlign: "right", whiteSpace: "nowrap" };
+
+const EXPAND_BUTTON: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "1.5rem",
+  height: "1.5rem",
+  padding: 0,
+  border: "none",
+  borderRadius: "0.25rem",
+  background: "transparent",
+  color: "var(--color-text-secondary)",
+  cursor: "pointer",
+};
+
 /** Which of the two sales on screen — this one (`a`) or the one picked (`b`). */
 type Side = "a" | "b";
 
@@ -78,6 +119,9 @@ interface MergeSalesDialogProps {
  * **Merge with…** (#2041): pick another open sale on the same platform and currency, say which of the
  * two remains, and whose buyer handling (or total paid), commission and postage the merged sale
  * takes — one, the other, or their sum — with the merged sale previewed before anything changes.
+ *
+ * The other sale is picked from a **table** (#2565): the same buyer's sales first, then everyone
+ * else's, newest first in each, narrowed by a search box, each row opening onto its sold sets.
  */
 export function MergeSalesDialog({
   collectionId,
@@ -96,14 +140,27 @@ export function MergeSalesDialog({
       return result;
     },
   });
-  const [otherId, setOtherId] = useState("");
+  const [pickedId, setPickedId] = useState("");
+  const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [remains, setRemains] = useState<Side>("a");
   const [buyer, setBuyer] = useState<AmountChoice>("a");
   const [commission, setCommission] = useState<AmountChoice>("sum");
   const [postage, setPostage] = useState<AmountChoice>("a");
 
   const a = query.data?.sale ?? null;
-  const b = query.data?.candidates.find((c) => c.id === otherId) ?? null;
+  const candidates = query.data?.candidates ?? [];
+  // With only one sale to merge with, it is picked already (#2565).
+  const otherId = pickedId || (candidates.length === 1 ? candidates[0].id : "");
+  const b = candidates.find((c) => c.id === otherId) ?? null;
+  const groups = a ? saleMergeCandidateGroups(a, candidates, search) : null;
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const sumRefusal = a && b ? postageSumRefusal(a, b) : null;
   // A sum the currencies no longer allow falls back to this sale's postage.
@@ -140,32 +197,79 @@ export function MergeSalesDialog({
           {query.isError && (
             <p style={{ color: "var(--color-error)", margin: 0 }}>{query.error.message}</p>
           )}
-          {a && query.data!.candidates.length === 0 && (
+          {a && candidates.length === 0 && (
             <p style={{ ...MUTED, margin: 0 }}>
               No other sale on this platform in {currency} is still open — only sales not yet sent
               can be merged.
             </p>
           )}
-          {a && query.data!.candidates.length > 0 && (
+          {a && groups && candidates.length > 0 && (
             <>
-              <LabelWithError htmlFor="merge-other-sale">Merge with</LabelWithError>
-              <select
-                id="merge-other-sale"
-                value={otherId}
-                onChange={(e) => setOtherId(e.target.value)}
+              <p style={{ margin: "0 0 0.625rem", fontSize: "0.875rem", fontWeight: 600 }}>
+                Merge sale {formatEntityNo(a.saleNo)} ({a.buyerName ?? "buyer unknown"}, {a.soldAt}) with
+              </p>
+              <TextInput
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by buyer, sale number or order number…"
+                aria-label="Search the sales to merge with"
                 disabled={isPending}
-                style={SELECT_STYLE}
-                data-autofocus-select
+                style={SEARCH_STYLE}
+                autoFocus
+              />
+              <div
+                style={{
+                  marginTop: "0.625rem",
+                  maxHeight: CANDIDATES_MAX_HEIGHT,
+                  overflowY: "auto",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "0.375rem",
+                }}
               >
-                <option value="">Choose a sale…</option>
-                {query.data!.candidates.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {`${formatEntityNo(c.saleNo)} · ${c.soldAt} · ${c.buyerName ?? "buyer unknown"}${
-                      c.externalRef ? ` · # ${c.externalRef}` : ""
-                    } · ${c.lineCount} ${c.lineCount === 1 ? "set" : "sets"}`}
-                  </option>
-                ))}
-              </select>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...STICKY_HEAD, width: "4.5rem" }} />
+                      <th style={STICKY_HEAD}>Sale</th>
+                      <th style={STICKY_HEAD}>Sold</th>
+                      <th style={STICKY_HEAD}>Buyer</th>
+                      <th style={STICKY_HEAD}>Status</th>
+                      <th style={{ ...STICKY_HEAD, textAlign: "right" }}>Sets</th>
+                      <th style={{ ...STICKY_HEAD, textAlign: "right" }}>Gross</th>
+                      <th style={STICKY_HEAD}>Order number</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groups.sameBuyer.length === 0 && groups.otherBuyers.length === 0 && (
+                      <tr>
+                        <td colSpan={CANDIDATE_COLUMNS} style={{ ...CELL, ...MUTED }}>
+                          No sale matches this search.
+                        </td>
+                      </tr>
+                    )}
+                    {(
+                      [
+                        ["Same buyer", groups.sameBuyer],
+                        ["Other buyers", groups.otherBuyers],
+                      ] as const
+                    ).map(([heading, rows]) =>
+                      rows.length === 0 ? null : (
+                        <CandidateGroup
+                          key={heading}
+                          heading={heading}
+                          rows={rows}
+                          currency={currency}
+                          pickedId={otherId}
+                          onPick={setPickedId}
+                          expanded={expanded}
+                          onToggle={toggleExpanded}
+                          disabled={isPending}
+                        />
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
           {a && b && preview && remaining && other && (
@@ -302,6 +406,141 @@ export function MergeSalesDialog({
         </DialogFooter>
       </form>
     </DialogShell>
+  );
+}
+
+/** The candidates' table's columns: the pick, then the seven the collector picks by. */
+const CANDIDATE_COLUMNS = 8;
+
+/** One group of the candidates' table — *Same buyer* or *Other buyers* — under its heading row. */
+function CandidateGroup({
+  heading,
+  rows,
+  currency,
+  pickedId,
+  onPick,
+  expanded,
+  onToggle,
+  disabled,
+}: {
+  heading: string;
+  rows: SaleMergeCandidate[];
+  currency: string;
+  pickedId: string;
+  onPick: (id: string) => void;
+  expanded: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <>
+      <tr>
+        <td colSpan={CANDIDATE_COLUMNS} style={GROUP_CELL}>
+          {heading}
+        </td>
+      </tr>
+      {rows.map((c) => {
+        const open = expanded.has(c.id);
+        const picked = c.id === pickedId;
+        const status = saleStatusMeta(c.status);
+        const pick = () => {
+          if (!disabled) onPick(c.id);
+        };
+        const rowCell = (style: React.CSSProperties): React.CSSProperties => ({
+          ...style,
+          cursor: disabled ? "default" : "pointer",
+          background: picked ? "var(--color-accent-soft)" : undefined,
+          borderBottom: open ? "none" : style.borderBottom,
+        });
+        return (
+          <Fragment key={c.id}>
+            <tr onClick={pick}>
+              <td style={{ ...rowCell(CELL), whiteSpace: "nowrap" }}>
+                {/* Opening a row shows what is in it; it does not pick it (#2565). */}
+                <Tooltip content={open ? "Hide its sold sets" : "Show its sold sets"}>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-label={`${open ? "Hide" : "Show"} the sold sets of sale ${formatEntityNo(c.saleNo)}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggle(c.id);
+                    }}
+                    style={EXPAND_BUTTON}
+                  >
+                    <Icon name={open ? "collapse" : "expand"} size="sm" />
+                  </button>
+                </Tooltip>
+                <input
+                  type="radio"
+                  name="merge-other-sale"
+                  aria-label={`Merge with sale ${formatEntityNo(c.saleNo)}`}
+                  checked={picked}
+                  onChange={pick}
+                  disabled={disabled}
+                  style={{ marginLeft: "0.375rem", verticalAlign: "middle" }}
+                />
+              </td>
+              <td style={{ ...rowCell(CELL), whiteSpace: "nowrap", fontWeight: 600 }}>{formatEntityNo(c.saleNo)}</td>
+              <td style={{ ...rowCell(CELL), whiteSpace: "nowrap" }}>{c.soldAt}</td>
+              <td style={rowCell(CELL)}>{c.buyerName ?? <span style={MUTED}>unknown</span>}</td>
+              <td style={rowCell(CELL)}>
+                <span style={saleStatusChipStyle(status.token)}>{status.label}</span>
+              </td>
+              <td style={rowCell(NUM_CELL)}>{c.lineCount}</td>
+              <td style={rowCell(NUM_CELL)}>
+                {c.gross} {currency}
+              </td>
+              <td style={rowCell(CELL)}>{c.externalRef ?? <span style={MUTED}>—</span>}</td>
+            </tr>
+            {open && (
+              <tr>
+                <td style={{ ...CELL, background: picked ? "var(--color-accent-soft)" : undefined }} />
+                <td
+                  colSpan={CANDIDATE_COLUMNS - 1}
+                  style={{ ...CELL, paddingTop: 0, background: picked ? "var(--color-accent-soft)" : undefined }}
+                >
+                  <CandidateLines saleId={c.id} currency={currency} />
+                </td>
+              </tr>
+            )}
+          </Fragment>
+        );
+      })}
+    </>
+  );
+}
+
+/** An opened row's sold sets (#2565) — offer number, title and price — read when it is opened. */
+function CandidateLines({ saleId, currency }: { saleId: string; currency: string }) {
+  const query = useQuery({
+    queryKey: ["sale-merge-candidate-lines", saleId] as const,
+    queryFn: async () => {
+      const { getSaleMergeCandidateLinesAction } = await import("@/app/actions/sales");
+      const result = await getSaleMergeCandidateLinesAction(saleId);
+      if (result.status === "error") throw new Error(result.message);
+      return result.lines;
+    },
+  });
+  if (query.isPending) return <span style={MUTED}>Loading…</span>;
+  if (query.isError) return <span style={{ color: "var(--color-error)" }}>{query.error.message}</span>;
+  if (query.data.length === 0) return <span style={MUTED}>No sold sets.</span>;
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <tbody>
+        {query.data.map((line) => (
+          <tr key={line.id}>
+            <td style={{ padding: "0.125rem 0.75rem 0.125rem 0", width: "5rem", whiteSpace: "nowrap", color: "var(--color-text-secondary)" }}>
+              {line.offerNo === null ? "—" : formatEntityNo(line.offerNo)}
+            </td>
+            <td style={{ padding: "0.125rem 0.75rem 0.125rem 0" }}>{line.title}</td>
+            <td style={{ padding: "0.125rem 0", textAlign: "right", whiteSpace: "nowrap" }}>
+              {line.price} {currency}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

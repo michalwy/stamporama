@@ -4,7 +4,9 @@ import {
   mergedSaleAmounts,
   mergedSaleApiReview,
   mergedSalePreview,
+  matchesSaleMergeSearch,
   postageSumRefusal,
+  saleMergeCandidateGroups,
   saleMergeRefusal,
   type SaleMergeChoices,
   type SaleMergeSide,
@@ -210,5 +212,51 @@ describe("mergedSaleApiReview", () => {
       apiReviewCreated: true,
       apiReviewActions: ["added offer #1 at 5 PLN", "merged in sale #3", "added offer #2 at 6 PLN"],
     });
+  });
+});
+
+describe("the merge dialog's candidates (#2565)", () => {
+  const listing = (saleNo: number, buyerId: string | null, buyerName: string | null, externalRef: string | null = null) => ({
+    saleNo,
+    buyerId,
+    buyerName,
+    externalRef,
+  });
+  // Newest first, as the candidates come.
+  const candidates = [
+    listing(52, "w", "Waldek Ch", "FB-9"),
+    listing(51, "k", "Krzysztof Łąka"),
+    listing(48, "w", "Waldek Ch"),
+    listing(45, null, null, "ORD-77"),
+  ];
+
+  it("puts the same buyer's sales first, then the rest, each in the order given", () => {
+    const { sameBuyer, otherBuyers } = saleMergeCandidateGroups({ buyerId: "w" }, candidates, "");
+    assert.deepEqual(sameBuyer.map((c) => c.saleNo), [52, 48]);
+    assert.deepEqual(otherBuyers.map((c) => c.saleNo), [51, 45]);
+  });
+
+  it("has no same buyer when the sale names none", () => {
+    const { sameBuyer, otherBuyers } = saleMergeCandidateGroups({ buyerId: null }, candidates, "");
+    assert.deepEqual(sameBuyer, []);
+    assert.equal(otherBuyers.length, 4);
+  });
+
+  it("narrows both groups by buyer, sale number or order number", () => {
+    const groups = (q: string) => {
+      const g = saleMergeCandidateGroups({ buyerId: "w" }, candidates, q);
+      return [...g.sameBuyer, ...g.otherBuyers].map((c) => c.saleNo);
+    };
+    assert.deepEqual(groups("waldek"), [52, 48]);
+    assert.deepEqual(groups("laka"), [51], "case and diacritics folded");
+    assert.deepEqual(groups("#48"), [48]);
+    assert.deepEqual(groups("51"), [51]);
+    assert.deepEqual(groups("ord-7"), [45]);
+    assert.deepEqual(groups("  "), [52, 48, 51, 45]);
+    assert.deepEqual(groups("nobody"), []);
+  });
+
+  it("does not match a bare # to every sale", () => {
+    assert.equal(matchesSaleMergeSearch(listing(1, null, null), "#"), false);
   });
 });
