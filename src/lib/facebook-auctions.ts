@@ -15,6 +15,7 @@ import {
   describeFacebookAuctionCopies,
   facebookLayoutLotTemplate,
   facebookMixedTypesRefusal,
+  isFacebookLotClosed,
   isFacebookLotPosted,
   readFacebookFrozenLot,
   type FacebookAuctionCopy,
@@ -723,15 +724,19 @@ export async function setFrozenFacebookClosing(offerIds: readonly string[], ends
 }
 
 /**
- * Freeze every Facebook offer that has gone up and carries no snapshot (#1800) — the offers already
- * up when #1800 landed, frozen with the text they showed then; nothing earlier is recovered. Run once
- * at start-up and idempotent: an offer published since is frozen by its transition and not touched.
+ * Freeze every Facebook offer that is up and carries no snapshot (#1800) — the offers already up when
+ * #1800 landed, frozen with the text they showed then; nothing earlier is recovered. Run once at
+ * start-up and idempotent: an offer published since is frozen by its transition and not touched.
+ *
+ * A closed offer is left as it is (#2560): every one that went up was frozen on its way up, or by this
+ * run's first pass once #1800 landed, so one closed with no snapshot is a lot sold or withdrawn before
+ * its post went up — and its missing snapshot is what says so.
  */
 export async function freezeUnfrozenFacebookPosts(): Promise<number> {
   const rows = await prisma.offer.findMany({
     where: { facebookGroupId: { not: null }, facebookPostSnapshot: { equals: Prisma.DbNull } },
     select: { id: true, state: true },
   });
-  const posted = rows.filter((r) => isFacebookLotPosted(r.state)).map((r) => r.id);
+  const posted = rows.filter((r) => isFacebookLotPosted(r.state) && !isFacebookLotClosed(r.state)).map((r) => r.id);
   return freezeFacebookPostText(posted, { onlyUnfrozen: true });
 }

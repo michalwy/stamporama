@@ -12,7 +12,7 @@ import {
 import {
   facebookLotOrderRefusal,
   facebookTitleWithWords,
-  isFacebookLotPosted,
+  hasFacebookPostGoneUp,
   type FacebookTitleEdge,
   type FacebookTitleWordsMode,
 } from "./facebook-post-rules";
@@ -75,15 +75,16 @@ export async function readLotGroup(ownerId: string, group: LotGroup, postUp: str
     if (!post || post.collection.ownerId !== ownerId) throw new Error("Post not found.");
     const lots = await prisma.offer.findMany({
       where: { facebookPostId: group.id },
-      select: LOT_SELECT,
+      select: { ...LOT_SELECT, facebookPostSnapshot: true },
       orderBy: { facebookLotNo: "asc" },
     });
-    if (lots.some((l) => isFacebookLotPosted(l.state))) throw new OfferActionBlockedError("facebook-group", postUp);
+    // A lot sold before the post went up (#2560) leaves it not up: the tools still work on the rest.
+    if (hasFacebookPostGoneUp(lots)) throw new OfferActionBlockedError("facebook-group", postUp);
     return {
       group,
       collectionId: post.collectionId,
       platformId: post.group.platformId,
-      lots: lots.map((l) => ({ ...l, state: l.state as OfferState })),
+      lots: lots.map(({ id, state, nameEdited }) => ({ id, state: state as OfferState, nameEdited })),
     };
   }
   const proposal = await prisma.proposal.findUnique({
@@ -126,13 +127,20 @@ export interface LotGroupPhotoSettings {
 
 const PHOTOS_POSTED = "The post is up, so its photos stay as they were posted.";
 
+/** The group's lots still offered — what its photo, text and title tools change. A lot sold before its
+ *  post went up (#2560) is closed, and a closed offer is not edited; it keeps its place in the order. */
+function openLots<L extends { state: OfferState }>(lots: readonly L[]): L[] {
+  return lots.filter((l) => !(CLOSED_OFFER_STATES as readonly string[]).includes(l.state));
+}
+
 async function readPhotoLots(ownerId: string, group: LotGroup) {
   const scope = await readLotGroup(ownerId, group, PHOTOS_POSTED);
-  if (scope.lots.length === 0) {
+  const lots = openLots(scope.lots);
+  if (lots.length === 0) {
     throw new OfferActionBlockedError(blockReason(group), group.kind === "post" ? "Post not found." : "The proposal has no lots yet.");
   }
   const rows = await prisma.offer.findMany({
-    where: { id: { in: scope.lots.map((l) => l.id) } },
+    where: { id: { in: lots.map((l) => l.id) } },
     select: {
       id: true,
       ...OFFER_PHOTO_CONFIG_SELECT,
@@ -142,7 +150,7 @@ async function readPhotoLots(ownerId: string, group: LotGroup) {
     },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));
-  return scope.lots.flatMap((l) => byId.get(l.id) ?? []);
+  return lots.flatMap((l) => byId.get(l.id) ?? []);
 }
 
 /** Every lot's photo settings, as one dialog shows them: shared, or differing by lot. */
@@ -261,7 +269,7 @@ export async function regenerateLotGroupTexts(
   }
   const asked = new Set(offerIds);
   const replace = new Set(overwrite);
-  const chosen = lots.filter((l) => asked.has(l.id) || replace.has(l.id));
+  const chosen = openLots(lots).filter((l) => asked.has(l.id) || replace.has(l.id));
   for (const lot of chosen) {
     if (replace.has(lot.id)) await regenerateOfferTitleAndDescription(ownerId, lot.id);
     else await syncGeneratedTexts(ownerId, lot.id, ["name", "description"]);
@@ -283,7 +291,7 @@ export async function setLotGroupTitleTemplate(
   template: string,
   overwrite: readonly string[]
 ): Promise<number> {
-  const { lots } = await readLotGroup(ownerId, group, TEXT_POSTED);
+  const lots = openLots((await readLotGroup(ownerId, group, TEXT_POSTED)).lots);
   const text = template.trim();
   if (!text) throw new OfferActionBlockedError(blockReason(group), "Write a title template for the lots.");
   const own = new Set(lots.map((l) => l.id));
@@ -314,7 +322,9 @@ export async function changeLotGroupTitleWords(
   edge: FacebookTitleEdge,
   mode: FacebookTitleWordsMode
 ): Promise<number> {
-  const { collectionId, lots } = await readLotGroup(ownerId, group, TEXT_POSTED);
+  const scope = await readLotGroup(ownerId, group, TEXT_POSTED);
+  const { collectionId } = scope;
+  const lots = openLots(scope.lots);
   if (!words.trim()) {
     throw new OfferActionBlockedError(blockReason(group), mode === "add" ? "Write the words to add." : "Write the words to remove.");
   }

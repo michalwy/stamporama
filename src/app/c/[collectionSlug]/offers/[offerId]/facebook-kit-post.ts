@@ -5,6 +5,7 @@ import {
   facebookPartsText,
   facebookPostGaps,
   facebookPostSource,
+  isFacebookLotLeftOut,
   renderFacebookCaptionedPost,
   renderFacebookPostParts,
   type FacebookCaptionedPostGaps,
@@ -75,14 +76,18 @@ function kitText(parts: readonly FacebookPostPart[]): FacebookKitText {
 /**
  * The post: a lot that has been published as it was posted, the rest from the group's templates and
  * their figures now (#1800). `live` names the lots drawn as they would go up **now** — a repost's.
+ *
+ * A lot sold or withdrawn before the post went up (#2560) is not in it: it never goes up, and the lots
+ * that do keep their numbers, so the post shows a gap where it was.
  */
 export function renderFacebookKitPost(
   kit: FacebookOfferKit,
   live: (lot: FacebookKitLot) => boolean = () => false
 ): FacebookKitPost {
+  const goingUp = kit.lots.filter((lot) => !isFacebookLotLeftOut(lot));
   const { templates, captions, layout, standingNote, lots, frozenAt, post: name } = facebookPostSource(
     { ...kit.group, layout: kit.layout, post: kit.post },
-    kit.lots,
+    goingUp,
     formatClosesAt,
     live
   );
@@ -93,7 +98,7 @@ export function renderFacebookKitPost(
       layout,
       captions: post.captions.map((caption, i) => ({
         ...kitText(caption.parts),
-        offerId: kit.lots.find((l) => l.lotNo === caption.lotNo)?.offerId ?? kit.lots[i].offerId,
+        offerId: goingUp.find((l) => l.lotNo === caption.lotNo)?.offerId ?? goingUp[i].offerId,
         offerNo: caption.offerNo,
         lotNo: caption.lotNo,
       })),

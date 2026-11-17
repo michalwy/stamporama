@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import {
   FACEBOOK_POST_STAGE_LABEL,
   facebookLotPrice,
+  facebookLotSalePrice,
   facebookPostLink,
   facebookPostMoves,
   facebookPostStage,
+  hasFacebookPostGoneUp,
   isFacebookLotClosed,
-  isFacebookLotPosted,
+  isFacebookLotLeftOut,
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { canPreviewFacebookPost } from "@/lib/facebook-post-preview-rules";
@@ -140,8 +142,12 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 // - **Covers on Ready lots** (#2114), until the post is up: a Ready lot's row offers *Review every
 //   photo*, and *Check covers* walks every lot's photos once none is left unchecked. The lot stays
 //   Ready and its photos are made again; *Publish…* waits while any lot's are being made.
-// - **Still for sale** (#2081), above the lots once the post is up: one chip narrowing the rows to the
-//   lots neither sold nor withdrawn, remembered per post. A filter never unticks anything — a ticked lot
+// - **Selling before the post is up** (#2560): a lot's *Sell* and the ticked lots' *Sell…* work while
+//   the post is being prepared or Ready — a buyer picks from the post's preview. The lot stays in the
+//   post, sold, with its number; nothing of it goes up, so the kit's text, the ZIP and the photos leave
+//   it out, and Publish puts up the rest with a gap in the numbers.
+// - **Still for sale** (#2081), above the lots whenever a lot is sold or withdrawn (#2560), before the
+//   post is up too: one chip narrowing the rows to the lots neither sold nor withdrawn, remembered per post. A filter never unticks anything — a ticked lot
 //   it hides stays ticked, and *Sell…* reaches only the ticked lots in view. The kit, the photos' ZIP
 //   and the post's text are the post's whole, not the list's view, so the chip leaves them alone.
 
@@ -221,8 +227,9 @@ export function FacebookPostPanel({
   const router = useRouter();
   const { data: screen, isLoading, isError } = useFacebookPostScreen(collectionId, postId);
   const { invalidateAll, settlePostLot, settlePostLotPrice } = useInvalidateOffers();
-  // The lots as Prepare rows (#2031), asked only while the post is not up.
-  const notUp = !!screen && !screen.kit.lots.some((l) => isFacebookLotPosted(l.state));
+  // The lots as Prepare rows (#2031), asked only while the post is not up — which a lot sold before it
+  // went up does not change (#2560).
+  const notUp = !!screen && !hasFacebookPostGoneUp(screen.kit.lots);
   const { data: prepare } = useFacebookPostLotsPrepare(collectionId, postId, notUp);
   const prepareRows = notUp ? (prepare ?? null) : null;
   // The lots' copies as *Fill catalogue values* lines (#2220), asked while the lots are priced.
@@ -246,7 +253,14 @@ export function FacebookPostPanel({
   const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
 
   const serverLots = screen?.kit.lots ?? [];
-  const reorderable = serverLots.length > 1 && !serverLots.some((l) => isFacebookLotPosted(l.state));
+  // *Still for sale* (#2081): offered whenever a lot of the post is sold or withdrawn (#2560) — before
+  // the post is up too, so a sold lot's text is not copied by mistake while the post goes up — and only
+  // on a post of several lots, since a post of one has nothing to narrow. Remembered per post.
+  const [stillForSale, setStillForSale] = useFacebookPostStillForSale(collectionId, postId);
+  const narrowable = serverLots.length > 1 && serverLots.some((l) => isFacebookLotClosed(l.state));
+  const narrowed = narrowable && stillForSale;
+  // Dragged only with every lot in view: an order missing the hidden lots would be refused as stale.
+  const reorderable = serverLots.length > 1 && !hasFacebookPostGoneUp(serverLots) && !narrowed;
   // The tools a post's lots share with a proposal's (#2313): photo settings, texts and titles, pricing
   // and readying, and the order — offered while the post is not up.
   const tools = useLotGroupTools({
@@ -267,11 +281,6 @@ export function FacebookPostPanel({
   });
   const lots = tools.lots;
   const drag = tools.drag;
-  // *Still for sale* (#2081): offered once the post is up and has more than one lot — before that no
-  // lot can be sold or withdrawn, and a post of one has nothing to narrow. Remembered per post.
-  const [stillForSale, setStillForSale] = useFacebookPostStillForSale(collectionId, postId);
-  const narrowable = serverLots.length > 1 && serverLots.some((l) => isFacebookLotPosted(l.state));
-  const narrowed = narrowable && stillForSale;
   const forSaleCount = serverLots.filter((l) => isFacebookLotForSale(l.state)).length;
   const lotsInView = facebookLotsInView(lots, narrowed);
   // Ticks outlive the chip — it never touches `ticked` — and what is counted and handed to *Sell…* is the
@@ -333,7 +342,9 @@ export function FacebookPostPanel({
   // closing-time question reads the post's pending auctions (#1779).
   function publish(url: string, target: PublishTarget, endsAt?: string) {
     const approving = dialog.kind === "publish" && dialog.approving;
-    const via = approving && pendingLot ? pendingLot.offerId : lots[0].offerId;
+    // What goes up is the lots not sold before (#2560); the post is asked through one of them.
+    const goingUp = lots.filter((l) => !isFacebookLotLeftOut(l));
+    const via = approving && pendingLot ? pendingLot.offerId : (goingUp[0] ?? lots[0]).offerId;
     run(
       async () => {
         const { publishOfferAction } = await import("@/app/actions/offers");
@@ -346,9 +357,11 @@ export function FacebookPostPanel({
           : `Post #${postNo} approved — all its lots are up`
         : target === "pending"
           ? `Post #${postNo} submitted — waiting for the group's approval`
-          : lots.length > 1
-            ? `Post #${postNo} is up — all ${lots.length} lots active`
-            : `Post #${postNo} is up`
+          : goingUp.length < lots.length
+            ? `Post #${postNo} is up — ${goingUp.length} of its ${lots.length} lots active, the sold ones left out`
+            : lots.length > 1
+              ? `Post #${postNo} is up — all ${lots.length} lots active`
+              : `Post #${postNo} is up`
     );
   }
 
@@ -593,7 +606,8 @@ export function FacebookPostPanel({
             } as RowAction,
           ]
         : []),
-      ...(moves.takeOut
+      // A lot sold before the post went up stays in it with its number (#2560).
+      ...(moves.takeOut && !terminal
         ? [
             {
               key: "take-out",
@@ -603,7 +617,7 @@ export function FacebookPostPanel({
             } as RowAction,
           ]
         : []),
-      ...(moves.deleteLot
+      ...(moves.deleteLot && !terminal
         ? [
             {
               key: "delete-offer",
@@ -1129,7 +1143,8 @@ export function FacebookPostPanel({
               label: lot.title,
               platformId: screen.platform.id,
               platformName: screen.platform.name,
-              price: lot.price,
+              // Before the post is up, an auction sells from its starting price (#2560).
+              price: facebookLotSalePrice(lot),
               currency: lot.currency,
               facebookGroupId: kit.group.id,
               closed: isTerminalState(lot.state),

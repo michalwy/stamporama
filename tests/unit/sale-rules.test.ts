@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   SELLABLE_OFFER_STATES,
   isSellableOfferState,
+  offerSaleRefusal,
   parsePrice,
   parseAmount,
   parseSaleDate,
@@ -20,6 +21,28 @@ describe("isSellableOfferState", () => {
     assert.equal(isSellableOfferState("paused"), true);
     assert.equal(isSellableOfferState("sold"), false);
     assert.equal(isSellableOfferState("withdrawn"), false);
+  });
+});
+
+describe("offerSaleRefusal (#2560)", () => {
+  it("sells a listing that is up, and names why anything else is not sold", () => {
+    for (const state of ["pending", "active", "paused"] as const) assert.equal(offerSaleRefusal(state), null);
+    assert.equal(offerSaleRefusal("preparing"), "is still being prepared");
+    assert.equal(offerSaleRefusal("ready"), "is Ready but not listed yet");
+    assert.equal(offerSaleRefusal("sold"), "is already sold");
+    assert.equal(offerSaleRefusal("withdrawn"), "was withdrawn");
+  });
+
+  it("sells a lot of a Facebook post before the post goes up", () => {
+    assert.equal(offerSaleRefusal("preparing", { postLot: true }), null);
+    assert.equal(offerSaleRefusal("ready", { postLot: true }), null);
+    assert.equal(offerSaleRefusal("sold", { postLot: true }), "is already sold");
+    assert.equal(offerSaleRefusal("withdrawn", { postLot: true }), "was withdrawn");
+  });
+
+  it("sells a proposal's lot from any open state (#2289)", () => {
+    assert.equal(offerSaleRefusal("preparing", { proposalLot: true }), null);
+    assert.equal(offerSaleRefusal("sold", { proposalLot: true }), "is already sold");
   });
 });
 

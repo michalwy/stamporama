@@ -6,7 +6,7 @@ import { buildAreaVendorMaps, formatStampCN } from "./area-vendor";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import { makeFormatFactorLookup } from "./format-pricing";
 import { compareSetItems } from "./offer-set-order";
-import { isFacebookLotPosted } from "./facebook-post-rules";
+import { hasFacebookPostGoneUp } from "./facebook-post-rules";
 import { isUnknownVariantStamp, VARIANT_FLAG_SELECT } from "./variant-classification";
 import type { PhotoSummary } from "./photos";
 import type { CatalogueFillLine } from "./lot-catalogue-fill";
@@ -56,6 +56,7 @@ export async function getFacebookPostCatalogueFill(
         select: {
           id: true,
           state: true,
+          facebookPostSnapshot: true,
           sets: {
             orderBy: { sortOrder: "asc" },
             select: {
@@ -102,7 +103,7 @@ export async function getFacebookPostCatalogueFill(
     },
   });
   if (!post) throw new Error("Post not found.");
-  if (post.lots.some((l) => isFacebookLotPosted(l.state))) return null;
+  if (hasFacebookPostGoneUp(post.lots)) return null;
 
   type SetItem = (typeof post.lots)[number]["sets"][number]["items"][number];
   const lotItems = post.lots.map((lot) => ({

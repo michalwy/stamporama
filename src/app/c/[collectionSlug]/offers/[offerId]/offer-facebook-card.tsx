@@ -8,7 +8,8 @@ import {
   facebookPostLabel,
   facebookPostMoves,
   facebookPostStage,
-  isFacebookLotPosted,
+  hasFacebookLotGoneUp,
+  isFacebookLotLeftOut,
 } from "@/lib/facebook-post-rules";
 import { isAuctionListing } from "@/lib/offer-rules";
 import { FACEBOOK_CLOSED_ADVICE, facebookBidding, recordBidLabel } from "@/lib/facebook-bidding-rules";
@@ -174,8 +175,10 @@ export function OfferFacebookCard({
   const customTemplate = ownTemplate !== null || draft !== null;
   const templateText = draft ?? ownTemplate ?? "";
 
-  // Posted: once the offer has gone up — anything past Ready.
-  const posted = isFacebookLotPosted(self.state);
+  // Posted: once the offer has gone up — anything past Ready, but a lot sold or withdrawn before its
+  // post went up (#2560), which never was.
+  const posted = hasFacebookLotGoneUp(self);
+  const leftOut = isFacebookLotLeftOut(self);
 
   // Waiting for the group's administrator (#1778): nobody bids on a post nobody can see, so the
   // bidding stays hidden; the link is the pending post's, and says so.
@@ -395,6 +398,10 @@ export function OfferFacebookCard({
             <p style={{ ...MUTED, margin: 0 }}>Waiting for approval, with no link recorded.</p>
           ) : posted ? (
             <p style={{ ...MUTED, margin: 0 }}>Up, with no link recorded — add the post&apos;s link as the listing link.</p>
+          ) : leftOut ? (
+            <p style={{ ...MUTED, margin: 0 }}>
+              {self.state === "sold" ? "Sold" : "Withdrawn"} before the post went up, so it was never posted.
+            </p>
           ) : (
             <p style={{ ...MUTED, margin: 0 }}>
               {self.state === "ready"

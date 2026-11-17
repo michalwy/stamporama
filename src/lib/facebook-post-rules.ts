@@ -887,11 +887,13 @@ export interface FacebookPostMoves {
   waiting: number[];
 }
 
-export function facebookPostMoves(lots: readonly { state: string; lotNo: number | null }[]): FacebookPostMoves {
-  const posted = lots.some((l) => isFacebookLotPosted(l.state));
+export function facebookPostMoves(lots: readonly (FacebookLotStanding & { lotNo: number | null })[]): FacebookPostMoves {
+  const posted = hasFacebookPostGoneUp(lots);
   const pending = lots.some((l) => l.state === "pending");
   const ready = lots.some((l) => l.state === "ready");
-  const onlyIn = (states: readonly string[]) => lots.every((l) => states.includes(l.state));
+  // A lot sold or withdrawn before the post went up (#2560) never goes up, so it holds nothing back.
+  const onlyIn = (states: readonly string[]) =>
+    lots.every((l) => states.includes(l.state) || isFacebookLotLeftOut(l));
   return {
     activate: !pending && ready && onlyIn(["ready", "active"]),
     submit: !pending && ready && onlyIn(["ready"]),
@@ -903,7 +905,7 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
     takeOut: !posted && lots.length > 1,
     deleteLot: !posted && lots.length > 0,
     addLots: !posted,
-    waiting: posted ? [] : lots.filter((l) => l.state !== "ready").map((l) => l.lotNo ?? 0),
+    waiting: posted ? [] : lots.filter((l) => l.state !== "ready" && !isFacebookLotLeftOut(l)).map((l) => l.lotNo ?? 0),
   };
 }
 
@@ -911,6 +913,34 @@ export function facebookPostMoves(lots: readonly { state: string; lotNo: number 
  *  rejection and withdrawal (#2290). */
 export function isFacebookLotClosed(state: string): boolean {
   return (CLOSED_OFFER_STATES as readonly string[]).includes(state);
+}
+
+/** A lot as whether it went up is read off it (#2560): its state, and its text as it was published
+ *  (#1800) — `frozen` on a kit's lot, `facebookPostSnapshot` on a row read straight from the offer.
+ *  Every lot that went up carries that text, from the moment it went up; a lot sold or withdrawn
+ *  before its post went up never does. */
+export type FacebookLotStanding = { state: string } & ({ frozen: unknown } | { facebookPostSnapshot: unknown });
+
+function publishedTextOf(lot: FacebookLotStanding): unknown {
+  return "frozen" in lot ? lot.frozen : lot.facebookPostSnapshot;
+}
+
+/** Whether a lot was sold or withdrawn **before its post went up** (#2560): a buyer took it from the
+ *  post's preview while the post was still being prepared. It stays in the post with its number, and
+ *  nothing of it goes up — not its text, not its photos — so the published post shows a gap there. */
+export function isFacebookLotLeftOut(lot: FacebookLotStanding): boolean {
+  return isFacebookLotClosed(lot.state) && publishedTextOf(lot) == null;
+}
+
+/** Whether this lot went up with its post — past Ready, and not one closed before the post went up. */
+export function hasFacebookLotGoneUp(lot: FacebookLotStanding): boolean {
+  return isFacebookLotPosted(lot.state) && !isFacebookLotLeftOut(lot);
+}
+
+/** Whether a post has gone up (#1668, #2560): once any of its lots has. A lot sold before the post went
+ *  up does not make it so — the post is still being prepared, and its other lots still go up. */
+export function hasFacebookPostGoneUp(lots: readonly FacebookLotStanding[]): boolean {
+  return lots.some(hasFacebookLotGoneUp);
 }
 
 /** Whether a lot is up in the group and still for sale — running or paused. */
@@ -959,12 +989,16 @@ export const FACEBOOK_POST_STAGE_LABEL: Record<FacebookPostStage, string> = {
   over: "Over",
 };
 
-export function facebookPostStage(lots: readonly { state: string }[]): FacebookPostStage {
+export function facebookPostStage(lots: readonly FacebookLotStanding[]): FacebookPostStage {
   if (lots.some((l) => l.state === "pending")) return "pending";
   if (lots.some((l) => l.state === "active" || l.state === "paused")) return "up";
-  if (lots.some((l) => isFacebookLotPosted(l.state))) return "over";
+  if (hasFacebookPostGoneUp(lots)) return "over";
+  // The lots sold or withdrawn before the post went up (#2560) are read past: the post stands where
+  // the rest do. A post whose every lot went that way has nothing left to put up, and is over.
+  const rest = lots.filter((l) => !isFacebookLotLeftOut(l));
+  if (lots.length > 0 && rest.length === 0) return "over";
   // A post made by hand with no lot yet (#2291) is being prepared, not ready.
-  return lots.length > 0 && lots.every((l) => l.state === "ready") ? "ready" : "preparing";
+  return rest.length > 0 && rest.every((l) => l.state === "ready") ? "ready" : "preparing";
 }
 
 /** A post's number as a list filter carries it (#1842): a positive whole number, else no filter. */
@@ -1112,6 +1146,19 @@ export function facebookLotPrice(lot: {
   if (!isAuctionListing(lot.listingType)) return { label: "Price", amount: lot.price };
   if (lot.price !== "0.00") return { label: "Bid", amount: lot.price };
   return { label: "Start", amount: lot.startingPrice };
+}
+
+/** What *Sell* starts a lot's line at (#2560): its price as the post states it. Before the post goes
+ *  up nothing has been bid, so an auction sells from its starting price; once it is up, from its
+ *  recorded bid as it always has — and any other offer from its own price. */
+export function facebookLotSalePrice(lot: {
+  state: string;
+  listingType: OfferListingType;
+  price: string;
+  startingPrice: string | null;
+}): string {
+  const prepared = lot.state === "preparing" || lot.state === "ready";
+  return prepared ? (facebookLotPrice(lot).amount ?? lot.price) : lot.price;
 }
 
 /** The shortcuts that sort a whole post (#1986): by catalogue number, or by price either way. */

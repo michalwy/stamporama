@@ -27,7 +27,12 @@ import {
   type FacebookLotPhotoState,
   type LotPhotoCollage,
 } from "./facebook-lot-photo-rules";
-import { facebookLotPhotoFileName, facebookPostPhotoArchiveName, readFacebookFrozenLot } from "./facebook-post-rules";
+import {
+  facebookLotPhotoFileName,
+  facebookPostPhotoArchiveName,
+  isFacebookLotLeftOut,
+  readFacebookFrozenLot,
+} from "./facebook-post-rules";
 
 // The photos of a captioned Facebook post (#1841; ADR-0061 §2 as amended): **one photo per lot**,
 // its caption the lot's text. A lot whose upload set is one image contributes it as it is; a lot of
@@ -209,6 +214,7 @@ const POST_SELECT = {
       name: true,
       offerNo: true,
       facebookLotNo: true,
+      state: true,
       facebookPostSnapshot: true,
       facebookLotPhoto: { select: { status: true, fingerprint: true, photoId: true, error: true } },
     },
@@ -221,10 +227,12 @@ function readPostRow(postId: string) {
   return prisma.facebookPost.findUnique({ where: { id: postId }, select: POST_SELECT });
 }
 
-/** How a post is laid out as its photos are drawn: as it was published, read off its last lot's
- *  frozen text (#1800), else as it is set now — the card's own rule. */
+/** How a post is laid out as its photos are drawn: as it was published, read off its last frozen
+ *  lot's text (#1800) — a lot sold before the post went up has none (#2560) — else as it is set now,
+ *  the card's own rule. */
 async function postPhotoLayout(post: Pick<PostRow, "layout" | "groupId" | "lots">) {
-  const frozen = readFacebookFrozenLot(post.lots.at(-1)?.facebookPostSnapshot);
+  const frozen =
+    [...post.lots].reverse().map((lot) => readFacebookFrozenLot(lot.facebookPostSnapshot)).find((f) => f !== null) ?? null;
   if (frozen) return frozen.layout;
   return facebookPostLayout(
     { layout: post.layout, lotCount: post.lots.length },
@@ -446,7 +454,9 @@ export async function buildFacebookPostPhotos(
 ): Promise<{ fileName: string; bytes: Buffer }> {
   const post = await readOwnedPost(ownerId, postId);
   if ((await postPhotoLayout(post)) !== "captions") return buildFacebookPostPhotoArchive(ownerId, postId);
-  const lots = (await syncFacebookPostLotPhotos(postId)) ?? [];
+  // A lot sold or withdrawn before the post went up (#2560) goes up with nothing — its photo included.
+  const leftOut = new Set(post.lots.filter(isFacebookLotLeftOut).map((lot) => lot.id));
+  const lots = ((await syncFacebookPostLotPhotos(postId)) ?? []).filter((lot) => !leftOut.has(lot.offerId));
   const notReady = lotPhotosNotReady(lots);
   if (notReady) throw new FacebookLotPhotosNotReadyError(notReady);
 

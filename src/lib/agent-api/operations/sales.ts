@@ -18,7 +18,8 @@ import {
 } from "../../sales";
 import type { SaleRecordStatus } from "../../sale-status";
 import type { CancelOfferOutcome } from "../../sale-cancel-rules";
-import { SELLABLE_OFFER_STATES } from "../../sale-rules";
+import { offerSaleRefusal } from "../../sale-rules";
+import { isOfferState } from "../../offer-rules";
 import { saleCopiesAddedAction, saleFreeExtrasAddedAction, saleLineAddedAction } from "../../sale-review";
 import { isSaleCancelled } from "../../sale-status";
 import { formatItemNo } from "../../item-number";
@@ -502,7 +503,14 @@ async function sell(
   const offerId = requiredString(params, "offerId");
   const offer = await prisma.offer.findFirst({
     where: { id: offerId, collectionId: context.collectionId, collection: { ownerId: context.ownerId } },
-    select: { offerNo: true, platformId: true, currency: true, state: true, sets: { select: { id: true } } },
+    select: {
+      offerNo: true,
+      platformId: true,
+      currency: true,
+      state: true,
+      facebookPostId: true,
+      sets: { select: { id: true } },
+    },
   });
   if (!offer) {
     throw notFound(`No offer with id "${offerId}" is in this token's collection. Use \`list_offers\` to find the right id.`);
@@ -513,9 +521,13 @@ async function sell(
   const price = parseSalePrice(requiredString(params, "price"), "price");
 
   // What is left to sell is the dialog's own list (`listSellableOffers`), so the two cannot disagree.
-  if (!(SELLABLE_OFFER_STATES as readonly string[]).includes(offer.state)) {
+  // A lot of a Facebook post not yet up may be sold too (#2560), as the dialog sells it.
+  const refusal = offerSaleRefusal(isOfferState(offer.state) ? offer.state : "active", {
+    postLot: offer.facebookPostId !== null,
+  });
+  if (refusal) {
     throw invalidRequest(
-      `Offer #${offer.offerNo} is ${offer.state}. Only a listing that is up — pending, active or paused — is sold; a draft has not been listed and a closed one has already ended.`
+      `Offer #${offer.offerNo} ${refusal}. Only a listing that is up — pending, active or paused — or a lot of a Facebook post not yet up is sold; another draft has not been listed and a closed one has already ended.`
     );
   }
   const sellable = (

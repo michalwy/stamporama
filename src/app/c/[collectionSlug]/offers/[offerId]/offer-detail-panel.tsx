@@ -92,7 +92,7 @@ import {
   soldElsewhereRemovalLabel,
   soldElsewhereRemovalVia,
 } from "@/lib/offer-needs-action-remedy";
-import { facebookPostLink, isFacebookLotClosed } from "@/lib/facebook-post-rules";
+import { facebookLotSalePrice, facebookPostLink, isFacebookLotClosed } from "@/lib/facebook-post-rules";
 import type { OfferDetailSet, OfferTextField } from "@/lib/offers";
 import {
   evaluatePublishPhotoHold,
@@ -1828,7 +1828,8 @@ export function OfferDetailPanel({
             label: offer.label,
             platformId: offer.platformId,
             platformName: offer.platformName,
-            price: offer.price,
+            // A lot of a Facebook post not yet up sells from the price the post states (#2560).
+            price: offer.facebook?.post ? facebookLotSalePrice(offer) : offer.price,
             currency: offer.currency,
             facebookGroupId: offer.facebookGroupId,
           }]}
