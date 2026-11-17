@@ -226,7 +226,7 @@ export function FacebookPostPanel({
 }) {
   const router = useRouter();
   const { data: screen, isLoading, isError } = useFacebookPostScreen(collectionId, postId);
-  const { invalidateAll, settlePostLot, settlePostLotPrice } = useInvalidateOffers();
+  const { invalidateAll, settlePostLot, settlePostLotPrice, settlePostLotsSold } = useInvalidateOffers();
   // The lots as Prepare rows (#2031), asked only while the post is not up — which a lot sold before it
   // went up does not change (#2560).
   const notUp = !!screen && !hasFacebookPostGoneUp(screen.kit.lots);
@@ -1153,6 +1153,8 @@ export function FacebookPostPanel({
           onSold={(ids) =>
             setTicked((prev) => new Set([...prev].filter((id) => !ids.includes(id))))
           }
+          // The sold lots shown sold at once and read again alone, never the whole post (#2563).
+          settleSold={(ids, sale) => void settlePostLotsSold(collectionId, postId, ids, sale)}
           onClose={() => setDialog({ kind: "none" })}
         />
       )}

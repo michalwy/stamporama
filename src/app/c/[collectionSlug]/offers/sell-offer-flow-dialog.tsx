@@ -13,6 +13,7 @@ import { useInvalidateOffers } from "./use-offers-query";
 import { SaleFormDialog } from "@/app/c/[collectionSlug]/sales/sale-form-dialog";
 import { saleStatusChipStyle, saleStatusMeta } from "@/app/c/[collectionSlug]/sales/sale-status";
 import { SALE_STATUS_ORDER, UNSENT_SALE_STATUSES } from "@/lib/sale-status";
+import { DIALOG_FOOTER_LEADING } from "@/app/dialog-footer-style";
 import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 import { planOfferSale, saleTargetOf, soldIntoSaleMessage } from "@/lib/offer-sale-plan";
@@ -75,6 +76,10 @@ export interface SellOfferFlowDialogProps {
   set?: { id: string; label: string };
   /** The offers that went into the sale, once they have — a selection unticks them (#2050). */
   onSold?: (offerIds: string[]) => void;
+  /** What the caller reads again once the offers are sold, in place of every offer read (#2563): a
+   *  post's screen writes its sold lots in at once and reads only them, where reading every offer
+   *  again re-read the whole post before a lot showed sold. A failed sale reads everything as before. */
+  settleSold?: (offerIds: string[], sale: { id: string; saleNo: number }) => void;
   onClose: () => void;
 }
 
@@ -110,6 +115,7 @@ export function SellOfferFlowDialog({
   offers,
   set,
   onSold,
+  settleSold,
   onClose,
 }: SellOfferFlowDialogProps) {
   const { toast } = useToast();
@@ -162,9 +168,14 @@ export function SellOfferFlowDialog({
     const { addSaleLinesAction } = await import("@/app/actions/sales");
     const result = await addSaleLinesAction(saleId, lines, { toSentSale: showSent });
     invalidateSales(collectionId);
-    invalidateOffers(collectionId);
-    if (result.status !== "success") return result.message;
-    onSold?.(sold.map((o) => o.id));
+    if (result.status !== "success") {
+      invalidateOffers(collectionId);
+      return result.message;
+    }
+    const soldIds = sold.map((o) => o.id);
+    if (settleSold) settleSold(soldIds, { id: saleId, saleNo: result.saleNo });
+    else invalidateOffers(collectionId);
+    onSold?.(soldIds);
     toast({
       message: soldIntoSaleMessage({
         offerNos: sold.map((o) => o.offerNo),
@@ -355,6 +366,12 @@ export function SellOfferFlowDialog({
         )}
       </DialogBody>
       <DialogFooter error={error}>
+        {/* Never a pressed sale with no sign of it (#2563): the offers stay as they were until it is written. */}
+        {isPending && (
+          <span role="status" style={{ ...DIALOG_FOOTER_LEADING, fontSize: "0.8125rem", color: MUTED }}>
+            Recording the sale…
+          </span>
+        )}
         <DialogSecondaryButton onClick={onClose} disabled={isPending}>
           Cancel
         </DialogSecondaryButton>

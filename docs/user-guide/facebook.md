@@ -1016,7 +1016,12 @@ on the next lot — and a message names the sale and its buyer, with **Open sale
 
 A buyer who took several lots of a post is sold all of them at once: tick the lots on the post's
 screen and choose **Sell…** above them. They go into one sale, each lot at its own price — an
-auction's at its highest recorded bid — and the message says how many went in. Several Facebook
+auction's at its highest recorded bid — and the message says how many went in.
+
+On the post's screen the sold lots show as **Sold**, with their sale, **the moment the sale is
+recorded** — and with **Still for sale** on, they leave the list at the same time. Until then the
+dialog says *Recording the sale…*; a sale that fails says why there, and the lots stay as they were.
+The post's totals and its stage catch up a moment later. Several Facebook
 offers ticked on the **Offers** list are sold together the same way (see
 [Offers](offers.md#selling-several-offers-together)).
 
