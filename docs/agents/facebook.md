@@ -861,6 +861,21 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   *Mark ready* — the issue's word for the per-lot state move is the lot's *Back to preparing*. The
   integration tests are in `facebook-post-prepare.test.ts` and `facebook-captioned-posts.test.ts`.
 
+- **Lots sold from a post's screen show sold at once** (#2563, raised by the collector on 2026-11-17:
+  about ten seconds passed between confirming *Sell* and the lot showing sold; the issue's *to be
+  confirmed* points implemented as written). The wait was `SellOfferFlowDialog`'s `invalidateAll` after
+  the sale, which read the post whole again (the screen, every lot's Prepare row, the catalogue fill)
+  before a lot redrew. The dialog now takes `settleSold`: when given, it replaces that `invalidateAll` on
+  a sale that went through (a failed one still reads everything). The post's screen passes
+  `settlePostLotsSold` (`use-offers-query.ts`): cancels any read of the screen or its Prepare rows under
+  way, writes the sold lots in with `withFacebookLotsSold` (`facebook-post-lot-refresh.ts`, pure,
+  unit-tested — state *sold*, the sale added to `sales`) and drops their Prepare rows, then marks every
+  other offer read stale as #2221's `settlePostLot` does and reads each sold lot alone through the same
+  `GET …/lots/[offerId]`, so photos and totals follow. *Still for sale* and the ticks read the same
+  cache, so they move at once too. While the sale is written, the dialog's footer says *Recording the
+  sale…* (the new-sale step's button already said *Starting…*). The offer's own screen, the Offers list
+  and the Allegro worklist pass no `settleSold` and are unchanged.
+
 - **A post's screen opens at the cost of the post, not a read per lot** (#2222, raised with the collector
   on 2026-10-27; the issue's *to be confirmed* points implemented as written). Before it, opening a post
   of forty lots asked after each lot's photos apart — a photo-plan request per lot as text, and per lot

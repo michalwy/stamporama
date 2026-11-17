@@ -38,7 +38,13 @@ import type {
   FacebookPostLotUpdate,
   FacebookPostScreen,
 } from "@/lib/facebook-posts";
-import { lotPhotosDrawing, withFacebookPostLot, withLotPhotos, withPrepareRow } from "@/lib/facebook-post-lot-refresh";
+import {
+  lotPhotosDrawing,
+  withFacebookLotsSold,
+  withFacebookPostLot,
+  withLotPhotos,
+  withPrepareRow,
+} from "@/lib/facebook-post-lot-refresh";
 import type { FacebookPostPhotos } from "@/lib/facebook-lot-photos";
 import type { FacebookPostStage } from "@/lib/facebook-post-rules";
 import type { ItemListItem } from "@/lib/items";
@@ -1074,6 +1080,12 @@ export function useInvalidateOffers() {
     },
     settlePostLot: (collectionId: string, postId: string, offerId: string) =>
       settlePostLot(queryClient, collectionId, postId, offerId),
+    settlePostLotsSold: (
+      collectionId: string,
+      postId: string,
+      offerIds: readonly string[],
+      sale: { id: string; saleNo: number }
+    ) => settlePostLotsSold(queryClient, collectionId, postId, offerIds, sale),
   };
 }
 
@@ -1093,13 +1105,57 @@ const lotRefreshes = new Map<string, number>();
  * for each price of a run typed down the list.
  */
 async function settlePostLot(queryClient: QueryClient, collectionId: string, postId: string, offerId: string) {
-  const ask = (lotRefreshes.get(offerId) ?? 0) + 1;
-  lotRefreshes.set(offerId, ask);
+  staleBesidePost(queryClient, collectionId, postId, [offerId]);
+  await readPostLot(queryClient, collectionId, postId, offerId);
+}
+
+/**
+ * Lots of a post sold into a sale from its screen (#2563): shown sold at once — their state and the
+ * sale, and with them *Still for sale* and the ticks — then each sold lot read again as
+ * {@link settlePostLot} reads one, so the rest of what the sale changed (its Prepare row going, its
+ * photos, the totals drawn from those) follows. The post is never read whole for it: on a post of
+ * dozens of lots that read was the wait between confirming the sale and the lot showing sold. A read
+ * of the post already under way is cancelled first, so an answer from before the sale cannot put the
+ * lots back for sale.
+ */
+async function settlePostLotsSold(
+  queryClient: QueryClient,
+  collectionId: string,
+  postId: string,
+  offerIds: readonly string[],
+  sale: { id: string; saleNo: number }
+) {
+  const screenKey = offerKeys.facebookPost(collectionId, postId);
+  const prepareKey = offerKeys.facebookPostPrepare(collectionId, postId);
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: screenKey, exact: true }),
+    queryClient.cancelQueries({ queryKey: prepareKey, exact: true }),
+  ]);
+  queryClient.setQueryData<FacebookPostScreen>(screenKey, (screen) => screen && withFacebookLotsSold(screen, offerIds, sale));
+  // A sold lot is no longer priced in its row: it has no Prepare row once read again.
+  queryClient.setQueryData<Record<string, PrepareOffer> | null>(prepareKey, (rows) =>
+    offerIds.reduce<Record<string, PrepareOffer> | null>((acc, id) => withPrepareRow(acc, id, null), rows ?? null)
+  );
+  staleBesidePost(queryClient, collectionId, postId, offerIds);
+  await Promise.all(offerIds.map((offerId) => readPostLot(queryClient, collectionId, postId, offerId)));
+}
+
+/** Every offer read marked stale but the post's own and the photo plans of offers other than `offerIds`
+ *  — what a change to those lots alone leaves out of step elsewhere (#2221). */
+function staleBesidePost(queryClient: QueryClient, collectionId: string, postId: string, offerIds: readonly string[]) {
   void queryClient.invalidateQueries({
     queryKey: offerKeys.all(collectionId),
     predicate: ({ queryKey: [, , kind, id] }) =>
-      kind === "photo-plan" ? id === offerId : !(POST_SCREEN_READS.has(kind) && id === postId),
+      kind === "photo-plan"
+        ? offerIds.includes(id as string)
+        : !(POST_SCREEN_READS.has(kind) && id === postId),
   });
+}
+
+/** One lot of the post read again and written into the screen and its Prepare rows (#2221). */
+async function readPostLot(queryClient: QueryClient, collectionId: string, postId: string, offerId: string) {
+  const ask = (lotRefreshes.get(offerId) ?? 0) + 1;
+  lotRefreshes.set(offerId, ask);
   const res = await fetch(`/api/collections/${collectionId}/facebook-posts/${postId}/lots/${offerId}`);
   if (lotRefreshes.get(offerId) !== ask) return;
   if (!res.ok) {

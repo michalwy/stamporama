@@ -37,6 +37,31 @@ export function withFacebookPostLot(screen: FacebookPostScreen, update: Facebook
   };
 }
 
+/**
+ * The screen with lots just sold into a sale written in at once (#2563): each sold, the sale beside
+ * its earlier ones. What the sale is known to have done the moment it is written — before the sold
+ * lots are read again — so the row never shows a lot for sale that has gone. A lot no longer in the
+ * kit is passed over, and a sale already listed against a lot is not listed twice.
+ */
+export function withFacebookLotsSold(
+  screen: FacebookPostScreen,
+  offerIds: readonly string[],
+  sale: { id: string; saleNo: number }
+): FacebookPostScreen {
+  const sold = new Set(offerIds.filter((id) => screen.kit.lots.some((l) => l.offerId === id)));
+  if (sold.size === 0) return screen;
+  const sales = { ...screen.sales };
+  for (const id of sold) {
+    const earlier = sales[id] ?? [];
+    if (!earlier.some((s) => s.id === sale.id)) sales[id] = [...earlier, sale];
+  }
+  return {
+    ...screen,
+    kit: { ...screen.kit, lots: screen.kit.lots.map((l) => (sold.has(l.offerId) ? { ...l, state: "sold" } : l)) },
+    sales,
+  };
+}
+
 /** The post's untranslated names with one lot's replaced: its keys, and any name only it prints. */
 function withLotTranslations(
   all: NonNullable<FacebookPostScreen["translations"]>,

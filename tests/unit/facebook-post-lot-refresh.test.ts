@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   lotPhotosDrawing,
+  withFacebookLotsSold,
   withFacebookPostLot,
   withLotPhotos,
   withPrepareRow,
@@ -223,5 +224,41 @@ describe("the lots' photos", () => {
   it("leaves the photos alone when the answer is in another layout than the screen holds", () => {
     const all = text(textPhotos("a", "ready"));
     assert.equal(withLotPhotos(all, captioned(photo("a", "ready"))), all);
+  });
+});
+
+// Lots sold from the post's screen (#2563): shown sold the moment the sale is written, before they are
+// read again — the whole post was read once, and that read was a wait of seconds on a post of dozens.
+describe("withFacebookLotsSold", () => {
+  const sale = { id: "s1", saleNo: 12 };
+
+  it("marks the sold lots sold and names the sale beside each, the other lots as they were", () => {
+    const before = screen();
+    const after = withFacebookLotsSold(before, ["a"], sale);
+    assert.equal(after.kit.lots[0].state, "sold");
+    assert.equal(after.kit.lots[1], before.kit.lots[1]);
+    assert.deepEqual(after.sales, { a: [sale] });
+  });
+
+  it("marks several ticked lots sold into the one sale", () => {
+    const after = withFacebookLotsSold(screen(), ["a", "b"], sale);
+    assert.deepEqual(
+      after.kit.lots.map((l) => l.state),
+      ["sold", "sold"]
+    );
+    assert.deepEqual(after.sales, { a: [sale], b: [sale] });
+  });
+
+  it("keeps a lot's earlier sales and lists this one once", () => {
+    const before = { ...screen(), sales: { a: [{ id: "s0", saleNo: 3 }] } };
+    const once = withFacebookLotsSold(before, ["a"], sale);
+    assert.deepEqual(once.sales.a, [{ id: "s0", saleNo: 3 }, sale]);
+    assert.deepEqual(withFacebookLotsSold(once, ["a"], sale).sales.a, once.sales.a);
+  });
+
+  it("passes over a lot no longer in the post", () => {
+    const before = screen();
+    assert.equal(withFacebookLotsSold(before, ["gone"], sale), before);
+    assert.deepEqual(withFacebookLotsSold(before, ["gone", "b"], sale).sales, { b: [sale] });
   });
 });
