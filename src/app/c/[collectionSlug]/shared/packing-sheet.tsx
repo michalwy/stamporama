@@ -6,6 +6,7 @@ import {
   usePersistentToggle,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { PrintGroup } from "@/app/c/[collectionSlug]/shared/print-group";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { formatItemNo } from "@/lib/item-number";
 import { formatEntityNo } from "@/lib/quick-jump";
@@ -494,75 +495,36 @@ interface SectionProps {
 /** One division as a section: its heading, then its copies as tick rows. */
 function PackingSection({ ctx, icon, group, columns, groupNote, groupAside, groupSubline, ...rest }: SectionProps) {
   const note = groupNote?.(group) ?? null;
-  const aside = groupAside?.(group) ?? null;
-  const subline = groupSubline?.(group) ?? null;
   return (
-    <section style={{ marginTop: "1.25rem" }}>
-      <h2
-        className="print-section-heading"
-        style={{
-          margin: "0 0 0.375rem",
-          fontSize: "0.9375rem",
-          fontWeight: 600,
-          color: "var(--color-text-primary)",
-          display: "flex",
-          alignItems: "baseline",
-          gap: "0.5rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <span>
-          <Icon name={icon} size="sm" /> {group.location}
-        </span>
-        <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-muted)" }}>
-          {group.copyCount} {group.copyCount === 1 ? "copy" : "copies"}
-          {note ? ` · ${note}` : ""}
-        </span>
-        {aside && (
-          <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-            {aside}
-          </span>
-        )}
-      </h2>
-      {subline && (
-        <Tooltip content={subline} maxWidth="32rem" style={{ display: "flex", minWidth: 0, maxWidth: "100%" }}>
-          <div
-            style={{
-              minWidth: 0,
-              margin: "-0.25rem 0 0.375rem",
-              fontSize: "0.75rem",
-              color: "var(--color-text-muted)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {subline}
-          </div>
-        </Tooltip>
-      )}
-      {/* Auto layout (the browser default): every column takes exactly the width its content
-          needs, so a sheet without long series names stays tight instead of holding empty space. */}
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {/* The tick box is the point of the sheet, so it is never optional. */}
-            <th style={TH} aria-label="Ticked" />
-            {columns.map((c) => (
-              <th key={c.key} style={{ ...TH, textAlign: c.align ?? "left", whiteSpace: "nowrap" }}>
-                {c.header}
-              </th>
-            ))}
-            {rest.rowActions && <th className="no-print" style={TH} aria-label="Row actions" />}
-          </tr>
-        </thead>
-        <tbody>
-          {group.rows.map((r) => (
-            <CopyRow key={r.key} ctx={ctx} row={r} columns={columns} {...rest} />
+    <PrintGroup
+      heading={{
+        title: (
+          <>
+            <Icon name={icon} size="sm" /> {group.location}
+          </>
+        ),
+        meta: `${group.copyCount} ${group.copyCount === 1 ? "copy" : "copies"}${note ? ` · ${note}` : ""}`,
+        aside: groupAside?.(group) ?? null,
+        subline: groupSubline?.(group) ?? null,
+      }}
+      columns={columns.length + (rest.rowActions ? 2 : 1)}
+      columnHeader={
+        <tr>
+          {/* The tick box is the point of the sheet, so it is never optional. */}
+          <th style={TH} aria-label="Ticked" />
+          {columns.map((c) => (
+            <th key={c.key} style={{ ...TH, textAlign: c.align ?? "left", whiteSpace: "nowrap" }}>
+              {c.header}
+            </th>
           ))}
-        </tbody>
-      </table>
-    </section>
+          {rest.rowActions && <th className="no-print" style={TH} aria-label="Row actions" />}
+        </tr>
+      }
+    >
+      {group.rows.map((r) => (
+        <CopyRow key={r.key} ctx={ctx} row={r} columns={columns} {...rest} />
+      ))}
+    </PrintGroup>
   );
 }
 

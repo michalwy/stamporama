@@ -147,18 +147,22 @@ export function FacebookPostPreviewDocument({
         const dimmed = lot.mark !== null;
         return (
           <section key={lot.key} style={LOT} aria-label={lotName(lot, labels)}>
-            <h2 style={{ margin: 0, fontSize: "1.0625rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
-              {lot.lotNo !== null && <span>{labels.lot} {lot.lotNo} · </span>}
-              {lot.title}
-              {lot.mark && <span style={SOLD_BADGE}>{lot.mark === "sold" ? labels.sold : labels.unavailable}</span>}
-            </h2>
-            <LotPrice lot={lot} labels={labels} language={language} hydrated={hydrated} />
+            {/* A lot taller than a page still breaks, so its heading and price are kept with its
+                first photo, and a photo is never cut (#2559). */}
+            <div className="print-keep-with-next">
+              <h2 style={{ margin: 0, fontSize: "1.0625rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
+                {lot.lotNo !== null && <span>{labels.lot} {lot.lotNo} · </span>}
+                {lot.title}
+                {lot.mark && <span style={SOLD_BADGE}>{lot.mark === "sold" ? labels.sold : labels.unavailable}</span>}
+              </h2>
+              <LotPrice lot={lot} labels={labels} language={language} hydrated={hydrated} />
+            </div>
             {lot.photoIds.length > 0 && (
               <ul style={PHOTOS}>
                 {lot.photoIds.map((photoId) => {
                   const index = photos.findIndex((p) => p.key === `${lot.key}:${photoId}`);
                   return (
-                    <li key={photoId} style={{ maxWidth: "100%" }}>
+                    <li key={photoId} className="print-unbroken" style={{ maxWidth: "100%" }}>
                       <button
                         type="button"
                         onClick={() => setViewing(index)}
