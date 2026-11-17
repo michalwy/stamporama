@@ -869,7 +869,12 @@ collection, and the date and time the sheet was **generated** — in your own ti
 server's, so it reads as the clock you printed it by. Each keeps to its own line and is shortened
 with an … when it runs past the paper, so the foot of the page is always the same depth. The list stops
 above it on **every** page — no row is hidden under it, a row is never split between two pages,
-and the column headings repeat at the top of each page the list continues on.
+and the column headings repeat at the top of each page the list continues on. **A heading never ends
+a page alone**: a set's (or a shelf's) heading is printed with its column headings and at least its
+first copy, and when there is no room for them it moves to the next page with them. A set that runs
+over a page break is named again at the top of the next page, marked **(cont.)**, so the copies there
+can be read on their own. The [order summary](#printing-an-order-summary-for-the-buyer) prints its
+sets the same way.
 So a page that slips out of the stack can still be matched back to its order, two printouts of the
 same sale can be told apart, and a sheet found weeks later says where it came from. The note about
 the tick boxes closes the document, after the last row.

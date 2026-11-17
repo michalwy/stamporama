@@ -15,6 +15,7 @@ import {
   usePersistentString,
   usePersistentToggle,
 } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { PrintGroup } from "@/app/c/[collectionSlug]/shared/print-group";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
 
@@ -186,82 +187,42 @@ function SetSection({
   columns: readonly PackingColumnSpec[];
   ctx: { collectionId: string; issueFormat: boolean };
 }) {
+  const rows = set.rows.length > 0 && columns.length > 0;
   return (
-    <section style={{ marginTop: "1.25rem" }}>
-      <h2
-        className="print-section-heading"
-        style={{
-          margin: "0 0 0.375rem",
-          fontSize: "0.9375rem",
-          fontWeight: 600,
-          color: "var(--color-text-primary)",
-          display: "flex",
-          alignItems: "baseline",
-          gap: "0.5rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <span>{set.title}</span>
-        <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-muted)" }}>
-          {copiesLabel(set.copyCount)}
-        </span>
-        {set.price && (
-          <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-            {set.price}
-          </span>
-        )}
-      </h2>
-      {set.numbers && (
-        <Tooltip content={set.numbers} maxWidth="32rem" style={{ display: "flex", minWidth: 0, maxWidth: "100%" }}>
-          <div
-            style={{
-              minWidth: 0,
-              margin: "-0.25rem 0 0.375rem",
-              fontSize: "0.75rem",
-              color: "var(--color-text-muted)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {set.numbers}
-          </div>
-        </Tooltip>
-      )}
-      {set.rows.length > 0 && columns.length > 0 && (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              {columns.map((c) => (
-                <th key={c.key} style={{ ...TH, textAlign: c.align ?? "left", whiteSpace: "nowrap" }}>
-                  {c.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {set.rows.map((row) => (
-              <tr key={row.key}>
-                {columns.map((c) => (
-                  <td
-                    key={c.key}
-                    style={{
-                      ...TD,
-                      textAlign: c.align ?? "left",
-                      fontVariantNumeric: c.numeric ? "tabular-nums" : undefined,
-                      fontWeight: c.strong ? 600 : undefined,
-                      whiteSpace: c.nowrap ? "nowrap" : undefined,
-                    }}
-                  >
-                    <Cell content={c.render(row, ctx)} hint={c.title?.(row)} />
-                  </td>
-                ))}
-              </tr>
+    <PrintGroup
+      heading={{ title: set.title, meta: copiesLabel(set.copyCount), aside: set.price, subline: set.numbers }}
+      columns={columns.length}
+      columnHeader={
+        rows && (
+          <tr>
+            {columns.map((c) => (
+              <th key={c.key} style={{ ...TH, textAlign: c.align ?? "left", whiteSpace: "nowrap" }}>
+                {c.header}
+              </th>
             ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+          </tr>
+        )
+      }
+    >
+      {set.rows.map((row) => (
+        <tr key={row.key}>
+          {columns.map((c) => (
+            <td
+              key={c.key}
+              style={{
+                ...TD,
+                textAlign: c.align ?? "left",
+                fontVariantNumeric: c.numeric ? "tabular-nums" : undefined,
+                fontWeight: c.strong ? 600 : undefined,
+                whiteSpace: c.nowrap ? "nowrap" : undefined,
+              }}
+            >
+              <Cell content={c.render(row, ctx)} hint={c.title?.(row)} />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </PrintGroup>
   );
 }
 

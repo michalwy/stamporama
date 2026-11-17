@@ -744,7 +744,9 @@ against it.
 Both sheets carry two lines at the foot of every printed page — the trade number and both names,
 then the version, collection and time the sheet was generated in your own timezone — so a page that
 slips out of the stack can be matched back, and two printings of the same trade can be told apart. The list stops above those two lines on
-every page, never splits a row between pages, and repeats its column headings on each page. **Page
+every page, never splits a row between pages, and repeats its column headings on each page. A
+section's heading never ends a page alone — it moves to the next page with its first copy — and a
+section running over a page break is named again at the top of the next page, marked **(cont.)**. **Page
 numbers** come from the browser: tick **Headers and footers** in the print dialog.
 
 ## Closing: what it does to your books
