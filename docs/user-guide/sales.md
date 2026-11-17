@@ -1050,8 +1050,16 @@ Sometimes two sales have to become one — two were recorded by mistake for the 
 buyer bid from two accounts and asked for everything to go together, in one parcel and one payment.
 **Merge with…** in the header of a sale's screen does it.
 
-1. **Choose the other sale.** Only sales on the **same platform**, in the **same currency** and
-   **not yet sent** are offered; a sale already *Sent* or *Delivered* has no **Merge with…** at all.
+1. **Choose the other sale** from the table under *Merge sale #47 (buyer, date) with*. Only sales on
+   the **same platform**, in the **same currency** and **not yet sent** are listed; a sale already
+   *Sent* or *Delivered* has no **Merge with…** at all. The sales to **the same buyer** come first,
+   under *Same buyer*, then everyone else's under *Other buyers*, newest first in each. Each row shows
+   the sale's number, date, buyer, status, how many sets it holds, its gross and its order number.
+   Type in the search box to narrow the table by buyer, sale number or order number. The arrow at
+   the start of a row opens it onto its sold sets — each one's offer number, title and price — so
+   you can check what is in it; opening a row does not pick it, and several can be open at once.
+   Pick the sale with the round button at the start of its row (or click the row); when there is
+   only one sale to merge with, it is picked already. The comparison below the table follows.
 2. **Choose which one remains.** It keeps its own buyer, date, order number, transaction link,
    shipping option and status. The other is deleted once everything has moved; its number is never
    given to another sale, and its buyer's contact stays as it is. The dialog names the other sale's

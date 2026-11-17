@@ -4236,6 +4236,8 @@ export async function countBuyerCancelledSales(
 export interface SaleMergeCandidate extends SaleMergeSide {
   id: string;
   soldAt: string;
+  /** Who bought it, for grouping the same buyer's sales first (#2565); null when nobody is named. */
+  buyerId: string | null;
   buyerName: string | null;
   externalRef: string | null;
   /** Sold sets on it. */
@@ -4282,6 +4284,7 @@ function toSaleMergeCandidate(row: SaleMergeRow): SaleMergeCandidate {
     currency: row.currency,
     status: row.status,
     soldAt: row.soldAt.toISOString().slice(0, 10),
+    buyerId: row.buyerId,
     buyerName: row.buyer?.name ?? null,
     externalRef: row.externalRef,
     gross: row.lines.reduce((s, l) => s + Number(l.price), 0).toFixed(2),
@@ -4327,6 +4330,89 @@ export async function listSaleMergeCandidates(
     .map(toSaleMergeCandidate)
     .filter((candidate) => saleMergeRefusal(sale, candidate) === null);
   return { sale, candidates };
+}
+
+/** One sold set of a merge candidate, as its expanded row lists it (#2565). */
+export interface SaleMergeCandidateLine {
+  id: string;
+  /** The offer it sold through; null on a set sold off no offer, or one whose offer is gone. */
+  offerNo: number | null;
+  /** Named as the sale's own screen names it (#2189): the offer's title, else the set's label. */
+  title: string;
+  /** In the sale's currency. */
+  price: string;
+}
+
+/**
+ * The sold sets of `saleId`, for the merge dialog's expanded row (#2565) — read only when a row is
+ * opened, so listing the candidates stays light. Each is named by {@link saleLineName}, the rule the
+ * sale's screen and packing list use, so a set reads the same in all three.
+ */
+export async function listSaleMergeCandidateLines(
+  ownerId: string,
+  saleId: string
+): Promise<SaleMergeCandidateLine[]> {
+  const SET_SELECT = {
+    title: true,
+    items: { select: { itemId: true, sortOrder: true, item: { select: STAMP_LABEL_SELECT } } },
+  } as const;
+  const sale = await prisma.sale.findUnique({
+    where: { id: saleId },
+    select: {
+      collectionId: true,
+      collection: { select: { ownerId: true } },
+      lines: {
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          offerId: true,
+          offerSetId: true,
+          price: true,
+          freeExtra: true,
+          offer: {
+            select: {
+              offerNo: true,
+              name: true,
+              sets: { orderBy: OFFER_SETS_ORDER_BY, select: { id: true, ...SET_SELECT } },
+            },
+          },
+          offerSet: { select: SET_SELECT },
+          items: { select: { itemId: true, item: { select: STAMP_LABEL_SELECT } } },
+        },
+      },
+    },
+  });
+  if (!sale || sale.collection.ownerId !== ownerId) {
+    throw new Error("Sale not found or access denied.");
+  }
+  const labeller = await makeOfferLabeller(sale.collectionId);
+  const soldHereByOffer = new Map<string, number>();
+  for (const l of sale.lines) {
+    if (l.offerId) soldHereByOffer.set(l.offerId, (soldHereByOffer.get(l.offerId) ?? 0) + 1);
+  }
+  return sale.lines.map((l) => {
+    const labelSet = l.offerSet ?? copiesAsLabelSet(l.items);
+    const setLabel = labeller.set(labelSet);
+    const ordinal =
+      l.offer && l.offerId && l.offerSetId
+        ? offerSetOrdinal(
+            l.offer.sets.map((s) => s.id),
+            l.offerSetId,
+            soldHereByOffer.get(l.offerId) ?? 0
+          )
+        : null;
+    const name = saleLineName({
+      setLabel,
+      setNumbers: labeller.set({ ...labelSet, title: null }),
+      freeExtra: l.freeExtra,
+      offer: l.offer && {
+        offerNo: l.offer.offerNo,
+        title: offerDisplayLabel(l.offer.name, l.offer.sets, labeller),
+        set: ordinal && { ...ordinal, ownName: l.offerSet?.title?.trim() || null },
+      },
+    });
+    return { id: l.id, offerNo: name.offerNo, title: name.title, price: Number(l.price).toFixed(2) };
+  });
 }
 
 /** What {@link mergeSales} is asked: which sale remains, which goes, and whose amount is taken. */

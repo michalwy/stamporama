@@ -9,6 +9,7 @@ import {
   createSale,
   getSaleDetail,
   listSaleMergeCandidates,
+  listSaleMergeCandidateLines,
   markSaleWrittenByApi,
   mergeSales,
   SaleActionBlockedError,
@@ -133,6 +134,44 @@ describe("merging two sales (#2041)", () => {
     // A sent sale is merged with nothing.
     assert.deepEqual((await listSaleMergeCandidates(userId, sent)).candidates, []);
     await assert.rejects(() => listSaleMergeCandidates(otherUserId, here));
+  });
+
+  it("names each candidate's buyer and lists its sold sets for the expanded row (#2565)", async () => {
+    const here = await newSale();
+    const there = await newSale();
+    const buyerId = (await prisma.contact.create({ data: { collectionId, name: "Waldek Ch" } })).id;
+    await prisma.sale.updateMany({ where: { id: { in: [here, there] } }, data: { buyerId } });
+
+    const offered = await newCopy();
+    const offerId = await createOffer(userId, collectionId, {
+      platformId: facebookId,
+      url: null,
+      price: "12.00",
+      currency: "PLN",
+      listingDate: null,
+    });
+    await addOfferSet(userId, offerId, [offered]);
+    await setOfferState(userId, offerId, "ready");
+    await setOfferState(userId, offerId, "active");
+    const offerSet = await prisma.offerSet.findFirstOrThrow({ where: { offerId } });
+    await addSaleLines(userId, there, [{ offerId, offerSetId: offerSet.id, price: "12.00", itemIds: [offered] }]);
+    await addSaleCopySet(userId, there, { itemIds: [await newCopy()], price: "3.50" });
+
+    const { sale, candidates } = await listSaleMergeCandidates(userId, here);
+    assert.equal(sale.buyerId, buyerId);
+    const candidate = candidates.find((c) => c.id === there)!;
+    assert.equal(candidate.buyerId, buyerId);
+    assert.equal(candidate.buyerName, "Waldek Ch");
+
+    const lines = await listSaleMergeCandidateLines(userId, there);
+    assert.equal(lines.length, 2);
+    const offerNo = (await prisma.offer.findUniqueOrThrow({ where: { id: offerId } })).offerNo;
+    const viaOffer = lines.find((l) => l.offerNo === offerNo)!;
+    assert.equal(viaOffer.price, "12.00");
+    assert.ok(viaOffer.title.length > 0);
+    const loose = lines.find((l) => l.offerNo === null)!;
+    assert.equal(loose.price, "3.50");
+    await assert.rejects(() => listSaleMergeCandidateLines(otherUserId, there));
   });
 
   it("moves every sold set and packing supply, deletes the other sale, and takes the amounts chosen", async () => {

@@ -30,6 +30,7 @@ import {
   markSaleCopiesPacked,
   confirmSaleReview,
   listSaleMergeCandidates,
+  listSaleMergeCandidateLines,
   mergeSales,
   listSaleMoveTargets,
   moveSaleLines,
@@ -37,6 +38,7 @@ import {
   SaleActionBlockedError,
   type SaleAmountField,
   type SaleMergeCandidate,
+  type SaleMergeCandidateLine,
   type SaleMoveCandidate,
   type SaleStatus,
 } from "@/lib/sales";
@@ -579,6 +581,18 @@ export async function getSaleMergeCandidatesAction(
     return { status: "success", sale, candidates };
   } catch (e) {
     return fail(e, "Failed to load the sales to merge with.");
+  }
+}
+
+/** The sold sets of one sale the merge dialog offers, for its expanded row (#2565). */
+export async function getSaleMergeCandidateLinesAction(
+  saleId: string
+): Promise<{ status: "success"; lines: SaleMergeCandidateLine[] } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", lines: await listSaleMergeCandidateLines(session.user.id, saleId) };
+  } catch (e) {
+    return fail(e, "Failed to load the sale's sold sets.");
   }
 }
 
