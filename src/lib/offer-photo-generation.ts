@@ -15,7 +15,7 @@ import { CLOSED_OFFER_STATES, isOfferState, isTerminalState, offerFileSlug } fro
 import { closedOfferPhotoClockStart, closedOfferPhotoCutoff } from "./offer-photo-cleanup-rules";
 import { resolveClosedOfferPhotoTtlMs } from "./offer-photo-retention";
 import { zip, type ZipEntry } from "./zip";
-import { facebookLotPhotoFileName, facebookPostPhotoArchiveName } from "./facebook-post-rules";
+import { facebookLotPhotoFileName, facebookPostPhotoArchiveName, isFacebookLotLeftOut } from "./facebook-post-rules";
 import {
   COLLAGE_MIME,
   renderCollage,
@@ -1749,11 +1749,15 @@ export async function buildFacebookPostPhotoArchive(
     select: { id: true, postNo: true, title: true },
   });
   if (!post) throw new OfferPhotoGenerationError("Post not found.");
-  const lots = await prisma.offer.findMany({
-    where: { facebookPostId: postId },
-    orderBy: { facebookLotNo: "asc" },
-    select: { id: true, facebookLotNo: true },
-  });
+  // A lot sold or withdrawn before the post went up (#2560) goes up with nothing, so it is not in the
+  // archive; the others keep their numbers, gap and all.
+  const lots = (
+    await prisma.offer.findMany({
+      where: { facebookPostId: postId },
+      orderBy: { facebookLotNo: "asc" },
+      select: { id: true, facebookLotNo: true, state: true, facebookPostSnapshot: true },
+    })
+  ).filter((lot) => !isFacebookLotLeftOut(lot));
   const sets = await Promise.all(lots.map((lot) => readOfferUploadSet(ownerId, lot.id)));
   const entries: ZipEntry[] = [];
   sets.forEach((set, index) => {

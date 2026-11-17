@@ -1,5 +1,10 @@
 import { normalizeLanguage } from "./languages";
-import { facebookPostLink, facebookPostStage, isFacebookLotPosted } from "./facebook-post-rules";
+import {
+  facebookPostLink,
+  facebookPostStage,
+  isFacebookLotPosted,
+  type FacebookLotStanding,
+} from "./facebook-post-rules";
 
 // **A Facebook post's preview for a buyer** (#2212) — the pure half, with no database and no
 // `server-only`: what the page shows at each stage of the post, which lots it marks, the link's shape
@@ -53,7 +58,7 @@ export function facebookPostPreviewPhotoSrcs(
  */
 export type FacebookPostPreviewStanding = "shown" | "updating" | "gone";
 
-export function facebookPostPreviewStanding(lots: readonly { state: string }[] | null): FacebookPostPreviewStanding {
+export function facebookPostPreviewStanding(lots: readonly FacebookLotStanding[] | null): FacebookPostPreviewStanding {
   if (!lots || lots.length === 0) return "gone";
   const stage = facebookPostStage(lots);
   if (stage === "preparing") return "updating";
@@ -62,7 +67,7 @@ export function facebookPostPreviewStanding(lots: readonly { state: string }[] |
 }
 
 /** Whether a post's preview can be handed out: once it is Ready, and while it waits or is up. */
-export function canPreviewFacebookPost(lots: readonly { state: string }[]): boolean {
+export function canPreviewFacebookPost(lots: readonly FacebookLotStanding[]): boolean {
   const stage = facebookPostStage(lots);
   return stage === "ready" || stage === "pending" || stage === "up";
 }

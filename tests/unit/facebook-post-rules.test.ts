@@ -28,6 +28,10 @@ import {
   parseFacebookPostNo,
   facebookLotPhotoFileName,
   facebookPostPhotoArchiveName,
+  facebookLotSalePrice,
+  hasFacebookLotGoneUp,
+  hasFacebookPostGoneUp,
+  isFacebookLotLeftOut,
   isFacebookLotPosted,
   isFacebookPendingPostUrl,
   parseBidIncrement,
@@ -838,7 +842,14 @@ describe("a captioned post (#1841)", () => {
 });
 
 describe("a multi-lot post's screen (#1842)", () => {
-  const lots = (...states: string[]) => states.map((state, i) => ({ state, lotNo: i + 1 }));
+  // A lot past Ready went up with its post and carries the text it went up with (#1800); one written
+  // `sold*` or `withdrawn*` closed before the post went up and carries none (#2560).
+  const lots = (...states: string[]) =>
+    states.map((state, i) =>
+      state.endsWith("*")
+        ? { state: state.slice(0, -1), lotNo: i + 1, frozen: null }
+        : { state, lotNo: i + 1, frozen: isFacebookLotPosted(state) ? {} : null }
+    );
 
   it("offers activating or submitting only when every lot is Ready", () => {
     const ready = facebookPostMoves(lots("ready", "ready"));
@@ -955,6 +966,45 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(facebookPostStage(lots("active", "sold")), "up");
     assert.equal(facebookPostStage(lots("paused", "withdrawn")), "up");
     assert.equal(facebookPostStage(lots("sold", "withdrawn")), "over");
+  });
+
+  it("reads past a lot sold or withdrawn before the post went up (#2560)", () => {
+    // The post stands where its other lots do: still being prepared, or Ready to publish.
+    assert.equal(facebookPostStage(lots("preparing", "sold*", "ready")), "preparing");
+    assert.equal(facebookPostStage(lots("ready", "sold*", "withdrawn*", "ready")), "ready");
+    assert.equal(facebookPostStage(lots("active", "sold*")), "up");
+    assert.equal(facebookPostStage(lots("sold", "sold*")), "over");
+    // Every lot gone before the post went up: nothing is left to put up.
+    assert.equal(facebookPostStage(lots("sold*", "sold*")), "over");
+
+    const ready = facebookPostMoves(lots("ready", "sold*", "ready"));
+    assert.deepEqual([ready.activate, ready.submit, ready.backToPreparing], [true, true, true]);
+    assert.deepEqual([ready.takeOut, ready.deleteLot, ready.addLots], [true, true, true], "the post is not up");
+    assert.deepEqual(ready.waiting, [], "a sold lot waits for nothing");
+    assert.deepEqual(facebookPostMoves(lots("preparing", "sold*", "ready")).waiting, [1]);
+    const allSold = facebookPostMoves(lots("sold*", "sold*"));
+    assert.deepEqual([allSold.activate, allSold.submit], [false, false], "nothing to publish");
+  });
+
+  it("sells a lot not yet up from the price the post states — an unbid auction from its start (#2560)", () => {
+    const auction = { listingType: "auction" as const, price: "0.00", startingPrice: "4.00" };
+    assert.equal(facebookLotSalePrice({ ...auction, state: "ready" }), "4.00");
+    assert.equal(facebookLotSalePrice({ ...auction, state: "preparing" }), "4.00");
+    assert.equal(facebookLotSalePrice({ ...auction, state: "active" }), "0.00", "once up, its recorded bid as before");
+    assert.equal(facebookLotSalePrice({ ...auction, price: "7.50", state: "ready" }), "7.50");
+    assert.equal(facebookLotSalePrice({ listingType: "fixed", price: "9.00", startingPrice: null, state: "ready" }), "9.00");
+  });
+
+  it("tells a lot closed before the post went up from one closed after (#2560)", () => {
+    assert.equal(isFacebookLotLeftOut({ state: "sold", frozen: null }), true);
+    assert.equal(isFacebookLotLeftOut({ state: "withdrawn", facebookPostSnapshot: null }), true);
+    assert.equal(isFacebookLotLeftOut({ state: "sold", frozen: {} }), false);
+    assert.equal(isFacebookLotLeftOut({ state: "ready", frozen: null }), false);
+    assert.equal(hasFacebookLotGoneUp({ state: "sold", facebookPostSnapshot: {} }), true);
+    assert.equal(hasFacebookLotGoneUp({ state: "sold", facebookPostSnapshot: null }), false);
+    assert.equal(hasFacebookLotGoneUp({ state: "active", frozen: {} }), true);
+    assert.equal(hasFacebookPostGoneUp(lots("ready", "sold*")), false);
+    assert.equal(hasFacebookPostGoneUp(lots("ready", "sold")), true);
   });
 
   it("reads a post made by hand with no lot yet as being prepared, offering only its lots (#2291)", () => {

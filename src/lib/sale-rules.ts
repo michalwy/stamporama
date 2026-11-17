@@ -18,6 +18,28 @@ export function isSellableOfferState(state: OfferState): boolean {
   return state === "pending" || state === "active" || state === "paused";
 }
 
+/** What else may be sold besides {@link SELLABLE_OFFER_STATES}: a lot of a Facebook post not yet up
+ *  (#2560) — a buyer picks it from the post's preview before the post is published — whether it is
+ *  still being prepared or Ready. Only a lot of a post; an offer prepared elsewhere is not. */
+export const SELLABLE_PREPARED_POST_LOT_STATES: readonly OfferState[] = ["preparing", "ready"];
+
+/**
+ * Why an offer cannot be sold now, or null when it can (#2560: the refusal names the real reason, not
+ * *already sold or withdrawn* for an offer still being prepared). `postLot` is a lot of a Facebook
+ * post, sold before the post goes up as readily as after; `proposalLot` a proposal's lot (#2289),
+ * sold from any open state since it is never put up anywhere.
+ */
+export function offerSaleRefusal(
+  state: OfferState,
+  { postLot = false, proposalLot = false }: { postLot?: boolean; proposalLot?: boolean } = {}
+): string | null {
+  if (state === "sold") return "is already sold";
+  if (state === "withdrawn") return "was withdrawn";
+  if (proposalLot || isSellableOfferState(state)) return null;
+  if (postLot && SELLABLE_PREPARED_POST_LOT_STATES.includes(state)) return null;
+  return state === "preparing" ? "is still being prepared" : "is Ready but not listed yet";
+}
+
 /** The shipping-option select's value for **a one-off option** (#468) — one not worth adding to
  * the platform's list, named on the sale itself. A token rather than a blank, because
  * "sent by nothing I recorded" and "sent by something I am about to name" are different answers,

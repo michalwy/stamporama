@@ -38,7 +38,7 @@ import { issueLineTitle } from "./offer-generator-rules";
 import { copiesAsLabelSet, makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { offerDisplayLabel } from "./offer-set-rules";
 import { offerSetOrdinal, saleLineName, type SaleLineName } from "./sale-line-name";
-import { isSellableOfferState, SELLABLE_OFFER_STATES, shipmentGoingBy } from "./sale-rules";
+import { offerSaleRefusal, SELLABLE_OFFER_STATES, SELLABLE_PREPARED_POST_LOT_STATES, shipmentGoingBy } from "./sale-rules";
 import { distributeSaleShared, type SaleLineInput, type SaleLineNet } from "./sale-allocation";
 import {
   computeCopySaleProfit,
@@ -386,6 +386,15 @@ const SELLABLE_OFFER_SELECT = {
   },
 } as const;
 
+/** The offers a sale may take (`offerSaleRefusal`'s rule as a query): a listing that is up, and a lot
+ *  of a Facebook post not yet up (#2560), which a buyer may pick from the post's preview. */
+const SELLABLE_OFFER_WHERE = {
+  OR: [
+    { state: { in: [...SELLABLE_OFFER_STATES] } },
+    { state: { in: [...SELLABLE_PREPARED_POST_LOT_STATES] }, facebookPostId: { not: null } },
+  ],
+} satisfies Prisma.OfferWhereInput;
+
 /**
  * Offers that can be recorded as sold (ADR-0013): `active` or `paused` offers in the collection,
  * optionally on one `platformId` — or just the one `offerId`, the phone's *Sell* (#2009) — each
@@ -406,11 +415,11 @@ export async function listSellableOffers(
   const rows = await prisma.offer.findMany({
     where: {
       collectionId,
-      state: { in: [...SELLABLE_OFFER_STATES] },
+      ...SELLABLE_OFFER_WHERE,
       ...(opts.platformId ? { platformId: opts.platformId } : {}),
       ...(opts.offerId ? { id: opts.offerId } : {}),
       ...(opts.salePlatformId
-        ? { OR: [{ platformId: opts.salePlatformId }, { inActiveBidding: false }] }
+        ? { AND: [{ OR: [{ platformId: opts.salePlatformId }, { inActiveBidding: false }] }] }
         : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -467,7 +476,7 @@ export async function listSellableCopies(
   const offers = await prisma.offer.findMany({
     where: {
       collectionId,
-      state: { in: [...SELLABLE_OFFER_STATES] },
+      ...SELLABLE_OFFER_WHERE,
       ...(opts.platformId ? { platformId: opts.platformId } : {}),
     },
     select: { sets: { select: { items: { select: { itemId: true } } } } },
@@ -1221,9 +1230,11 @@ async function checkSaleLineDrafts(
       id: true,
       platformId: true,
       currency: true,
+      offerNo: true,
       state: true,
       inActiveBidding: true,
       proposalId: true,
+      facebookPostId: true,
       sets: { select: { id: true } },
     },
   });
@@ -1255,8 +1266,13 @@ async function checkSaleLineDrafts(
       );
     }
     const state = (isOfferState(offer.state) ? offer.state : "active") as OfferState;
-    if (opts.proposalLots ? state === "sold" || state === "withdrawn" : !isSellableOfferState(state)) {
-      throw new SaleActionBlockedError("bad-offer", "One of the offers is already sold or withdrawn.");
+    // Named for what it is (#2560): an offer still being prepared is not *already sold or withdrawn*.
+    const refusal = offerSaleRefusal(state, {
+      postLot: offer.facebookPostId !== null,
+      proposalLot: opts.proposalLots === true,
+    });
+    if (refusal) {
+      throw new SaleActionBlockedError("bad-offer", `Offer #${offer.offerNo} ${refusal}, so it cannot be sold.`);
     }
 
     // The set must belong to the offer it was recorded against.
@@ -2638,6 +2654,32 @@ export async function removeSaleLines(
   return { removed: ids.length, photoRuns: await regenerateCleanedUpOfferPhotos(ownerId, offerIds) };
 }
 
+/**
+ * Open again the offers a sale had closed (`sold`), now that the sale no longer holds them: `active`,
+ * with `closedAt` (#512) cleared, which takes them back out of the generated-photo purge's reach.
+ *
+ * A lot sold **before its Facebook post went up** (#2560) is withdrawn instead (settled with the
+ * collector on 2026-11-17): it never went up, and its post may have gone up without it since, which
+ * is no longer edited — its stamps are listed again in a new offer. It stays in its post, closed, so
+ * nothing of it goes up there either way.
+ */
+async function reopenSoldOffers(tx: DbTransaction, offerIds: readonly string[], now: Date): Promise<void> {
+  if (offerIds.length === 0) return;
+  await tx.offer.updateMany({
+    where: {
+      id: { in: [...offerIds] },
+      state: "sold",
+      facebookPostId: { not: null },
+      facebookPostSnapshot: { equals: Prisma.DbNull },
+    },
+    data: { state: "withdrawn", stateChangedAt: now, closedAt: now, listingToCloseAt: null },
+  });
+  await tx.offer.updateMany({
+    where: { id: { in: [...offerIds] }, state: "sold" },
+    data: { state: "active", stateChangedAt: now, closedAt: null, listingToCloseAt: null },
+  });
+}
+
 /** What removing a sold set does to its offer (ADR-0013): back to active if it had been flipped to
  * `sold` and is no longer fully sold, and a live listing marked changed. The images the sweep may
  * have cleaned up are queued again by the caller once this commits (#2317). */
@@ -2647,12 +2689,7 @@ async function releaseOfferAfterRemoval(tx: DbTransaction, offerId: string): Pro
     select: { state: true },
   });
   if (offer && offer.state === "sold" && !(await isOfferFullySold(tx, offerId))) {
-    await tx.offer.update({
-      where: { id: offerId },
-      // Open again, so no longer closed: as in `deleteSale`, clearing `closedAt` (#512) takes it
-      // back out of the generated-photo purge's reach.
-      data: { state: "active", stateChangedAt: new Date(), closedAt: null, listingToCloseAt: null },
-    });
+    await reopenSoldOffers(tx, [offerId], new Date());
   }
   // The set is back in what this offer sells, which is the same composition change in reverse
   // (#700/#542): a live listing now understates what is there.
@@ -3972,12 +4009,7 @@ export async function deleteSale(ownerId: string, saleId: string): Promise<numbe
       sale.supplyLines.map((l) => l.supplyId)
     );
     if (offerIds.length > 0) {
-      await tx.offer.updateMany({
-        where: { id: { in: offerIds }, state: "sold" },
-        // The listing is open again, so it is no longer closed: clearing `closedAt` (#512) takes it
-        // back out of the generated-photo purge's reach.
-        data: { state: "active", stateChangedAt: new Date(), closedAt: null, listingToCloseAt: null },
-      });
+      await reopenSoldOffers(tx, offerIds, new Date());
       // As in `removeSaleLine`: every set the sale held is sellable again, so a listing still up is
       // out of step with it (#700/#542). After the reopen above, so an offer this call just took
       // back out of `sold` is stamped as well.
@@ -4147,13 +4179,8 @@ async function cancelSaleIn(
     });
     await tx.saleStatusEvent.create({ data: { saleId, status: SALE_CANCELLED, changedAt: now } });
 
-    if (activeOfferIds.length > 0) {
-      await tx.offer.updateMany({
-        where: { id: { in: activeOfferIds }, state: "sold" },
-        // Open again, as on a delete: clearing `closedAt` (#512) takes it out of the photo purge.
-        data: { state: "active", stateChangedAt: now, closedAt: null, listingToCloseAt: null },
-      });
-    }
+    // Open again, as on a delete — a lot sold before its post went up is withdrawn (#2560).
+    await reopenSoldOffers(tx, activeOfferIds, now);
     if (withdrawnOfferIds.length > 0) {
       await tx.offer.updateMany({
         where: { id: { in: withdrawnOfferIds }, state: "sold" },

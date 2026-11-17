@@ -393,7 +393,7 @@ describe("the sale operations (#1949)", () => {
       );
       assert.match(
         (await refused(token, "POST", `/offers/${id}/sale`, { price: "3", sold_at: "2026-10-15" })).message,
-        /is preparing/
+        /is still being prepared/
       );
     });
 

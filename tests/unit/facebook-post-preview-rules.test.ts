@@ -19,7 +19,14 @@ import { SPECIFICATION_LABEL_LANGUAGES } from "../../src/lib/offer-specification
 
 // A Facebook post's preview for a buyer (#2212) — the pure half.
 
-const lots = (...states: string[]) => states.map((state) => ({ state }));
+// A lot past Ready went up and carries its published text (#1800); `sold*` was sold before the post
+// went up and carries none (#2560).
+const lots = (...states: string[]) =>
+  states.map((state) =>
+    state.endsWith("*")
+      ? { state: state.slice(0, -1), frozen: null }
+      : { state, frozen: state === "preparing" || state === "ready" ? null : {} }
+  );
 
 describe("the post preview link's shape (#2212)", () => {
   it("accepts its own prefix with something after it", () => {
@@ -60,6 +67,12 @@ describe("what the preview shows of a post (#2212)", () => {
 
   it("keeps showing a post that is over with something sold", () => {
     assert.equal(facebookPostPreviewStanding(lots("sold", "withdrawn")), "shown");
+  });
+
+  it("keeps showing a Ready post a buyer has bought lots of before it went up (#2560)", () => {
+    assert.equal(facebookPostPreviewStanding(lots("ready", "sold*", "ready")), "shown");
+    assert.equal(canPreviewFacebookPost(lots("ready", "sold*")), true);
+    assert.equal(facebookPostPreviewStanding(lots("sold*", "sold*")), "shown", "every lot sold to the buyer");
   });
 
   it("says a withdrawn or deleted post is no longer current", () => {

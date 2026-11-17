@@ -747,10 +747,11 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `tests/integration/facebook-post-photo-settings.test.ts`.
 
 - **A post's screen narrows its lots to the ones still for sale** (#2081, raised on 2026-10-19). One
-  `FilterChip`, *Still for sale*, above the lots — drawn once the post is up and has more than one lot,
-  since before that no lot can be sold or withdrawn (a sold or withdrawn lot stays behind in the old post
-  on *Back to Ready*, #1998) and a post of one has nothing to narrow; that is also why it never meets the
-  drag-to-reorder, which is only before the post is up. On, the rows are `facebookLotsInView`
+  `FilterChip`, *Still for sale*, above the lots — drawn once a lot of a post of several is sold or
+  withdrawn (#2560; it was once the post is up, before lots could be sold before it), since a post of
+  one has nothing to narrow. It now meets the drag-to-reorder, which is only before the post is up:
+  while it hides lots, `reorderable` is off, since an order missing the hidden lots would be refused as
+  stale. On, the rows are `facebookLotsInView`
   (`facebook-post-ui-state.ts`, pure): the lots `isFacebookLotForSale` — not sold or withdrawn, the
   list of posts' `forSaleCount` reading — in lot order; its count is on the chip and a status line says
   how many of the post's lots are shown. **Remembered per post** in `localStorage`, not the URL, as the
@@ -760,6 +761,50 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   which here changes nothing in practice, since the chip hides only lots that can no longer be sold and
   those never counted. The kit, the photos' ZIP and the post text read `kit.lots`, the whole post.
   The unit test is `tests/unit/facebook-post-ui-state.test.ts`.
+
+- **A lot of a post not yet up can be sold, and stays in the post as sold** (#2560, settled with the
+  collector on 2026-11-17; the issue's *to be confirmed* points implemented as written). A buyer picks
+  lots from the post's preview (#2212) before it is published. **Selling**: `offerSaleRefusal`
+  (`sale-rules.ts`, pure) is the one rule — a listing that is up, or a lot of a Facebook post
+  (`facebookPostId` set) preparing or Ready (`SELLABLE_PREPARED_POST_LOT_STATES`); a proposal's lot from
+  any open state, as before (#2289) — asked by `checkSaleLineDrafts` and the agent API's `sell_offer`,
+  and written as a query (`SELLABLE_OFFER_WHERE`) for `listSellableOffers` and `listSellableCopies`. A
+  refusal names its reason (*Offer #12 is still being prepared, so it cannot be sold.*), no longer
+  *already sold or withdrawn* for everything. The offer goes straight to `sold` through the ordinary
+  `writeSaleLines`; nothing new runs. *Sell* starts its line at `facebookLotSalePrice` — an unbid
+  auction not yet up from its starting price — on the post's screen and the offer's own.
+  **How a lot sold early is told apart, without a column**: every lot that went up carries its frozen
+  text (#1800) from the moment it went up, and one sold before never does. So `isFacebookLotLeftOut`
+  is *closed with no snapshot*; `hasFacebookLotGoneUp` / `hasFacebookPostGoneUp` replace
+  `isFacebookLotPosted` wherever the question is **whether the post is up** — the screen's `notUp` and
+  `reorderable`, every server guard that refused an up post (adding lots, layout, texts, taking a lot
+  out, back to Preparing, the lot-group tools, catalogue fill, the deletion read), `facebookPostMoves`
+  and `facebookPostStage`. `isFacebookLotPosted(state)` stays for a **candidate** offer (a closed offer
+  joins no post). Their lot type, `FacebookLotStanding`, takes `frozen` (a kit's lot) or
+  `facebookPostSnapshot` (a row), and requiring one of them is what made the compiler find every caller.
+  `freezeUnfrozenFacebookPosts` now freezes only open lots: a closed one with no snapshot is exactly
+  what this rule reads, and every closed lot that went up was frozen by its first run. The list's stage
+  filter (`facebookPostStageWhere`) and *not yet up* use `GONE_UP_LOT_WHERE`, the same rule as a query,
+  and the list page asks which closed lots have a snapshot in one read rather than selecting the JSON.
+  **The stage reads past them**: a post is where its other lots are (Ready with lots 1, 3 Ready and 2
+  sold); every lot gone that way is `over`. **Nothing of it goes up**: `renderFacebookKitPost` drops
+  them before `facebookPostSource` (so the text, the captions, and `allFrozen` once published, read
+  only the lots that went up); `buildFacebookPostPhotos` (captioned) and `buildFacebookPostPhotoArchive`
+  (text) leave them out of the ZIP, and the kit's photo run skips them, their rows saying so;
+  `postPhotoLayout` and the preview read the last **frozen** lot, not the last lot. The kit says how
+  many it leaves out (`leftOutNote`). **Lot numbers are never touched**: the published post has a gap.
+  **Publishing** (`publishFacebookPost`) neither moves them nor waits on them, gives them no link, and
+  refuses a post whose every lot is left out; `facebookPostMoves` lets them through `activate` /
+  `submit` and leaves them out of `waiting`. A left-out lot is not taken out of its post
+  (`removeFacebookLot`, and its row's `⋮`), and the lot-group tools that write texts, titles and photo
+  settings skip closed lots (`openLots`) while reordering still sees every lot — reordering and taking
+  an earlier lot out renumber as before, the collector chose on 2026-11-17. **Undoing the sale**
+  (`reopenSoldOffers` in `sales.ts`: a line removed, a sale deleted or cancelled to *active*) withdraws
+  a left-out lot instead of reopening it to `active` — it never went up and its post may be up by then
+  (settled with the collector on 2026-11-17: its stamps are listed again in a new offer). The preview
+  shows the lot *Sold* and leaves it out of the text, so a buyer with an earlier link sees what they
+  bought. Tests: `tests/unit/facebook-post-rules.test.ts`, `tests/unit/sale-rules.test.ts`,
+  `tests/unit/facebook-post-preview-rules.test.ts`, `tests/integration/facebook-post-early-sale.test.ts`.
 
 - **A post's screen prices its lots and marks them ready, as Prepare does — until it is up** (#2031,
   settled with the collector on 2026-10-18; the issue's *to be confirmed* points implemented as

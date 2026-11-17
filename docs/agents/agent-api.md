@@ -1038,6 +1038,10 @@ the total, both over `saleListWhere`; the span of days and the sale number were 
   `set_offer_price`*: it is not — on an auction `set_offer_price` writes the **starting** price
   (*`set_offer_price` writes the figure the seller states*, above) — and the collector chose on
   2026-10-16 to leave it so: the sale takes its price, and the agent records no running bid.
+- **What `sell_offer` sells is what the dialog sells** (#2560): `offerSaleRefusal` (`sale-rules.ts`)
+  for both, so a lot of a Facebook post not yet up — preparing or Ready — is sold, and a refusal names
+  its reason (*is still being prepared*, *is already sold*). The check is asked before
+  `listSellableOffers`, whose query (`SELLABLE_OFFER_WHERE`) is the same rule.
 - **A sale already *Sent* is never added to** by `sell_offer`. The dialog does it behind *Show sent
   sales too*, as a correction (#1950); a correction is the collector's. `sell_copies` (#2531, below)
   is the one exception, and only when the call says so.

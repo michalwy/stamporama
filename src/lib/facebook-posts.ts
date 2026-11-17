@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import {
   detachFacebookLot,
@@ -26,7 +26,9 @@ import {
   facebookPostRefusal,
   facebookPostStage,
   facebookPostTitleRefusal,
+  hasFacebookPostGoneUp,
   isFacebookLotClosed,
+  isFacebookLotLeftOut,
   isFacebookLotPosted,
   type FacebookApprovalClosing,
   type FacebookPostDeletion,
@@ -81,7 +83,6 @@ import {
   isAuctionListing,
   isOfferState,
   normalizeListingType,
-  type OfferState,
 } from "./offer-rules";
 
 // A post in one Facebook group (#1544; ADR-0061 §2, §3) — several lots, or one offer posted alone.
@@ -251,13 +252,13 @@ export async function addFacebookLots(
       groupId: true,
       lots: {
         orderBy: { facebookLotNo: "asc" },
-        select: { id: true, facebookLotNo: true, listingType: true, state: true, endsAt: true },
+        select: { id: true, facebookLotNo: true, listingType: true, state: true, facebookPostSnapshot: true, endsAt: true },
       },
     },
   });
   if (!post) throw new Error("Post not found.");
   await assertCollectionOwner(ownerId, post.collectionId);
-  if (post.lots.some((l) => isFacebookLotPosted(l.state))) {
+  if (hasFacebookPostGoneUp(post.lots)) {
     throw new OfferActionBlockedError(
       "facebook-group",
       `Post #${post.postNo} is up, so it takes no new lots — they go up with a post, not after it.`
@@ -404,11 +405,11 @@ async function joinPostAsNextLot(tx: DbTransaction, postId: string, offerId: str
       groupId: true,
       lots: {
         orderBy: { facebookLotNo: "asc" },
-        select: { id: true, facebookLotNo: true, listingType: true, state: true, endsAt: true },
+        select: { id: true, facebookLotNo: true, listingType: true, state: true, facebookPostSnapshot: true, endsAt: true },
       },
     },
   });
-  if (post.lots.some((l) => isFacebookLotPosted(l.state))) {
+  if (hasFacebookPostGoneUp(post.lots)) {
     throw new OfferActionBlockedError(
       "facebook-group",
       `Post #${post.postNo} is up, so it takes no new lots — they go up with a post, not after it.`
@@ -456,11 +457,15 @@ export async function listFacebookLotCandidates(
 ): Promise<FacebookLotCandidate[]> {
   const post = await prisma.facebookPost.findFirst({
     where: { id: postId, collectionId },
-    select: { collectionId: true, groupId: true, lots: { select: { listingType: true, state: true } } },
+    select: {
+      collectionId: true,
+      groupId: true,
+      lots: { select: { listingType: true, state: true, facebookPostSnapshot: true } },
+    },
   });
   if (!post) throw new Error("Post not found.");
   await assertCollectionOwner(ownerId, post.collectionId);
-  if (post.lots.some((l) => isFacebookLotPosted(l.state))) return [];
+  if (hasFacebookPostGoneUp(post.lots)) return [];
   const mixes = await facebookGroupMixesTypes(post.groupId);
   const types = [...new Set(post.lots.map((l) => normalizeListingType(l.listingType)))];
   const alone = (
@@ -507,12 +512,12 @@ export async function getFacebookPostLotsPrepare(
     where: { id: postId, collectionId },
     select: {
       collectionId: true,
-      lots: { select: { id: true, state: true }, orderBy: { facebookLotNo: "asc" } },
+      lots: { select: { id: true, state: true, facebookPostSnapshot: true }, orderBy: { facebookLotNo: "asc" } },
     },
   });
   if (!post) throw new Error("Post not found.");
   await assertCollectionOwner(ownerId, post.collectionId);
-  if (post.lots.some((l) => isFacebookLotPosted(l.state))) return null;
+  if (hasFacebookPostGoneUp(post.lots)) return null;
   const rows = await readPrepareOffers(
     ownerId,
     post.collectionId,
@@ -607,7 +612,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
   if (!kit) return null;
   const platform = post.group.platform;
   const sales = await readLotSales(kit.lots.map((l) => l.offerId));
-  const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
+  const posted = hasFacebookPostGoneUp(kit.lots);
   const previewLinks = await prisma.facebookPostPreviewToken.count({ where: { postId: post.id } });
   return {
     postId: post.id,
@@ -674,14 +679,14 @@ export async function getFacebookPostLot(
   await assertCollectionOwner(ownerId, collectionId);
   const post = await prisma.facebookPost.findFirst({
     where: { id: postId, collectionId },
-    select: { title: true, lots: { select: { id: true, state: true, nameEdited: true } } },
+    select: { title: true, lots: { select: { id: true, state: true, facebookPostSnapshot: true, nameEdited: true } } },
   });
   const own = post?.lots.find((l) => l.id === offerId);
   if (!post || !own) return null;
   const kit = await getFacebookOfferKit(offerId, { lotOnly: true });
   const lot = kit?.lots[0];
   if (!kit || !lot) return null;
-  const posted = post.lots.some((l) => isFacebookLotPosted(l.state));
+  const posted = hasFacebookPostGoneUp(post.lots);
   const photos = await readFacebookPostPhotos(ownerId, postId, [offerId]);
   if (posted) {
     return { title: post.title, lot, prepare: null, text: null, translations: null, handWritten: own.nameEdited, photos };
@@ -752,9 +757,9 @@ export async function refreshFacebookPostTexts(ownerId: string, postId: string):
   await assertPostOwner(ownerId, postId);
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: postId },
-    select: { id: true, state: true },
+    select: { id: true, state: true, facebookPostSnapshot: true },
   });
-  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+  if (hasFacebookPostGoneUp(lots)) {
     throw new OfferActionBlockedError("facebook-group", "The post is up, so its text stays as it was posted.");
   }
   for (const lot of lots) await syncGeneratedTexts(ownerId, lot.id, ["name", "description"]);
@@ -830,10 +835,19 @@ export interface FacebookPostListFilters {
   pageSize?: number;
 }
 
-const POSTED_STATES: readonly OfferState[] = OFFER_STATES.filter((s) => isFacebookLotPosted(s));
+/** A lot that went up with its post (`hasFacebookLotGoneUp`) as a query: pending, up or paused, or
+ *  closed with the text it was published with (#1800) — a lot sold or withdrawn before its post went
+ *  up (#2560) carries none. */
+const GONE_UP_LOT_WHERE = {
+  OR: [
+    { state: { in: ["pending", "active", "paused"] } },
+    { state: { in: [...CLOSED_OFFER_STATES] }, facebookPostSnapshot: { not: Prisma.DbNull } },
+  ],
+} satisfies Prisma.OfferWhereInput;
 
 /** The posts `facebookPostStage` would place at `stage`, as a query over their lots — the same
- *  precedence, so a filtered page holds exactly the rows whose chip says that stage. */
+ *  precedence, so a filtered page holds exactly the rows whose chip says that stage. A lot closed
+ *  before the post went up (#2560) is read past, as the stage reads it. */
 function facebookPostStageWhere(stage: FacebookPostStage): Prisma.FacebookPostWhereInput {
   switch (stage) {
     case "pending":
@@ -841,20 +855,33 @@ function facebookPostStageWhere(stage: FacebookPostStage): Prisma.FacebookPostWh
     case "up":
       return { AND: [{ lots: { none: { state: "pending" } } }, { lots: { some: { state: { in: ["active", "paused"] } } } }] };
     case "over":
+      // Gone up and nothing left running — or every lot closed before the post went up.
       return {
         AND: [
           { lots: { none: { state: { in: ["pending", "active", "paused"] } } } },
-          { lots: { some: { state: { in: [...POSTED_STATES] } } } },
+          {
+            OR: [
+              { lots: { some: GONE_UP_LOT_WHERE } },
+              { AND: [{ lots: { every: { state: { in: [...CLOSED_OFFER_STATES] } } } }, { lots: { some: {} } }] },
+            ],
+          },
         ],
       };
     case "ready":
-      return { AND: [{ lots: { every: { state: "ready" } } }, { lots: { some: {} } }] };
+      // Every lot Ready but those closed before the post went up, and one Ready at least.
+      return {
+        AND: [
+          { lots: { every: { state: { in: ["ready", ...CLOSED_OFFER_STATES] } } } },
+          { lots: { none: GONE_UP_LOT_WHERE } },
+          { lots: { some: { state: "ready" } } },
+        ],
+      };
     case "preparing":
       // A post with no lot yet (#2291) is being prepared too.
       return {
         AND: [
-          { lots: { none: { state: { in: [...POSTED_STATES] } } } },
-          { OR: [{ lots: { some: { state: { not: "ready" } } } }, { lots: { none: {} } }] },
+          { lots: { none: GONE_UP_LOT_WHERE } },
+          { OR: [{ lots: { some: { state: "preparing" } } }, { lots: { none: {} } }] },
         ],
       };
   }
@@ -881,7 +908,7 @@ export async function listFacebookPostsPaginated(
     ...(filters.groupIds?.length ? { groupId: { in: [...filters.groupIds] } } : {}),
     AND: [
       ...(filters.stage ? [facebookPostStageWhere(filters.stage)] : []),
-      ...(filters.notUp ? [{ lots: { none: { state: { in: [...POSTED_STATES] } } } }] : []),
+      ...(filters.notUp ? [{ lots: { none: GONE_UP_LOT_WHERE } }] : []),
     ],
     ...(filters.untitled ? { OR: [{ title: null }, { title: "" }] } : {}),
   };
@@ -913,6 +940,19 @@ export async function listFacebookPostsPaginated(
   });
   const hasMore = rows.length > pageSize;
   const page = hasMore ? rows.slice(0, pageSize) : rows;
+  // Which closed lots went up (#2560) — asked of those alone, rather than reading every lot's
+  // published text to see whether it has one.
+  const closedIds = page.flatMap((row) => row.lots.filter((l) => isFacebookLotClosed(l.state)).map((l) => l.id));
+  const wentUp = new Set(
+    closedIds.length === 0
+      ? []
+      : (
+          await prisma.offer.findMany({
+            where: { id: { in: closedIds }, facebookPostSnapshot: { not: Prisma.DbNull } },
+            select: { id: true },
+          })
+        ).map((o) => o.id)
+  );
   const { baseCurrency } = await prisma.collection.findUniqueOrThrow({
     where: { id: collectionId },
     select: { baseCurrency: true },
@@ -936,7 +976,7 @@ export async function listFacebookPostsPaginated(
       .map((l) => l.listingDate)
       .filter((d): d is Date => d !== null)
       .sort((a, b) => a.getTime() - b.getTime());
-    const stage = facebookPostStage(row.lots);
+    const stage = facebookPostStage(row.lots.map((l) => ({ state: l.state, frozen: wentUp.has(l.id) || null })));
     return {
       postId: row.id,
       postNo: row.postNo,
@@ -1000,12 +1040,19 @@ export async function removeFacebookLot(ownerId: string, offerId: string): Promi
   if (!offer.facebookPostId) return;
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: offer.facebookPostId },
-    select: { state: true },
+    select: { id: true, state: true, facebookPostSnapshot: true },
   });
-  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+  if (hasFacebookPostGoneUp(lots)) {
     throw new OfferActionBlockedError(
       "facebook-group",
       "The post is up, so its lots stay as they were posted. Withdraw this lot instead."
+    );
+  }
+  // A lot sold or withdrawn before the post went up stays in it, with its number (#2560).
+  if (lots.some((l) => l.id === offerId && isFacebookLotClosed(l.state))) {
+    throw new OfferActionBlockedError(
+      "facebook-group",
+      "This lot is sold or withdrawn, so it stays in its post with its number."
     );
   }
   if (lots.length < 2) return;
@@ -1025,7 +1072,7 @@ async function readDeletionLots(db: DbTransaction | typeof prisma, postId: strin
   const lots = await db.offer.findMany({
     where: { facebookPostId: postId },
     orderBy: { facebookLotNo: "asc" },
-    select: { id: true, offerNo: true, facebookLotNo: true, state: true },
+    select: { id: true, offerNo: true, facebookLotNo: true, state: true, facebookPostSnapshot: true },
   });
   const sold = await db.saleLine.findMany({
     where: { offerSet: { offerId: { in: lots.map((l) => l.id) } } },
@@ -1052,7 +1099,7 @@ export async function readFacebookPostDeletion(ownerId: string, postId: string):
     title: post.title,
     offerCount: lots.length,
     soldLots,
-    submitted: lots.some((l) => isFacebookLotPosted(l.state)),
+    submitted: hasFacebookPostGoneUp(lots),
   };
 }
 
@@ -1116,8 +1163,11 @@ export async function setFacebookPostLayout(
     throw new Error("Unknown layout for a post of several lots.");
   }
   await assertPostOwner(ownerId, postId);
-  const lots = await prisma.offer.findMany({ where: { facebookPostId: postId }, select: { state: true } });
-  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: postId },
+    select: { state: true, facebookPostSnapshot: true },
+  });
+  if (hasFacebookPostGoneUp(lots)) {
     throw new OfferActionBlockedError(
       "facebook-group",
       "The post is up, so it stays laid out as it was posted."
@@ -1248,15 +1298,28 @@ export async function publishFacebookPost(
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: postId },
     orderBy: { facebookLotNo: "asc" },
-    select: { id: true, offerNo: true, facebookLotNo: true, state: true, url: true },
+    select: { id: true, offerNo: true, facebookLotNo: true, state: true, url: true, facebookPostSnapshot: true },
   });
+  // A lot sold or withdrawn before the post went up (#2560) stays in it, and nothing of it goes up:
+  // it neither moves nor holds the rest back. A post whose every lot went that way has nothing to offer.
+  const leftOut = new Set(lots.filter(isFacebookLotLeftOut).map((l) => l.id));
+  if (lots.length > 0 && leftOut.size === lots.length) {
+    throw new OfferActionBlockedError(
+      "bad-transition",
+      "Every lot of this post is sold or withdrawn, so there is nothing left to put up."
+    );
+  }
   // Where each lot may start from, and where it is already done: approving finishes a post that was
   // pending, and submitting one leaves a lot already pending where it is. Approving also leaves a lot
   // that closed while the post waited (#2290).
   const approving = lots.some((l) => l.state === "pending") && to === "active";
   const movable = to === "active" ? ["ready", "pending"] : ["ready"];
   const waiting = lots.filter(
-    (l) => !movable.includes(l.state) && l.state !== to && !(approving && isFacebookLotClosed(l.state))
+    (l) =>
+      !movable.includes(l.state) &&
+      l.state !== to &&
+      !leftOut.has(l.id) &&
+      !(approving && isFacebookLotClosed(l.state))
   );
   if (waiting.length > 0) {
     const named = waiting.map((l) => `lot ${l.facebookLotNo} (offer #${l.offerNo}, ${l.state})`).join(", ");
@@ -1265,7 +1328,7 @@ export async function publishFacebookPost(
   // A lot holding a set sold elsewhere keeps the whole post down (#1876): asked of every lot before
   // any of them moves, since the loop below would otherwise put the lots ahead of it up alone.
   for (const lot of lots) {
-    if (!isOfferState(lot.state)) continue;
+    if (!isOfferState(lot.state) || leftOut.has(lot.id)) continue;
     const refusal = await readSoldElsewhereRefusal(lot.id, lot.state, to);
     if (refusal) {
       throw new OfferActionBlockedError("sold-elsewhere", `Lot ${lot.facebookLotNo} (offer #${lot.offerNo}): ${refusal}`);
@@ -1274,6 +1337,7 @@ export async function publishFacebookPost(
   // So does a Ready lot whose photos are being made again (#2114) — covers changed after it was
   // readied — so the post never goes up with the old ones.
   for (const lot of lots) {
+    if (leftOut.has(lot.id)) continue;
     const hold = await readPublishPhotoHold(lot.id);
     if (hold) {
       throw new OfferActionBlockedError("photos-generating", `Lot ${lot.facebookLotNo} (offer #${lot.offerNo}): ${hold}`);
@@ -1291,6 +1355,8 @@ export async function publishFacebookPost(
     await prisma.offer.updateMany({
       where: {
         facebookPostId: postId,
+        // A lot left out never went up, so it has no address in the group (#2560).
+        id: { notIn: [...leftOut] },
         OR: [{ url: null }, { url: "" }, ...(approving && pending ? [{ url: pending }] : [])],
       },
       data: { url: link },
@@ -1327,9 +1393,9 @@ export async function takeFacebookPostBackToPreparing(ownerId: string, postId: s
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: postId },
     orderBy: { facebookLotNo: "asc" },
-    select: { id: true, state: true },
+    select: { id: true, state: true, facebookPostSnapshot: true },
   });
-  if (lots.some((l) => isFacebookLotPosted(l.state))) {
+  if (hasFacebookPostGoneUp(lots)) {
     throw new OfferActionBlockedError(
       "bad-transition",
       "The post has gone up, so its lots no longer go back to Preparing."

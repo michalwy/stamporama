@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { FacebookKitLot, FacebookOfferKit } from "@/lib/facebook-auctions";
-import { facebookLotPhotoFileName, isFacebookLotPosted } from "@/lib/facebook-post-rules";
+import { facebookLotPhotoFileName, hasFacebookPostGoneUp, isFacebookLotLeftOut } from "@/lib/facebook-post-rules";
 import {
   FACEBOOK_MULTI_LOT_LAYOUT_LABEL,
   FACEBOOK_MULTI_LOT_LAYOUTS,
@@ -181,10 +181,19 @@ export function FacebookPostKit({
   const captioned = layout === "captions";
   const lotPhotos = photos?.layout === "captions" ? photos.lots : undefined;
   const textPhotos = photos?.layout === "text" ? photos.lots : undefined;
-  // The ZIP of a captioned post is refused until every lot's photo is ready (#1861).
-  const zipWaits = captioned ? (lotPhotos ? lotPhotosNotReady(lotPhotos) : "Loading the lots' photos…") : null;
+  // The lots sold or withdrawn before the post went up (#2560): nothing of them goes up — not in the
+  // text, the ZIP or the photos below — and the kit says how many it leaves out.
+  const leftOut = kit.lots.filter(isFacebookLotLeftOut);
+  const leftOutIds = new Set(leftOut.map((l) => l.offerId));
+  // The ZIP of a captioned post is refused until every lot's photo is ready (#1861) — every lot that
+  // goes up.
+  const zipWaits = captioned
+    ? lotPhotos
+      ? lotPhotosNotReady(lotPhotos.filter((l) => !leftOutIds.has(l.offerId)))
+      : "Loading the lots' photos…"
+    : null;
   // Posted: once any lot has gone up — the lots of a post go up together.
-  const posted = kit.lots.some((l) => isFacebookLotPosted(l.state));
+  const posted = hasFacebookPostGoneUp(kit.lots);
   // Where a setting is set: the group's own pane when it holds it, else Facebook's defaults (#1661),
   // open on the tab the setting is on (#1849).
   const settingHref = (setting: FacebookGroupSetting) =>
@@ -249,7 +258,7 @@ export function FacebookPostKit({
             </Tooltip>
           )}
           <CopyButton value={plain} html={html} label="post text" />
-          {kit.lots.length === 0 ? null : zipWaits ? (
+          {kit.lots.length === leftOut.length ? null : zipWaits ? (
             <Tooltip content={zipWaits}>
               <span style={MUTED}>↓ Photos, one per lot</span>
             </Tooltip>
@@ -273,6 +282,9 @@ export function FacebookPostKit({
         <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
           As posted on {formatInstant(frozenAt)} — editing a template no longer changes it.
         </p>
+      )}
+      {leftOut.length > 0 && (
+        <p role="status" style={{ ...MUTED, margin: "0.25rem 0 0" }}>{leftOutNote(leftOut)}</p>
       )}
       {(gaps.missingPostText ||
         gaps.missingPostTitle ||
@@ -386,6 +398,21 @@ export function FacebookPostKit({
   );
 }
 
+/** What the kit says of the lots it leaves out (#2560): how many, and which, sold or withdrawn before
+ *  the post went up — the others keep their numbers, so the post shows a gap where each one was. */
+function leftOutNote(lots: readonly FacebookKitLot[]): string {
+  const sold = lots.filter((l) => l.state === "sold").length;
+  const what =
+    sold === lots.length
+      ? `${lots.length} sold lot${lots.length === 1 ? "" : "s"}`
+      : sold === 0
+        ? `${lots.length} withdrawn lot${lots.length === 1 ? "" : "s"}`
+        : `${lots.length} lots sold or withdrawn`;
+  const numbers = lots.map((l) => l.lotNo).filter((n): n is number => n !== null);
+  const which = numbers.length > 0 ? ` (${numbers.length === 1 ? "lot" : "lots"} ${numbers.join(", ")})` : "";
+  return `${what}${which} left out — not in the post's text, its photos or the ZIP. The other lots keep their numbers.`;
+}
+
 /** What the kit puts up for one lot of a multi-lot post (#1863), drawn in that lot's row. */
 export type FacebookLotKit = {
   /** Captioned, the lot's one photo; as text, its upload set — or why there is nothing to show. */
@@ -428,6 +455,8 @@ function PostLots({
     const photos: PostPhotoEntry[] = [];
     const photoBase = `/api/collections/${collectionId}/photos/`;
     lots.forEach((lot, index) => {
+      // A lot sold or withdrawn before the post went up puts nothing up (#2560).
+      if (isFacebookLotLeftOut(lot)) return;
       const lotNo = lot.lotNo ?? index + 1;
       if (captioned) {
         const stored = lotPhotos?.find((l) => l.offerId === lot.offerId);
@@ -467,6 +496,16 @@ function PostLots({
   }
 
   function lotKit(lot: FacebookKitLot): FacebookLotKit {
+    if (isFacebookLotLeftOut(lot)) {
+      return {
+        photos: (
+          <p style={{ ...MUTED, margin: 0 }}>
+            {lot.state === "sold" ? "Sold" : "Withdrawn"} before the post went up — nothing of it goes up.
+          </p>
+        ),
+        caption: null,
+      };
+    }
     if (captioned) {
       const caption = captions.find((c) => c.offerId === lot.offerId);
       return {

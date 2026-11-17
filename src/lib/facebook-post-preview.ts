@@ -149,7 +149,13 @@ async function readPostHead(postId: string) {
       collection: { select: { ownerId: true, defaultLanguage: true } },
       lots: {
         orderBy: { facebookLotNo: "asc" },
-        select: { id: true, state: true, url: true, platform: { select: { titleLanguage: true } } },
+        select: {
+          id: true,
+          state: true,
+          url: true,
+          facebookPostSnapshot: true,
+          platform: { select: { titleLanguage: true } },
+        },
       },
     },
   });
@@ -172,11 +178,12 @@ async function buildPreview(ownerId: string, postId: string): Promise<FacebookPo
 
   const kit = await getFacebookOfferKit(head.lots[0].id);
   if (!kit) return null;
-  // Laid out as it went up, read off its last lot's frozen text (#1841), else as it is set now.
-  const captioned = (kit.lots.at(-1)?.frozen?.layout ?? kit.layout) === "captions";
+  // Laid out as it went up, read off its last frozen lot's text (#1841) — a lot sold before the post
+  // went up has none (#2560) — else as it is set now.
+  const lastFrozen = [...kit.lots].reverse().find((lot) => lot.frozen !== null)?.frozen ?? null;
+  const captioned = (lastFrozen?.layout ?? kit.layout) === "captions";
   const photos = await lotPhotoIds(ownerId, postId, kit, captioned);
   const states = new Map(head.lots.map((l) => [l.id, l.state]));
-  const lastFrozen = kit.lots.at(-1)?.frozen ?? null;
 
   return {
     ...base,
@@ -395,7 +402,7 @@ export async function canServeFacebookPostPreviewPhoto(
   if (!access.postId) return false;
   const lots = await prisma.offer.findMany({
     where: { facebookPostId: access.postId, collectionId: access.collectionId },
-    select: { state: true },
+    select: { state: true, facebookPostSnapshot: true },
   });
   if (facebookPostPreviewStanding(lots) !== "shown") return false;
   const lotOfThisPost = { facebookPostId: access.postId, collectionId: access.collectionId };

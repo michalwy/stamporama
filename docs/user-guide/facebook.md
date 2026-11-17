@@ -635,10 +635,12 @@ show, and from the
   ([Changing the order of the lots](#changing-the-order-of-the-lots)). A row wraps onto the next line on a narrow window rather than shrinking
   the photo. Everything a post needs is here — its text, its photos and, captioned, its captions — so
   posting needs no lot opened.
-- **Still for sale** — once the post is up, a chip above the lots, with the number of lots neither sold
-  nor withdrawn. Click it to list only those — what is left to sell, to answer a buyer or sell them
-  several lots together — and a line beside it says how many of the post's lots it is showing; click it
-  again to see every lot. Each post remembers it: a post you narrowed opens narrowed next time, while
+- **Still for sale** — as soon as a lot of the post is sold or withdrawn, before the post is up too, a
+  chip above the lots, with the number of lots neither sold nor withdrawn. Click it to list only those —
+  what is left to sell, to answer a buyer or sell them several lots together, or, while the post goes
+  up, the lots whose texts you copy, so a sold one's is not copied by mistake — and a line beside it
+  says how many of the post's lots it is showing; click it again to see every lot. While it hides lots,
+  the rows cannot be dragged into another order. Each post remembers it: a post you narrowed opens narrowed next time, while
   others still list every lot. Lots you have ticked stay ticked, and **Sell…** sells only the ticked
   lots in view. The post's text, its photos and their download are always the whole post.
 - **Pricing and readying the lots** — until the post is up, each row also prices its lot and says what
@@ -897,7 +899,8 @@ It goes out two ways:
 
 **The link stays live.** Once the group approves the post, the page gains a link to the post in the
 group (a pending post's own link opens only for you, so it is never shown). A lot that sells — an
-auction won included — is marked **Sold**, its photos dimmed, without naming the buyer; a lot
+auction won included, or one sold before the post went up — is marked **Sold**, its photos dimmed,
+without naming the buyer, so a buyer holding the link still sees what they bought; a lot
 withdrawn from a post still up is marked **No longer available**. If you take the post back to
 **Preparing**, the link says the post is being updated and to ask you for a current one, and shows it
 again once it is Ready. Once the post is withdrawn or deleted, it says only that the offer is no longer
@@ -1039,6 +1042,28 @@ it as any offer.
 
 The sale's **Message to buyer** writes what the buyer owes from the group's
 [message template](#buyer-messages).
+
+### Selling lots before the post goes up
+
+A regular buyer often misses a post until someone else has bid, so you may send them its
+[preview](#preview-for-a-buyer) before it goes up and let them pick. The lots they choose are sold
+**while the post is still being prepared or Ready**, the same way: a lot's **Sell**, **Sell…** on the
+ticked lots, or **Sell** on the offer's own screen, into an open sale or a new one. The price starts
+from the lot's price as the post states it — for an auction, its starting price.
+
+A lot sold this way **stays in the post as sold**: it keeps its place and its number, shows as *sold*
+on the post's screen with its sale, and the other lots are not renumbered. The post itself does not
+move — it is still being prepared, or Ready, as its other lots are.
+
+**Nothing of a sold lot goes up.** The post's text leaves it out, and so do its photos and **↓ Photos**:
+above the text, the kit says how many sold lots it leaves out and which. The lots that do go up keep
+their numbers, so the published post shows a gap — lots 1, 2, 4, 5 — and a number means the same lot
+here, on the preview and in a comment. **Publish…** puts up only the rest; a post whose every lot is
+sold has nothing to offer and is not published. A sold lot cannot be taken out of the post.
+
+If such a sale is deleted or cancelled later, the lot does not go back on offer: it never went up, and
+the post may be up without it by then, so it becomes **Withdrawn**. List its stamps again in a new
+offer.
 
 ## Refreshing a quick buy
 
