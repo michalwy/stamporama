@@ -565,9 +565,11 @@ input[data-lpignore="true"] + div[id^="__lpform_"] {
   /* A headed group of rows (#2559, `PrintGroup`): its heading is the first row of the `<thead>`,
      so the page never breaks between the header and the group's first row — a heading and a column
      header with nothing under them move to the next page with that row. Further rows may still
-     continue overleaf, where the repeated `<thead>` names the group again. */
+     continue overleaf, where the repeated `<thead>` names the group again. The anchor row the
+     first page's plain heading hangs from (#2569) is held to that first row the same way. */
   .print-group-head,
-  .print-group-head > tr {
+  .print-group-head > tr,
+  .print-group-anchor {
     break-after: avoid;
   }
 
