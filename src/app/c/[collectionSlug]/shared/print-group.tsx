@@ -14,10 +14,18 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 //   header, because the browser repeats a `<thead>` on every page the table continues on.
 //
 // The `<thead>` copy is the *continued* one, and it is the same on every page — the browser repeats
-// it as drawn. So the first page's is covered by the plain heading: an overlay pinned to the top of
-// the group, laid out from the same markup with the marker kept but invisible, so it wraps exactly as
-// the copy under it does and hides all of it. Absolutely positioned at the group's top, it prints in
-// the group's first page and nowhere else.
+// it as drawn. So the first page's is covered by the plain heading: an overlay laid out from the same
+// markup with the marker kept but invisible, so it wraps exactly as the copy under it does and hides
+// all of it.
+//
+// **The overlay hangs from the group's first body row, never from the group** (#2569). Positioned
+// against the whole group, whose box breaks across pages, Chrome drew it one heading lower than the
+// `<thead>` on every group that ran over a break — both headings printed, the plain one over the
+// column header and the first copy. Its containing block is now a zero-height row at the top of the
+// `<tbody>` (`.print-group-anchor`): a row is never split and is kept with the `<thead>`, so the
+// overlay's box never breaks and lands on the group's first page only. It hangs *up* from there: the
+// plain heading, then a hidden copy of the column header as a spacer, which is as tall as the real
+// one because a column header never wraps (`white-space: nowrap` on every sheet's `<th>`).
 //
 // The heading cell spans the whole table but must not widen a column: its content is
 // `contain: inline-size`, so it adds nothing to the table's intrinsic width and takes whatever width
@@ -85,7 +93,7 @@ export function PrintGroup({
     );
   }
   return (
-    <section style={{ marginTop: "1.25rem", position: "relative" }}>
+    <section style={{ marginTop: "1.25rem" }}>
       {/* Auto layout (the browser default): every column takes exactly the width its content needs,
           so a sheet without long series names stays tight instead of holding empty space. */}
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -97,14 +105,23 @@ export function PrintGroup({
           </tr>
           {columnHeader}
         </thead>
-        <tbody>{children}</tbody>
+        <tbody>
+          {/* The plain heading over the first page's `<thead>` copy — see the note at the top. */}
+          <tr className="print-group-anchor" aria-hidden style={{ position: "relative" }}>
+            <td colSpan={columns} style={{ padding: 0, border: 0, height: 0 }}>
+              <div style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}>
+                <div style={{ background: "var(--color-bg-page)" }}>
+                  <Heading heading={heading} mark="hidden" />
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", visibility: "hidden" }}>
+                  <thead>{columnHeader}</thead>
+                </table>
+              </div>
+            </td>
+          </tr>
+          {children}
+        </tbody>
       </table>
-      <div
-        aria-hidden
-        style={{ position: "absolute", top: 0, left: 0, right: 0, background: "var(--color-bg-page)" }}
-      >
-        <Heading heading={heading} mark="hidden" />
-      </div>
     </section>
   );
 }
