@@ -58,6 +58,10 @@ from outside home is the installation's: **one HTTPS address, the same on the de
 phone**, set as `BETTER_AUTH_URL`, because a session ends on a move to another address or between
 http and https. Every other screen is desktop-only, with no breakpoints (`docs/agents/phone.md`).
 
+`User.phoneCollectionId?` (#2574, FK `SetNull`) is the collection `/phone` opens when the collector
+has several: the last one a phone screen was opened in, kept on the account and set only from a
+phone screen.
+
 ### Behind a reverse proxy
 
 Nearly every self-hosted deployment sits behind one — nginx, Caddy, a Cloudflare tunnel — and there
