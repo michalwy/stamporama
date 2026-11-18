@@ -46,4 +46,13 @@ describe("pickPricingTab (#2522)", () => {
   it("ignores a remembered key no tab carries", () => {
     assert.equal(pickPricingTab([market()], "gone")?.key, "colnect-market");
   });
+
+  it("opens a tab clicked on this screen, even an empty one beside a tab with content (#2577)", () => {
+    assert.equal(pickPricingTab([market({ empty: true }), earlier()], "colnect-market", "colnect-market")?.key, "colnect-market");
+    assert.equal(pickPricingTab([market({ empty: true }), earlier()], "earlier-offers", "earlier-offers")?.key, "earlier-offers");
+  });
+
+  it("ignores a clicked key no present tab carries, and picks as before", () => {
+    assert.equal(pickPricingTab([market({ present: false, empty: true }), earlier()], "colnect-market", "colnect-market")?.key, "earlier-offers");
+  });
 });

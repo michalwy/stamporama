@@ -1436,8 +1436,10 @@ export function OfferDetailPanel({
 
       {/* Pricing (#2522): directly under the compact header, because setting the price is what this
           screen is for — the price table on the left, and on the right, in tabs, what it is weighed
-          against: the Colnect market (#2454), which used to sit under the description. */}
+          against: the Colnect market (#2454), which used to sit under the description. Keyed by offer
+          so a tab clicked here is not carried to the next offer's screen (#2577). */}
       <OfferPricingPanel
+        key={offer.id}
         collectionId={collectionId}
         priceTable={
           <>
