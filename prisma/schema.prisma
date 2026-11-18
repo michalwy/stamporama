@@ -17,7 +17,13 @@ model User {
   updatedAt     DateTime
   sessions      Session[]
   accounts      Account[]
-  collections   Collection[]
+  collections   Collection[]  @relation("CollectionOwner")
+  // The collection the phone opens on its next start (#2574; ADR-0072 §3, amended): the last one a
+  // phone screen was opened in, kept for the account so it holds on another phone and across signing
+  // in again. Only a phone screen sets it — working at the desk never does. Null when none is
+  // remembered, and again once that collection is deleted.
+  phoneCollectionId String?
+  phoneCollection   Collection?  @relation("PhoneCollection", fields: [phoneCollectionId], references: [id], onDelete: SetNull)
 
   @@map("user")
 }
@@ -149,7 +155,9 @@ model Collection {
   ownerId      String
   createdAt    DateTime @default(now())
 
-  owner           User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner           User              @relation("CollectionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  // The accounts whose phone opens here (#2574) — the owner's at most.
+  phoneUsers      User[]            @relation("PhoneCollection")
   defaultScanningProfile ScanningProfile? @relation("CollectionDefaultScanningProfile", fields: [defaultScanningProfileId], references: [id], onDelete: NoAction)
   scanningProfiles ScanningProfile[] @relation("CollectionScanningProfiles")
   collectionAreas CollectionArea[]

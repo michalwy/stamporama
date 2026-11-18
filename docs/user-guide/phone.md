@@ -32,9 +32,14 @@ of its own, without Chrome's address bar.
 
 ## The phone start screen
 
-The icon opens straight into your collection. If you have **several collections**, it lists them
-first; tap the one to open, and **Other collections** at the bottom of a collection's start screen
-brings the list back.
+The icon opens straight into your collection. If you have **several collections**, it opens the one
+you **last used on the phone**. The first time — or when that collection has since been deleted — it
+lists your collections instead; tap the one to open. **Other collections** at the bottom of a
+collection's start screen brings the list back, and the collection you pick there is the one the icon
+opens next time.
+
+The phone remembers this for your account, so it holds after signing in again and on another phone.
+Working in a collection at the desk does not change where the phone starts.
 
 The start screen lists the phone screens, one row each — **Browse by area**, **Start a purchase**,
 **Sales to do** and **Offers**. New ones arrive with new releases. Above

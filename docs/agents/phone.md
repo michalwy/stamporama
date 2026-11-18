@@ -11,7 +11,7 @@ desktop-only.
   no service worker cache; a web app manifest only, for the home-screen icon.
 - **A separate, reduced set of phone screens, never a breakpoint on a desktop screen.** Phone pages
   live under `/c/[collectionSlug]/phone/…`, with `/phone` as the start (straight into the collection,
-  or the list when there are several). They are drawn at phone width without the desktop sidebar, and
+  the one last used on the phone when there are several, else the list — #2574). They are drawn at phone width without the desktop sidebar, and
   share the desk's domain logic and server actions — never a second copy of a rule. A phone screen has
   no desktop layout; a desktop screen gains no phone layout, and opened on a phone it renders as it
   always has. Making the existing screens responsive was rejected: they are built on the window's full
@@ -27,11 +27,22 @@ desktop-only.
 
 ## The shell (#2002)
 
-- **`/phone`** (`src/app/phone/page.tsx`) is the manifest's `start_url`. `phoneStart` (`src/lib/phone.ts`,
-  pure, unit-tested) decides it: one collection → its phone start, several → a phone list of them,
-  none → a line pointing at the full app. **No collection is remembered** — with several the list is
-  one tap. Signed out, it goes to `/sign-in?next=/phone` like any screen (#1176), so signing in on
-  the phone lands back on the phone.
+- **`/phone`** (`src/app/phone/page.tsx`) is the manifest's `start_url` and draws nothing: it
+  redirects. `phoneStart` (`src/lib/phone.ts`, pure, unit-tested) decides where: one collection → its
+  phone start; several → the one **last used on the phone** (#2574), else the phone's list,
+  **`/phone/collections`** (`PHONE_COLLECTIONS_PATH`), which also says so when there are none. Signed
+  out, it goes to `/sign-in?next=/phone` like any screen (#1176), so signing in on the phone lands
+  back on the phone. The screen-frame test lists `/phone` as a phone redirect.
+- **The remembered collection (#2574, decided in writing the issue on 2026-11-18)** is
+  `User.phoneCollectionId` (`src/lib/phone-collection.ts`) — **on the account**, not the device, so it
+  holds across signing in again and on another phone; `ON DELETE SET NULL`, so a deleted collection
+  sends the next start to the list. **Only a phone screen sets it**: `phone/layout.tsx` mounts
+  `PhoneCollectionMemory`, which calls `rememberPhoneCollectionAction` in an effect. Never at render —
+  Next renders a layout to prefetch a link, and the list links to every collection, so a write there
+  would remember the last link prefetched. The desk never touches it. `phoneStart` trusts it only
+  while it is among the collector's own collections. *Other collections* goes to the list, not to
+  `/phone`, which would come straight back. #2002 had remembered nothing (*the list is one tap*); the
+  collector found that tap at every start too many.
 - **A collection's phone start** is `/c/[collectionSlug]/phone` (`phoneHomePath`). Its rows come from
   `PHONE_ENTRIES` (`phone/phone-entries.ts`) — each screen in the table below adds its own row,
   except the stamp screen, which search and browsing open, and the search, which is the start

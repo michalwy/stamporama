@@ -6,6 +6,12 @@
 /** What the home-screen icon opens (the manifest's `start_url`). */
 export const PHONE_START_PATH = "/phone";
 
+/**
+ * The phone's list of the collector's collections (#2574) — where *Other collections* goes. Apart
+ * from `/phone`, which goes straight to the remembered collection and so could not offer the list.
+ */
+export const PHONE_COLLECTIONS_PATH = "/phone/collections";
+
 /** A collection's phone start screen — the full app's link to the phone, and the icon's landing. */
 export function phoneHomePath(collectionSlug: string): string {
   return `/c/${collectionSlug}/phone`;
@@ -69,20 +75,28 @@ export function phonePurchasePath(collectionSlug: string, purchaseId: string): s
 }
 
 export type PhoneStart =
-  /** Exactly one collection: straight into it. */
+  /** Straight into a collection: the only one, or the one remembered. */
   | { kind: "collection"; href: string }
-  /** Several: the phone's own list to choose from. */
+  /** Several and none remembered: the phone's own list to choose from. */
   | { kind: "choose" }
   /** None yet: a collection is created at the desk, so the phone says so and links there. */
   | { kind: "none" };
 
 /**
- * Where `/phone` takes the collector. **No collection is remembered**: with several, the list is one
- * tap, and a remembered choice would be one more thing that can be stale on a phone the collector
- * picks up once a fortnight at a fair.
+ * Where `/phone` takes the collector (#2002, #2574): the only collection when there is one, else the
+ * collection last opened on the phone (`rememberedId`, the account's), else the list.
+ *
+ * The remembered collection counts only while it is still among the collector's own — a deleted one
+ * is cleared by the database, but the list is the authority on what is theirs, so anything not in it
+ * falls back to the list rather than to a screen that would not open.
  */
-export function phoneStart(collections: readonly { slug: string }[]): PhoneStart {
+export function phoneStart(
+  collections: readonly { id: string; slug: string }[],
+  rememberedId: string | null = null
+): PhoneStart {
   if (collections.length === 0) return { kind: "none" };
   if (collections.length === 1) return { kind: "collection", href: phoneHomePath(collections[0].slug) };
+  const remembered = rememberedId ? collections.find((c) => c.id === rememberedId) : undefined;
+  if (remembered) return { kind: "collection", href: phoneHomePath(remembered.slug) };
   return { kind: "choose" };
 }

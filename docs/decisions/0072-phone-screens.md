@@ -6,6 +6,9 @@ Accepted. Decided with the collector in #2000 on 2026-10-17. **Narrows the produ
 browsers only; no mobile layouts or breakpoints"** (`AGENTS.md`, *Product Context*), which until now
 stood with no ADR behind it. Built by #2002–#2011.
 
+**Amended by #2574** (2026-11-18): with several collections `/phone` opens the collection **last used
+on the phone**, remembered for the account, instead of the list at every start (§3).
+
 ## Context
 
 Stamporama was used only at a desk. The collector needs it in hand away from the desk for two things:
@@ -46,7 +49,10 @@ so fitting them would touch nearly every component for screens the phone does no
 ### 3. Getting there: an icon and a link, no redirect
 
 The home-screen icon opens `/phone`. Every phone screen links to the full app and the full app links
-to `/phone`. **There is no automatic redirect by device**: it guesses, and guesses wrong for a tablet
+to `/phone`. With several collections, `/phone` opens the one last used on the phone (#2574): it is
+remembered for the collector's account — so it holds on another phone and across signing in again —
+set only by opening a phone screen, never by work at the desk, and forgotten when that collection is
+deleted, when the phone's list of collections is shown instead. **There is no automatic redirect by device**: it guesses, and guesses wrong for a tablet
 or a narrow desktop window. A desktop page opened on a phone simply renders as it does today.
 
 ### 4. Reaching the server is the installation's job

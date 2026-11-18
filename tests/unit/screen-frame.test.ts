@@ -25,8 +25,10 @@ const ROOT = path.resolve(HERE, "../..");
 const COLLECTION_APP = path.join(ROOT, "src/app/c/[collectionSlug]");
 /** The phone screens' own directory inside a collection (ADR-0072). */
 const PHONE_DIR = "phone";
-/** The phone pages outside a collection: `/phone`, the home-screen icon's landing. */
+/** The phone pages outside a collection: `/phone`, the home-screen icon's landing, and its list. */
 const PHONE_APP = path.join(ROOT, "src/app/phone");
+/** Phone pages that render nothing: `/phone` only decides where to go (#2574). */
+const PHONE_REDIRECTS = new Set(["src/app/phone/page.tsx"]);
 
 /** Pages that hand their whole frame to a client screen of their own, which draws the `Screen`. */
 const DELEGATED: Record<string, string> = {
@@ -90,6 +92,10 @@ describe("every phone screen is drawn in PhoneScreen", () => {
   for (const page of found) {
     it(page, () => {
       const source = readFileSync(path.join(ROOT, page), "utf8");
+      if (PHONE_REDIRECTS.has(page)) {
+        assert.match(source, /\bredirect\(/, `${page} is listed as a redirect but does not redirect`);
+        return;
+      }
       assert.match(
         source,
         /<PhoneScreen[\s>]/,

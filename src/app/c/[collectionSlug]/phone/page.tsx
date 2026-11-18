@@ -8,7 +8,7 @@ import { searchCollection } from "@/lib/collection-search";
 import { loadPhoneStampThumbs } from "@/lib/phone-stamp-thumbs";
 import { PICKER_LIMIT } from "@/lib/stamps";
 import { trimTextInput } from "@/lib/text-input";
-import { phoneHomePath, PHONE_START_PATH } from "@/lib/phone";
+import { phoneHomePath, PHONE_COLLECTIONS_PATH } from "@/lib/phone";
 import { Icon } from "@/app/icons";
 import { PhoneScreen, phoneRow } from "@/app/phone-screen";
 import { PHONE_ENTRIES } from "./phone-entries";
@@ -35,8 +35,8 @@ export default async function PhoneHomePage({ params, searchParams }: PhoneHomeP
 
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
-  // The way to another collection, offered only when there is one to go to: with a single
-  // collection `/phone` comes straight back here.
+  // The way to another collection, offered only when there is one to go to. It is the phone's list,
+  // not `/phone`, which comes straight back to the collection last opened (#2574).
   const several = (await getCollectionsByOwner(session.user.id)).length > 1;
   const home = phoneHomePath(collectionSlug);
   // The desk's *have I got this?* search, its stamps only: an issue is reached by browsing (#2005)
@@ -73,7 +73,7 @@ export default async function PhoneHomePage({ params, searchParams }: PhoneHomeP
       )}
       {several && (
         <Link
-          href={PHONE_START_PATH}
+          href={PHONE_COLLECTIONS_PATH}
           style={{ ...phoneRow, marginTop: "auto", color: "var(--color-text-secondary)" }}
         >
           <Icon name="collections" size="lg" />
