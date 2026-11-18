@@ -11,6 +11,7 @@ import {
   packingFormatSummary,
   packingLocationLegend,
   packingSetOrder,
+  salePackingCopiesLabel,
   type PackingCopy,
   type PackingLine,
   type PackingSet,
@@ -744,5 +745,22 @@ describe("packingFormatSummary (#2571)", () => {
       [["Souvenir sheet", 5]]
     );
     assert.equal(summary.total, list.totalCopies);
+  });
+});
+
+// ── A sale's Copies line (#2573) ─────────────────────────────────────────────
+
+describe("salePackingCopiesLabel", () => {
+  it("writes the total first and its parts in brackets, adding up to it", () => {
+    assert.equal(salePackingCopiesLabel(61, 14, 5), "61 (56 in 14 sold sets + 5 free extras)");
+  });
+
+  it("reads as before for a sale with no free extras", () => {
+    assert.equal(salePackingCopiesLabel(61, 14, 0), "61 in 14 sold sets");
+  });
+
+  it("speaks of one set and one extra in the singular", () => {
+    assert.equal(salePackingCopiesLabel(3, 1, 1), "3 (2 in 1 sold set + 1 free extra)");
+    assert.equal(salePackingCopiesLabel(1, 1, 0), "1 in 1 sold set");
   });
 });

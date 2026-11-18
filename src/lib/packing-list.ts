@@ -628,3 +628,16 @@ function compareByCatalog(a: PackingListRow, b: PackingListRow): number {
   if (byCatalog !== 0) return byCatalog;
   return COLLATOR.compare(a.condition ?? "", b.condition ?? "");
 }
+
+/**
+ * A sale's packing-list *Copies* line (#2573): the parcel's total first, then its parts adding up to
+ * it — *61 (56 in 14 sold sets + 5 free extras)*. The total includes the free extras (#2408); written
+ * as *61 in 14 sold sets + 5 free extras* it read as 66 pieces. Without free extras the line is
+ * *61 in 14 sold sets*.
+ */
+export function salePackingCopiesLabel(totalCopies: number, soldSets: number, freeExtras: number): string {
+  const sets = `${soldSets} sold ${soldSets === 1 ? "set" : "sets"}`;
+  if (freeExtras <= 0) return `${totalCopies} in ${sets}`;
+  const extras = `${freeExtras} free ${freeExtras === 1 ? "extra" : "extras"}`;
+  return `${totalCopies} (${totalCopies - freeExtras} in ${sets} + ${extras})`;
+}

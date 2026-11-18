@@ -224,10 +224,11 @@ their **cost counts against the sale's profit**. The line's price cannot be edit
 back, take it off the line from its row's **⋮ → Take off the sale** (see
 [Taking one copy off](#taking-one-copy-off)) — and add it as a sold set if it was sold after all;
 once the last copy has gone, the line goes too. On the [packing list](#printing-a-packing-list) the
-**Free extras** line shows with its copies, each marked *(free)*, and the header counts the free
-extras' copies apart from the sold sets. Merging two sales, or moving the free extras to a sale that
-has its own, leaves one **Free extras** line. A sale recorded before free extras shared a line keeps
-its one line per copy.
+**Free extras** line shows with its copies, each marked *(free)*, and the header's **Copies** gives
+the parcel's total first, then its parts adding up to it — *61 (56 in 14 sold sets + 5 free
+extras)*. A sale with no free extras reads *61 in 14 sold sets*. Merging two sales, or moving the
+free extras to a sale that has its own, leaves one **Free extras** line. A sale recorded before free
+extras shared a line keeps its one line per copy.
 
 ### Step 3 — amounts
 
