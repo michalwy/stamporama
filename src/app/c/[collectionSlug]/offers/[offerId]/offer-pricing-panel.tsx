@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { pickPricingTab } from "@/lib/offer-pricing-tab";
 import { usePersistedCollectionValue } from "../../shared/use-persisted-collection-value";
 
@@ -10,9 +10,11 @@ import { usePersistedCollectionValue } from "../../shared/use-persisted-collecti
 //
 // A tab is drawn only where its card would render (`content` non-null). One that is drawn but has
 // nothing to show yet (`empty` — a Colnect market never read) is never picked on its own while
-// another tab has content; it stays in the tab row, since its own button is what fills it. With no
-// tab at all the price table takes the panel's whole width. The selected tab is remembered per
-// browser, not per offer. On a narrow window the columns wrap, the price table first. The panel is
+// another tab has content; it stays in the tab row, since its own button is what fills it. A tab
+// clicked on this screen always opens, empty or not, and stays open until another is clicked (#2577).
+// With no tab at all the price table takes the panel's whole width. The selected tab is remembered per
+// browser, not per offer — and the screen keys this panel by offer, so the click is forgotten on the
+// next offer, where the panel picks again. On a narrow window the columns wrap, the price table first. The panel is
 // never folded.
 
 export interface PricingTab {
@@ -20,7 +22,7 @@ export interface PricingTab {
   label: string;
   /** The tab's card, or null when it does not apply to this offer (the tab is then not drawn). */
   content: ReactNode | null;
-  /** Drawn, but with nothing to show yet — another tab with content is preferred when none is chosen. */
+  /** Drawn, but with nothing to show yet — another tab with content is preferred until this one is clicked. */
   empty?: boolean;
 }
 
@@ -47,10 +49,12 @@ export function OfferPricingPanel({
   tabs: readonly PricingTab[];
 }) {
   const [stored, setStored] = usePersistedCollectionValue("offer-pricing-tab", collectionId);
+  const [clicked, setClicked] = useState<string | null>(null);
   const present = tabs.filter((tab) => tab.content !== null);
   const selected = pickPricingTab(
     present.map((tab) => ({ ...tab, present: true, empty: tab.empty ?? false })),
-    stored
+    stored,
+    clicked
   );
 
   return (
@@ -89,7 +93,10 @@ export function OfferPricingPanel({
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => setStored(tab.key)}
+                  onClick={() => {
+                    setClicked(tab.key);
+                    setStored(tab.key);
+                  }}
                   style={{
                     padding: "0.25rem 0.625rem",
                     fontSize: "0.875rem",

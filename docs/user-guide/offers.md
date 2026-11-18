@@ -239,8 +239,10 @@ The price has a panel of its own, **Pricing**, directly under the offer's header
 the left, and on the right, in tabs, what you weigh it against — on a Colnect offer, the
 [Colnect market](#checking-the-colnect-market), and on any offer whose stamps were offered before,
 [Earlier offers](#earlier-offers-of-the-same-stamps). The tab you pick is remembered in this browser, for
-every offer. A tab that has nothing to show yet (a Colnect market never read) is opened only when no
-other tab has anything; on an offer with no tab at all, the price table runs across the whole panel.
+every offer. When the screen opens, a tab that has nothing to show yet (a Colnect market never read)
+is opened only when no other tab has anything; clicking a tab always opens it, empty or not, so an
+empty Colnect market shows its button to read the market. On an offer with no tab at all, the price
+table runs across the whole panel.
 On a narrow window the two columns stack, the price table first.
 
 An offer's price sits in a small table with the figures you weigh it against. It has three columns —
