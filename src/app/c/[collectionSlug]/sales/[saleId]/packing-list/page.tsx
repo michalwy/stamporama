@@ -8,10 +8,13 @@ import { getCollectionBySlug } from "@/lib/collections";
 import { getSaleDetail, listSaleCopies } from "@/lib/sales";
 import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
+import { getStampFormats } from "@/lib/stamp-formats";
+import { getStampIssueFormats } from "@/lib/stamp-issue-formats";
 import { buildAreaVendorMaps } from "@/lib/area-vendor";
 import { loadIssuePrefixMap } from "@/lib/issue-prefix";
 import {
   buildPackingList,
+  packingFormatSummary,
   packingLocationLegend,
   packingSetOrder,
   type PackingLegendEntry,
@@ -71,16 +74,24 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
   const sale = await getSaleDetail(session.user.id, saleId);
   if (!sale || sale.collectionId !== collection.id) notFound();
 
-  const [areas, issuePrefixes, locations, copies] = await Promise.all([
+  const [areas, issuePrefixes, locations, copies, issueFormats, formats] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     loadIssuePrefixMap(collection.id),
     getLocations(session.user.id, collection.id),
     listSaleCopies(session.user.id, saleId),
+    getStampIssueFormats(session.user.id, collection.id),
+    getStampFormats(session.user.id, collection.id),
   ]);
 
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
   const list = buildPackingList(copies, areas, locations, maps, { locationLabel: "code" });
   const legend = packingLocationLegend(copies, locations);
+  // The parcel's pieces by issue format (#2571), over every copy of the sale.
+  const formatSummary = packingFormatSummary(
+    copies,
+    issueFormats.map((f) => f.id),
+    new Map(formats.map((f) => [f.id, f.pieceKind]))
+  );
   // Each set named as the sale screen names its line (#2189): the offer and its title, the set's
   // numbers under it, the price.
   const positions = packingSetOrder(sale.lines);
@@ -186,7 +197,12 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
         </div>
       </header>
 
-      <SalePackingSheet collectionId={collection.id} byLocation={list} bySet={bySet} />
+      <SalePackingSheet
+        collectionId={collection.id}
+        byLocation={list}
+        bySet={bySet}
+        formatSummary={formatSummary}
+      />
 
       {/* The legend closes the document — it is read once, after the last row, so it stays in the
           flow rather than repeating at the foot of every page. */}

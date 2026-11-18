@@ -1,6 +1,6 @@
 "use client";
 
-import type { PackingListData, PackingListGroup } from "@/lib/packing-list";
+import type { PackingFormatSummary, PackingListData, PackingListGroup } from "@/lib/packing-list";
 import {
   PACKING_COLUMN,
   PackingSheet,
@@ -56,6 +56,9 @@ const GROUP_BY_KEY = "stamporama:packingList:groupBy:v1";
 
 // The *Issue format* switch (#2444), remembered the same way.
 const ISSUE_FORMAT_KEY = "stamporama:packingList:issueFormat:v1";
+
+// The *By issue format* box's switch (#2571), on by default and remembered the same way.
+const FORMAT_SUMMARY_KEY = "stamporama:packingList:formatSummary:v1";
 type GroupBy = "location" | "set";
 const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
   { value: "location", label: "Location" },
@@ -78,10 +81,13 @@ export function SalePackingSheet({
   collectionId,
   byLocation,
   bySet,
+  formatSummary,
 }: {
   collectionId: string;
   byLocation: PackingListData;
   bySet: PackingListData;
+  /** The sale's pieces by issue format — one count, whichever division the sheet is in. */
+  formatSummary: PackingFormatSummary;
 }) {
   const [stored, setGroupBy] = usePersistentString(GROUP_BY_KEY, "location");
   const groupBy: GroupBy = stored === "set" ? "set" : "location";
@@ -108,6 +114,7 @@ export function SalePackingSheet({
       controls={controls}
       prefKey={PREF_KEY}
       issueFormatKey={ISSUE_FORMAT_KEY}
+      formatSummary={{ summary: formatSummary, key: FORMAT_SUMMARY_KEY }}
       empty="Nothing to pack — this sale has no copies on it yet."
       groupIcon={set ? "offers" : "location"}
       tickTitle={(row) => (row.packed ? "Packed" : "Not packed")}

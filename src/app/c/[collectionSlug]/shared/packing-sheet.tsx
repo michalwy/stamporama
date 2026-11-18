@@ -1,6 +1,11 @@
 "use client";
 
-import type { PackingListData, PackingListGroup, PackingListRow } from "@/lib/packing-list";
+import type {
+  PackingFormatSummary,
+  PackingListData,
+  PackingListGroup,
+  PackingListRow,
+} from "@/lib/packing-list";
 import {
   usePersistentString,
   usePersistentToggle,
@@ -353,6 +358,10 @@ export interface PackingSheetProps {
   /** Where this printout's *Issue format* switch (#2444) is remembered — off until the collector
    *  turns it on, and kept per printout, globally, as the columns are. */
   issueFormatKey: string;
+  /** The sheet's pieces counted by issue format (#2571), drawn as a box above the first division,
+   *  and where its *By issue format* switch is remembered — on until the collector turns it off.
+   *  Absent where the printout is not used for packing (the parcel enclosure). */
+  formatSummary?: { summary: PackingFormatSummary; key: string };
   /** Said in place of the table when there is nothing on the transaction to print. */
   empty: string;
   /** The heading's icon — the shelf for a walk-order sheet, the transaction's own division for a
@@ -394,6 +403,7 @@ export function PackingSheet({
   controls,
   prefKey,
   issueFormatKey,
+  formatSummary,
   empty,
   groupIcon = "location",
   ticks = "source",
@@ -408,6 +418,9 @@ export function PackingSheet({
 }: PackingSheetProps) {
   const [raw, setRaw] = usePersistentString(prefKey, defaultPackingColumns(columns));
   const [issueFormat, setIssueFormat] = usePersistentToggle(issueFormatKey, false);
+  // The key is only a fallback's: a hook cannot be called conditionally, and a sheet without the box
+  // never reads the value.
+  const [byFormat, setByFormat] = usePersistentToggle(formatSummary?.key ?? `${issueFormatKey}:byFormat`, true);
   const selected = new Set(raw.split(",").filter(Boolean));
   const pinned = new Set(pinnedColumns);
   const enabled = columns.filter((c) => selected.has(c.key) || pinned.has(c.key));
@@ -441,6 +454,11 @@ export function PackingSheet({
         <SheetChip on={issueFormat} onClick={() => setIssueFormat(!issueFormat)}>
           {issueFormat && <Icon name="check" size="xs" />} Issue format
         </SheetChip>
+        {formatSummary && (
+          <SheetChip on={byFormat} onClick={() => setByFormat(!byFormat)}>
+            {byFormat && <Icon name="check" size="xs" />} By issue format
+          </SheetChip>
+        )}
         <SheetChipsDivider />
         <SheetChipsLabel>Columns</SheetChipsLabel>
         {columns.map((column) => {
@@ -453,6 +471,8 @@ export function PackingSheet({
           );
         })}
       </div>
+
+      {formatSummary && byFormat && <FormatSummaryBox summary={formatSummary.summary} />}
 
       {list.groups.map((group) => (
         <PackingSection
@@ -473,6 +493,60 @@ export function PackingSheet({
         />
       ))}
     </>
+  );
+}
+
+/**
+ * The sheet's pieces by issue format (#2571), under the header on the first page. Every line has a
+ * box, the total's included, and they **always print empty**: the box is for the last count by hand
+ * once the parcel is packed, kind by kind, not a reflection of the copies ticked in the app. Plain
+ * text only, so it reads the same in black and white.
+ */
+function FormatSummaryBox({ summary }: { summary: PackingFormatSummary }) {
+  const cell: React.CSSProperties = { ...TD, padding: "0.2rem 0.5rem" };
+  const count: React.CSSProperties = {
+    ...cell,
+    textAlign: "right",
+    fontVariantNumeric: "tabular-nums",
+    paddingLeft: "1.5rem",
+  };
+  return (
+    <section
+      aria-label="By issue format"
+      className="print-unbroken"
+      style={{
+        display: "inline-block",
+        margin: "1rem 0 0",
+        padding: "0.5rem 0.75rem",
+        border: "1px solid var(--color-border-strong)",
+        borderRadius: "0.375rem",
+      }}
+    >
+      <h2 style={{ ...TH, borderBottom: "none", padding: "0 0.5rem 0.25rem", margin: 0 }}>By issue format</h2>
+      <table style={{ borderCollapse: "collapse" }}>
+        <tbody>
+          {summary.lines.map((line) => (
+            <tr key={line.key}>
+              <td style={{ ...cell, textAlign: "center" }}>
+                <span style={BOX} />
+              </td>
+              <td style={cell}>
+                {line.label}
+                {line.abbreviation && ` (${line.abbreviation})`}
+              </td>
+              <td style={count}>{line.count}</td>
+            </tr>
+          ))}
+          <tr>
+            <td style={{ ...cell, textAlign: "center", borderBottom: "none" }}>
+              <span style={BOX} />
+            </td>
+            <td style={{ ...cell, borderBottom: "none", fontWeight: 600 }}>Total pieces</td>
+            <td style={{ ...count, borderBottom: "none", fontWeight: 600 }}>{summary.total}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
   );
 }
 

@@ -5,6 +5,7 @@ import { buildAreaPath } from "./area-path";
 import { buildLocationCode } from "./location-code";
 import { buildLocationPath } from "./location-path";
 import { compareLocationRef } from "./location-ref";
+import type { PieceKind } from "./piece-valuation";
 
 // The printable packing list (#330): copies flattened into paper rows. Pure (no React / Prisma) so
 // the print views are plain server renders and the shaping is unit-testable.
@@ -151,8 +152,9 @@ export interface PackingCopy {
   issueId: string | null;
   catalogNumbers: readonly { catalogVendorId: string; number: string }[];
   issueName: string | null;
-  /** The stamp's issue format (#2439), or null — an ordinary stamp. Absent reads as null. */
-  issueFormat?: { name: string; abbreviation: string } | null;
+  /** The stamp's issue format (#2439), or null — an ordinary stamp. Absent reads as null. The id
+   *  places it in the dictionary's order on the sheet's summary by issue format (#2571). */
+  issueFormat?: { id?: string; name: string; abbreviation: string } | null;
   /** Null for a piece, which has no condition (#2383); its row prints none. */
   conditionId: string | null;
   conditionName: string | null;
@@ -484,6 +486,97 @@ export function packingLocationLegend(
     if (code && path) entries.set(locationId, { code, path });
   }
   return Array.from(entries.values()).sort((a, b) => COLLATOR.compare(a.path, b.path));
+}
+
+// ── The summary by issue format (#2571) ──────────────────────────────────────
+//
+// What kinds of pieces go into the parcel, so the packing supplies can be judged before packing
+// starts: loose stamps go in a stock card, while a souvenir sheet, a booklet pane or a cover each want
+// a sleeve or a bigger envelope of their own. Counted in **pieces**, not rows — a merged row of five
+// is five — and over **every** copy on the sheet, packed or not and free extras included, so it
+// describes the whole parcel and its total is the sheet's own copy count.
+//
+// A **piece** (#744, #2383) is counted as itself and never by the stamps on it: by its format's kind
+// — *Covers* for on cover, *Fragments* for on piece — and a carrier of several stamps whose format has
+// no kind as *Pieces*. Everything else is counted by its stamp's issue format, and a stamp with none
+// is an ordinary *Stamp*.
+
+/** Label of the line counting copies of stamps with no issue format. */
+export const FORMAT_SUMMARY_STAMPS = "Stamps";
+/** Labels of the lines counting pieces, by the kind of the copy's format. */
+export const FORMAT_SUMMARY_COVERS = "Covers";
+export const FORMAT_SUMMARY_FRAGMENTS = "Fragments";
+/** Label of the line counting carriers of several stamps whose format has no kind. */
+export const FORMAT_SUMMARY_PIECES = "Pieces";
+
+/** What the summary reads off a copy — a sale's sold copies and a trade's give lines alike. */
+export interface PackingFormatSubject {
+  issueFormat?: { id?: string; name: string; abbreviation: string } | null;
+  /** The copy's own physical format (a multiple, a cover…), whose kind makes the copy a piece. */
+  formatId?: string | null;
+  /** More than one stamp on one indivisible piece (#745). */
+  multiStamp?: boolean;
+}
+
+/** One line of the summary: a kind of piece and how many of it the sheet holds. */
+export interface PackingFormatLine {
+  key: string;
+  /** The issue format's name as the dictionary writes it, or one of the fixed labels above. */
+  label: string;
+  /** Printed beside the name (`Bl`), or null where there is none or it would repeat the name. */
+  abbreviation: string | null;
+  count: number;
+}
+
+export interface PackingFormatSummary {
+  lines: PackingFormatLine[];
+  /** Every piece counted — the sheet's copy count. */
+  total: number;
+}
+
+/**
+ * Count a sheet's copies by issue format (#2571). Lines in the dictionary's order
+ * (`issueFormatOrder`, ids by `sortOrder`), *Stamps* first and the pieces last; only what is present
+ * prints. `formatKinds` maps a copy format's id to its kind (`StampFormat.pieceKind`).
+ */
+export function packingFormatSummary(
+  copies: readonly PackingFormatSubject[],
+  issueFormatOrder: readonly string[],
+  formatKinds: ReadonlyMap<string, PieceKind | null>
+): PackingFormatSummary {
+  const rank = new Map(issueFormatOrder.map((id, i) => [id, i]));
+  const lines = new Map<string, PackingFormatLine & { order: number }>();
+  const add = (key: string, label: string, abbreviation: string | null, order: number) => {
+    const line = lines.get(key);
+    if (line) line.count += 1;
+    else lines.set(key, { key, label, abbreviation, count: 1, order });
+  };
+  // Stamps first, the issue formats after in the dictionary's order (one it no longer lists after
+  // those), then the pieces.
+  const pieceOrder = issueFormatOrder.length + 2;
+  for (const copy of copies) {
+    const kind = copy.formatId ? (formatKinds.get(copy.formatId) ?? null) : null;
+    if (kind === "on_cover") add("piece:on_cover", FORMAT_SUMMARY_COVERS, null, pieceOrder);
+    else if (kind === "on_piece") add("piece:on_piece", FORMAT_SUMMARY_FRAGMENTS, null, pieceOrder + 1);
+    else if (copy.multiStamp) add("piece:several", FORMAT_SUMMARY_PIECES, null, pieceOrder + 2);
+    else if (copy.issueFormat) {
+      const { id, name, abbreviation } = copy.issueFormat;
+      const order = id !== undefined && rank.has(id) ? rank.get(id)! + 1 : issueFormatOrder.length + 1;
+      add(
+        `format:${id ?? name}`,
+        name,
+        abbreviation && abbreviation !== name ? abbreviation : null,
+        order
+      );
+    } else add("stamps", FORMAT_SUMMARY_STAMPS, null, 0);
+  }
+  const sorted = Array.from(lines.values()).sort(
+    (a, b) => a.order - b.order || COLLATOR.compare(a.label, b.label)
+  );
+  return {
+    lines: sorted.map(({ key, label, abbreviation, count }) => ({ key, label, abbreviation, count })),
+    total: copies.length,
+  };
 }
 
 /** A copy as `catalogLabel` reads it: where it sits, and what it is numbered and called. The one

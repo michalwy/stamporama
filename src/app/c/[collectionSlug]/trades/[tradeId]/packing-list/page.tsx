@@ -9,7 +9,9 @@ import { getCollectionAreas } from "@/lib/areas";
 import { getLocations } from "@/lib/locations";
 import { buildAreaVendorMaps } from "@/lib/area-vendor";
 import { loadIssuePrefixMap } from "@/lib/issue-prefix";
-import { buildPackingList } from "@/lib/packing-list";
+import { buildPackingList, packingFormatSummary } from "@/lib/packing-list";
+import { getStampFormats } from "@/lib/stamp-formats";
+import { getStampIssueFormats } from "@/lib/stamp-issue-formats";
 import { getTrade } from "@/lib/trades";
 import { readTradePackingList } from "@/lib/trade-packing";
 import { TRADE_STATUS_LABEL } from "@/lib/trade-rules";
@@ -58,7 +60,7 @@ export default async function TradePackingListPage({ params }: PageProps) {
   const trade = await getTrade(session.user.id, tradeId);
   if (!trade || trade.collectionId !== collection.id) notFound();
 
-  const [areas, issuePrefixes, locations, read] = await Promise.all([
+  const [areas, issuePrefixes, locations, read, issueFormats, formats] = await Promise.all([
     getCollectionAreas(session.user.id, collection.id),
     loadIssuePrefixMap(collection.id),
     getLocations(session.user.id, collection.id),
@@ -66,6 +68,8 @@ export default async function TradePackingListPage({ params }: PageProps) {
     // something you read off a shelf. The figures belong on the enclosure, which is the paper the
     // partner reads.
     readTradePackingList(session.user.id, tradeId, { withValues: false, voice: "own" }),
+    getStampIssueFormats(session.user.id, collection.id),
+    getStampFormats(session.user.id, collection.id),
   ]);
   if (!read) notFound();
 
@@ -148,8 +152,12 @@ export default async function TradePackingListPage({ params }: PageProps) {
 
       <TradePackingSheet
         collectionId={collection.id}
-       
         list={list}
+        formatSummary={packingFormatSummary(
+          read.copies,
+          issueFormats.map((f) => f.id),
+          new Map(formats.map((f) => [f.id, f.pieceKind]))
+        )}
         recordable={read.recordable}
       />
 

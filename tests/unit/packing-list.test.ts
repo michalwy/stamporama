@@ -8,6 +8,7 @@ import {
   buildPackingList,
   NO_GROUP_LABEL,
   NO_LOCATION_LABEL,
+  packingFormatSummary,
   packingLocationLegend,
   packingSetOrder,
   type PackingCopy,
@@ -649,5 +650,99 @@ describe("buildPackingList for the order summary", () => {
       list.groups[0].rows.map((r) => r.locationRef),
       ["A20", null, "A1"]
     );
+  });
+});
+
+describe("packingFormatSummary (#2571)", () => {
+  const BL = { id: "bl", name: "Souvenir sheet", abbreviation: "Bl" };
+  const HBL = { id: "hbl", name: "Booklet pane", abbreviation: "HBl" };
+  const FDC = { id: "fdc", name: "FDC", abbreviation: "FDC" };
+  // The dictionary's own order: the booklet pane is listed before the souvenir sheet.
+  const ORDER = ["hbl", "bl", "fdc"];
+  const KINDS = new Map([
+    ["cover", "on_cover" as const],
+    ["fragment", "on_piece" as const],
+    ["block4", null],
+  ]);
+  const times = <T,>(n: number, value: T): T[] => Array.from({ length: n }, () => value);
+
+  it("counts 48 stamps, 6 souvenir sheets and 4 covers as 58 pieces", () => {
+    const summary = packingFormatSummary(
+      [
+        ...times(4, { formatId: "cover", multiStamp: true }),
+        ...times(6, { issueFormat: BL }),
+        ...times(48, { issueFormat: null }),
+      ],
+      ORDER,
+      KINDS
+    );
+    assert.deepEqual(
+      summary.lines.map((l) => [l.label, l.abbreviation, l.count]),
+      [
+        ["Stamps", null, 48],
+        ["Souvenir sheet", "Bl", 6],
+        ["Covers", null, 4],
+      ]
+    );
+    assert.equal(summary.total, 58);
+  });
+
+  it("lists the formats in the dictionary's order, stamps first and the pieces last", () => {
+    const summary = packingFormatSummary(
+      [
+        { formatId: "fragment" },
+        { formatId: "block4", multiStamp: true },
+        { formatId: "cover" },
+        { issueFormat: BL },
+        { issueFormat: HBL },
+        {},
+      ],
+      ORDER,
+      KINDS
+    );
+    assert.deepEqual(
+      summary.lines.map((l) => l.label),
+      ["Stamps", "Booklet pane", "Souvenir sheet", "Covers", "Fragments", "Pieces"]
+    );
+  });
+
+  it("counts a piece by its kind, never by the issue format of a stamp on it", () => {
+    const summary = packingFormatSummary(
+      [{ formatId: "cover", issueFormat: BL }, { formatId: "fragment", issueFormat: BL }],
+      ORDER,
+      KINDS
+    );
+    assert.deepEqual(
+      summary.lines.map((l) => [l.label, l.count]),
+      [
+        ["Covers", 1],
+        ["Fragments", 1],
+      ]
+    );
+  });
+
+  it("counts a copy in a format of no kind by its stamp", () => {
+    const summary = packingFormatSummary([{ formatId: "block4", issueFormat: BL }], ORDER, KINDS);
+    assert.deepEqual(
+      summary.lines.map((l) => l.label),
+      ["Souvenir sheet"]
+    );
+  });
+
+  it("leaves out an abbreviation that only repeats the name", () => {
+    const summary = packingFormatSummary([{ issueFormat: FDC }], ORDER, KINDS);
+    assert.equal(summary.lines[0].abbreviation, null);
+  });
+
+  it("counts every copy behind a merged row", () => {
+    const copies = times(5, copy({ issueFormat: { ...BL, color: null } }));
+    const list = buildPackingList(copies, AREAS, LOCATIONS, MAPS);
+    assert.equal(list.groups[0].rows.length, 1);
+    const summary = packingFormatSummary(copies, ORDER, KINDS);
+    assert.deepEqual(
+      summary.lines.map((l) => [l.label, l.count]),
+      [["Souvenir sheet", 5]]
+    );
+    assert.equal(summary.total, list.totalCopies);
   });
 });

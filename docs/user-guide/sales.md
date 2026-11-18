@@ -858,6 +858,29 @@ The switch starts **off**, so the sheet reads as it always has until you turn it
 remembered the same way as the columns: once, for every sale. Lines that differ only in issue format
 are always different stamps, so they never merge into one line with a quantity.
 
+### Pieces by issue format
+
+Loose stamps fit in a stock card, while souvenir sheets, booklet panes and covers each need a sleeve
+or a bigger envelope of their own. So the packing list opens with a **By issue format** box, under its
+header on the first page, that counts the parcel's pieces by kind — for example *Stamps 48*,
+*Souvenir sheet (Bl) 6*, *Covers 4* and, closing it, *Total pieces 58*:
+
+- A stamp with no [issue format](collections.md#issue-formats) counts as one of the **Stamps**; every
+  other one under its issue format, named as your dictionary names it, with its abbreviation beside it.
+- A cover or a fragment counts as one piece of its own — under **Covers** or **Fragments**, by the kind
+  of its format — and never by the stamps on it. A piece carrying several stamps in a format of
+  neither kind counts under **Pieces**.
+- It counts **pieces, not lines**: a line of five copies counts as five. Every copy of the sale
+  counts, packed or not and free extras included, so **Total pieces** is the sale's copy count.
+- Only the kinds present in the sale are listed — *Stamps* first, then the issue formats in your
+  dictionary's order, then the covers and fragments. It prints plain, with no chip colours.
+
+Every line has a tick box, the total's included, and they always print **empty**: once the parcel is
+packed, count each kind once more and tick its line, then tick the total. The **By issue format**
+switch under **Show** turns the box off and on. It starts **on**, and is remembered the same way as the
+columns: once, for every sale. The box does not depend on the **Issue format** switch or on any
+column. The parcel enclosure and the order summary for the buyer do not have it.
+
 Copies you already ticked as **packed** in the app print with a **✓** in the box; the rest print
 empty, for ticking by hand. The sheet is a snapshot — ticking on paper doesn't change anything in
 Stamporama, so update the packed checkboxes on the detail screen when you're back at the computer.

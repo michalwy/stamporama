@@ -714,6 +714,11 @@ chips row: turned on, a souvenir sheet's line reads `Mi·PL 200 Bl` — see
 [showing the issue format](sales.md#showing-the-issue-format). It starts off, and each sheet remembers
 it separately, as it does its columns.
 
+The packing checklist (not the enclosure) also opens with the sale packing list's **By issue format**
+box — the pieces to pack, counted by kind, each line with an empty tick box — see
+[pieces by issue format](sales.md#pieces-by-issue-format). Its switch under **Show** starts on and is
+remembered apart from the sale packing list's.
+
 ### 📦 Enclosure — the sheet that goes in the envelope
 
 The same list, written for the person opening the parcel. **Every internal identifier comes off**: no
