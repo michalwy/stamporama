@@ -17,6 +17,7 @@ import {
   packingFormatSummary,
   packingLocationLegend,
   packingSetOrder,
+  salePackingCopiesLabel,
   type PackingLegendEntry,
   type PackingSet,
 } from "@/lib/packing-list";
@@ -118,9 +119,10 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
   );
   const status = saleStatusMeta(sale.status);
   // Free extras (#2408) are a line, but not a set the buyer bought: the header counts their copies
-  // apart (#2420 puts them all on one line).
+  // apart (#2420 puts them all on one line), as a part of the total (#2573). Counted off the sheet's
+  // own divisions, so the parts add up to the total it prints.
   const freeLines = sale.lines.filter((l) => l.freeExtra);
-  const freeExtras = freeLines.reduce((n, l) => n + l.copyCount, 0);
+  const freeExtras = bySet.groups.reduce((n, g) => n + (g.set?.freeExtra ? g.copyCount : 0), 0);
   const soldSets = sale.lines.length - freeLines.length;
 
   return (
@@ -189,9 +191,7 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
           <Meta label="Status" value={status.label} />
           <Meta
             label="Copies"
-            value={`${list.totalCopies} in ${soldSets} sold ${soldSets === 1 ? "set" : "sets"}${
-              freeExtras > 0 ? ` + ${freeExtras} free ${freeExtras === 1 ? "extra" : "extras"}` : ""
-            }`}
+            value={salePackingCopiesLabel(list.totalCopies, soldSets, freeExtras)}
           />
           <Meta label="Packed" value={`${list.packedCopies} of ${list.totalCopies}`} />
         </div>
