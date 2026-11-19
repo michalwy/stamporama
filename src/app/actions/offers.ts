@@ -1148,6 +1148,24 @@ export interface BulkMarkReadyState extends BulkOfferActionState {
   awaitingPhotos: string[];
 }
 
+/** *Remove sets sold elsewhere* over a selection (#2581): each offer through
+ * {@link removeOfferSetsSoldElsewhere} with the set ids its row listed, exactly as its own action — so
+ * only those still sold elsewhere go, and an offer that would be left with nothing is refused and
+ * named rather than emptied. */
+export async function removeOffersSetsSoldElsewhereAction(
+  entries: { offerId: string; setIds: string[] }[]
+): Promise<BulkOfferActionState> {
+  const session = await getSession();
+  const setIdsOf = new Map(entries.map((e) => [e.offerId, e.setIds]));
+  return runOverOffers(
+    entries.map((e) => e.offerId),
+    "Failed to remove the sets.",
+    async (offerId) => {
+      await removeOfferSetsSoldElsewhere(session.user.id, offerId, setIdsOf.get(offerId) ?? []);
+    }
+  );
+}
+
 /** Mark a selection of Preparing offers ready in one motion (#1893). Each goes through
  * {@link markOfferReady}, as the button on one offer does: missing or out-of-date photos are queued
  * and the offer turns Ready once they are done, anything else is refused per offer and named. The

@@ -139,6 +139,7 @@ import {
   usesPlatformConditions,
 } from "./platform-modules";
 import { assistantActsOn, offerAssistantFacts, type OfferAssistantFacts } from "./offer-assistant-runs";
+import type { OfferSoldElsewhereFacts } from "./offer-fix-everything";
 import {
   backfillAllegroCategory,
   getAllegroOfferListingConfig,
@@ -2682,6 +2683,10 @@ export interface OfferListItem {
    *  and which of the two its *Needs action* calls for (#1804). Null for any other offer, and on a
    *  platform whose listings the Assistant can neither update nor close. */
   assistant: OfferAssistantFacts | null;
+  /** The sets sold elsewhere (#1805) of an offer that flags them (`flagsSoldElsewhere`, #1876), and
+   *  how many sets are left to sell without them — what the selection bar's *Remove sets sold
+   *  elsewhere* and *Fix everything* read (#2581). Null where no set has sold elsewhere. */
+  soldElsewhere: OfferSoldElsewhereFacts | null;
   createdAt: Date;
 }
 
@@ -2847,6 +2852,7 @@ function toListItem(
     readyAfterPhotos: row.readyAfterPhotosAt !== null,
     readyAfterPhotosRefusal: row.readyAfterPhotosRefusal,
     assistant: null, // filled by attachAssistantFacts (needs the page's sales and bids)
+    soldElsewhere: null, // likewise
     createdAt: row.createdAt,
   };
 }
@@ -2859,17 +2865,22 @@ function toListItem(
  * elsewhere when a copy left through another set's (`isSetSoldElsewhere`), and needs action when it
  * is that or holds a copy another active offer is in bidding on — asked of this page's rows in two
  * queries, so the button a row offers is the one the offer's screen highlights.
+ *
+ * The same per-set answers fill `soldElsewhere` (#2581) on every row whose state flags a set sold
+ * elsewhere, live or still being prepared — what the selection bar's removal and *Fix everything* read.
  */
 async function attachAssistantFacts(rows: OfferRow[], items: OfferListItem[]): Promise<void> {
-  // Only a row the Assistant can act on at all is worth the two reads below.
-  const asked = rows.filter((r) =>
+  // Only a row the Assistant can act on, or one whose sets can have sold elsewhere (#2581), is worth
+  // the two reads below.
+  const stateOf = (r: OfferRow) => (isOfferState(r.state) ? r.state : "active") as OfferState;
+  const actsOn = (r: OfferRow) =>
     assistantActsOn({
-      state: (isOfferState(r.state) ? r.state : "active") as OfferState,
+      state: stateOf(r),
       platformModule: r.platform.platformModule,
       url: r.url,
       colnectSaleId: r.colnectSaleId,
-    })
-  );
+    });
+  const asked = rows.filter((r) => actsOn(r) || flagsSoldElsewhere(stateOf(r)));
   if (asked.length === 0) return;
 
   const itemIds = asked.flatMap((r) => r.sets.flatMap((s) => s.items.map((li) => li.itemId)));
@@ -2901,22 +2912,31 @@ async function attachAssistantFacts(rows: OfferRow[], items: OfferListItem[]): P
   for (const row of asked) {
     const item = byId.get(row.id);
     if (!item) continue;
-    item.assistant = offerAssistantFacts({
-      state: item.state,
-      platformModule: row.platform.platformModule,
-      url: row.url,
-      colnectSaleId: row.colnectSaleId,
-      listingOutOfDate: item.listingOutOfDate !== null,
-      sets: row.sets.map((s) => {
-        const ids = s.items.map((li) => li.itemId);
-        const sold = s.saleLines.length > 0;
-        const soldElsewhere = isSetSoldElsewhere({ id: s.id, sold, itemIds: ids }, soldVia);
-        const bidElsewhere = ids.some((id) =>
-          [...(biddingOn.get(id) ?? [])].some((offerId) => offerId !== row.id)
-        );
-        return { id: s.id, sold, soldElsewhere, needsAction: soldElsewhere || (!sold && bidElsewhere) };
-      }),
+    const sets = row.sets.map((s) => {
+      const ids = s.items.map((li) => li.itemId);
+      const sold = s.saleLines.length > 0;
+      const soldElsewhere = isSetSoldElsewhere({ id: s.id, sold, itemIds: ids }, soldVia);
+      const bidElsewhere = ids.some((id) =>
+        [...(biddingOn.get(id) ?? [])].some((offerId) => offerId !== row.id)
+      );
+      return { id: s.id, sold, soldElsewhere, needsAction: soldElsewhere || (!sold && bidElsewhere) };
     });
+    if (actsOn(row)) {
+      item.assistant = offerAssistantFacts({
+        state: item.state,
+        platformModule: row.platform.platformModule,
+        url: row.url,
+        colnectSaleId: row.colnectSaleId,
+        listingOutOfDate: item.listingOutOfDate !== null,
+        sets,
+      });
+    }
+    // The removal's own question (`soldElsewhereRemoval`), asked only where the offer's state flags
+    // a set sold elsewhere at all — `readSoldElsewhereSets`'s rule.
+    if (flagsSoldElsewhere(item.state)) {
+      const { remove, leftToSell } = soldElsewhereRemoval(sets);
+      item.soldElsewhere = remove.length > 0 ? { setIds: remove.map((s) => s.id), leftToSell } : null;
+    }
   }
 }
 

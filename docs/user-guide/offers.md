@@ -3095,6 +3095,40 @@ be left to sell, the dialog offers **Withdraw…** instead. The flag goes as soo
 removed, or the offer is withdrawn or deleted. A **Pending** offer is not "before it is posted": the
 administrator may approve it at any moment, so it is flagged like an active one.
 
+### Fixing many ticked offers at once
+
+On the Offers list, filtered to **Needs action**, tick the offers and use the selection bar:
+
+- **Remove sets sold elsewhere from N** does what each offer's own **Remove N sets sold elsewhere**
+  does, on every ticked offer that holds such a set and keeps something to sell afterwards; the button
+  counts those offers. A Preparing or Ready offer then loses its Needs action flag and can be marked
+  ready; a live one is flagged **Listing out of date**, as after the single action. A Colnect listing
+  with **Update via Assistant** is left to that update, which removes the sets itself.
+- **Fix everything (N)** gives every ticked offer the action its own situation calls for:
+
+  | The ticked offer | What it gets |
+  | --- | --- |
+  | Colnect listing, nothing left to sell | **Close via Assistant** |
+  | Colnect listing, something still for sale | **Update via Assistant** (removing the sets sold elsewhere first) |
+  | Preparing or Ready, sold elsewhere, keeps something to sell | **Remove N sets sold elsewhere** |
+  | Preparing or Ready, sold elsewhere, nothing left to sell | **Withdraw** — it was never listed |
+  | Live on another platform, sold elsewhere, keeps something to sell | **Remove N sets sold elsewhere** — then update the listing there by hand |
+
+  N counts the ticked offers it can act on. It never deletes, and it never withdraws a listing that is
+  up: one with nothing left on a platform without the Assistant has to come down there by hand.
+
+Both ask first. The confirmation names each offer and what it gets — for Fix everything with the plan
+on top (*3 closed on Colnect · 2 updated on Colnect · 4 sets removed from 2 offers · 1 withdrawn*) —
+and lists the ticked offers it **leaves alone**, each with the reason: nothing would be left to sell,
+a sale on Allegro not recorded yet, a listing to close or update by hand on its platform, and so on.
+Those stay ticked and carry the reason on their row, so **Withdraw** and **Delete** still reach them.
+
+Removals and withdrawals happen at once. Closes and updates join the Assistant's queue and run one
+listing at a time, exactly as **Close N / Update N via Assistant** do — see
+[When sets have sold elsewhere](#when-sets-have-sold-elsewhere). A failure stops nothing else: the
+offer stays ticked with the reason on its row. Like every action on the selection bar, both reach only
+the ticked offers **in view**.
+
 The offer the sale actually went through is handled for you — it becomes **Sold** once *every* set
 has sold through it (a partial sale keeps it **Active** for its remaining sets). Nothing is done to
 other platforms automatically — you stay in control of each marketplace. The flag is derived live
