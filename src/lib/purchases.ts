@@ -9,7 +9,12 @@ import { allocateEntityNumber } from "./items";
 import { realizedProceedsForItems } from "./sales";
 import { loadCostEstimates } from "./cost-estimates";
 import { summarizePurchaseReturn, type PurchaseReturn, type ReturnBasis } from "./purchase-return";
-import { collectScanStorageRefs, deleteScanStorageRefs } from "./scan-sheets";
+import {
+  collectScanStorageRefs,
+  deleteScanStorageRefs,
+  OPEN_TILE_STATES,
+  UNCUT_SHEET_WHERE,
+} from "./scan-sheets";
 import { addPurchasePhotos, deletePhotoStorageRefs, purchasePhotoStorageRefs } from "./photos";
 import { roundAmount } from "./decimal-input";
 import {
@@ -176,6 +181,13 @@ export interface PurchaseListItem {
   toCompleteSince: string | null;
   /** The document's note (#2378), else null — the row's note icon, its text the tooltip. */
   note: string | null;
+  /** Scan tiles still to be identified (#2582): waiting or parked — a parked tile is set aside, not
+   *  decided. Identified and discarded tiles are done. Tiles, not stamps: a block or a cover on one
+   *  tile is one. The row's *N to identify*, whatever the filter. */
+  tilesToIdentify: number;
+  /** Scans nothing has been cut from yet (#2582) — the cards' *Review the cut*, the dashboard's
+   *  *Scans to cut*. The row's *N scans to cut*. */
+  scansToCut: number;
 }
 
 export interface PurchaseListFilters {
@@ -199,6 +211,10 @@ export interface PurchaseListFilters {
   /** Started on the phone and not yet *Done at the desk* (#2006) when true; every other document
    *  when false. The dashboard's filter; no toolbar offers it. */
   toComplete?: boolean;
+  /** Documents holding work waiting for identification (#2582): a tile still to identify (parked
+   *  ones included) or a scan not yet cut. **Whatever the document's status** — a completed one with
+   *  a tile left is listed too, so nothing is forgotten. The list's *To identify*. */
+  toIdentify?: boolean;
   contactId?: string;
   /** Platforms (#1392), any of them — {@link INTAKE_PARTY_NONE} for documents recorded without one,
    *  which includes every opening balance. Empty or absent is no filter. */
@@ -341,6 +357,12 @@ export async function listPurchasesPaginated(
       lots: { select: { price: true, _count: { select: { items: true } } } },
       expenses: { select: { price: true } },
       supplyLines: { select: { price: true } },
+      _count: {
+        select: {
+          scanTiles: { where: OPEN_TILE_WHERE },
+          scanSheets: { where: UNCUT_SHEET_WHERE },
+        },
+      },
     },
   });
 
@@ -380,6 +402,8 @@ export async function listPurchasesPaginated(
       statusChangedAt: row.statusChangedAt.toISOString(),
       toCompleteSince: row.toCompleteSince?.toISOString() ?? null,
       note: row.note,
+      tilesToIdentify: row._count.scanTiles,
+      scansToCut: row._count.scanSheets,
     };
   });
 
@@ -414,6 +438,7 @@ function buildPurchaseListWhere(
       filters.toComplete === undefined
         ? {}
         : { toCompleteSince: filters.toComplete ? { not: null } : null },
+      filters.toIdentify ? TO_IDENTIFY_WHERE : {},
       partyWhere("platformId", filters.platformIds),
       partyWhere("contactId", filters.supplierIds),
     ],
@@ -422,6 +447,17 @@ function buildPurchaseListWhere(
     ...(filters.purchaseNo !== undefined ? { purchaseNo: filters.purchaseNo } : {}),
   };
 }
+
+/** A tile still to be identified (#2582) — the states identification can still work from. */
+const OPEN_TILE_WHERE = { state: { in: [...OPEN_TILE_STATES] } } satisfies Prisma.ScanTileWhereInput;
+
+/**
+ * *To identify* (#2582): a tile still to identify, or a scan not yet cut into tiles — the same two
+ * readings the row's figures count, so a document is listed exactly when it shows one of them.
+ */
+const TO_IDENTIFY_WHERE = {
+  OR: [{ scanTiles: { some: OPEN_TILE_WHERE } }, { scanSheets: { some: UNCUT_SHEET_WHERE } }],
+} satisfies Prisma.PurchaseWhereInput;
 
 /**
  * One platform or supplier filter (#1392): the named ones, or no party at all where

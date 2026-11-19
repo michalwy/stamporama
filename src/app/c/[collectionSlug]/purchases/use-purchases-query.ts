@@ -26,12 +26,16 @@ export interface PurchaseFilters {
   platformIds?: string[];
   /** Supplier ids, on the same terms. */
   supplierIds?: string[];
+  /** Only documents with scans still to identify or to cut (#2582). */
+  toIdentify?: boolean;
   sortBy?: PurchaseSortBy;
   sortDir?: "asc" | "desc";
 }
 
 export const purchaseKeys = {
   all: (collectionId: string) => ["purchases", collectionId] as const,
+  /** Every page of the Intake documents list, whatever its filters. */
+  lists: (collectionId: string) => ["purchases", collectionId, "list"] as const,
   list: (collectionId: string, filters: PurchaseFilters) =>
     ["purchases", collectionId, "list", filters] as const,
 };
@@ -49,6 +53,7 @@ export function usePurchasesInfinite(
       if (filters.statuses?.length) params.set("status", filters.statuses.join(","));
       if (filters.platformIds?.length) params.set("platform", filters.platformIds.join(","));
       if (filters.supplierIds?.length) params.set("supplier", filters.supplierIds.join(","));
+      if (filters.toIdentify) params.set("toIdentify", "1");
       if (filters.sortBy) params.set("sortBy", filters.sortBy);
       if (filters.sortDir) params.set("sortDir", filters.sortDir);
       const res = await fetch(

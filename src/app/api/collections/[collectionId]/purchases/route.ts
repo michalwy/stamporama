@@ -31,6 +31,8 @@ export async function GET(
   // Several of each, `none` among them for a document recorded without one (#1392).
   const platformIds = parseIntakePartyIds(sp.get("platform"));
   const supplierIds = parseIntakePartyIds(sp.get("supplier"));
+  // Documents with scans still to identify or to cut (#2582).
+  const toIdentify = sp.get("toIdentify") === "1" || undefined;
   const sortByParam = sp.get("sortBy") as PurchaseSortBy | null;
   const sortBy = sortByParam && VALID_SORT_BY.has(sortByParam) ? sortByParam : undefined;
   const sortDirParam = sp.get("sortDir");
@@ -47,6 +49,7 @@ export async function GET(
       contactId,
       platformIds,
       supplierIds,
+      toIdentify,
       sortBy,
       sortDir,
       pageSize: 50,

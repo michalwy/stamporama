@@ -93,15 +93,23 @@ export function PurchasesListPanel({
   );
   // *Clear filters* lets go of the applied preset as well (#2534).
   const detachPreset = useDetachListPreset(collectionId, PURCHASES_VIEW.list);
-  const { type, statuses, platforms, suppliers, sortBy, sortDir } = view;
+  const { type, statuses, platforms, suppliers, toIdentify, sortBy, sortDir } = view;
   // A delivery status is a purchase's own (#1323): under *Opening balances* there is none to filter
   // by, so only *Completed* is drawn (#1461) — and no other is in force (`resolveIntakeView`).
   const offeredStatuses = intakeViewStatusesFor(type);
   const statusFilters = STATUS_FILTERS.filter((f) => offeredStatuses.includes(f.value));
 
   const filters: PurchaseFilters = useMemo(
-    () => ({ type, statuses, platformIds: platforms, supplierIds: suppliers, sortBy, sortDir }),
-    [type, statuses, platforms, suppliers, sortBy, sortDir]
+    () => ({
+      type,
+      statuses,
+      platformIds: platforms,
+      supplierIds: suppliers,
+      toIdentify,
+      sortBy,
+      sortDir,
+    }),
+    [type, statuses, platforms, suppliers, toIdentify, sortBy, sortDir]
   );
 
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isLoading } =
@@ -146,6 +154,8 @@ export function PurchasesListPanel({
         return `Platform: ${partyNames(n.value, parties?.platforms, "No platform", "Unknown platform")}`;
       case "suppliers":
         return `Supplier: ${partyNames(n.value, parties?.suppliers, "No supplier", "Unknown supplier")}`;
+      case "toIdentify":
+        return "To identify";
     }
   }
 
@@ -222,6 +232,17 @@ export function PurchasesListPanel({
               );
             })}
           </div>
+
+          {/* The documents with identification waiting (#2582) — scanned days ago, identified now.
+              Any type and any status: a completed document with a tile left is listed too. */}
+          <Tooltip content="Documents with scan tiles still to identify, parked ones included, or a scan not yet cut">
+            <FilterChip
+              label="To identify"
+              active={toIdentify}
+              toggle
+              onClick={() => setView({ toIdentify: !toIdentify })}
+            />
+          </Tooltip>
 
           {/* Platform and supplier (#1392). Multi-select, each with a *none* value for documents
               recorded without one — an opening balance carries neither, so it is found there and
