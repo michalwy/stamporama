@@ -117,5 +117,12 @@ redirecting storage backend comes from another origin and cannot be read.
 
 - A copy photo can be shown to a buyer only through offer images for the covers to matter; anything
   that hands out the copy's own photo (the copy's page, a shared link) shows it uncovered by design.
-- A cover's preview in the editor is an indication (a CSS backdrop blur, a box in the bar's colour); the real
-  pixelation and blur are the server's, and are seen in the regenerated images.
+- A cover is shown in the editor and on the copy's page **as it comes out on the offer images**
+  (*amended by #2586*; before it, a CSS backdrop blur stood in for both blur and pixelation, and the
+  collector judged the style from a picture that did not show it). The blocks and the blur strength
+  live in one pure module, `photo-cover-render.ts`, which the server's `photos/covers.ts` and the
+  browser both draw with; the browser paints each pixelation or blur from the photo's own pixels,
+  fetched from this origin as the eyedropper's are. A pixelation has the server's blocks exactly; their
+  colours are a plain mean where sharp resamples with Lanczos, a shade apart at hard edges. A blur is
+  worked at a small size (`BLUR_WORK_SIDE`) with the server's sigma and mask cut-off and drawn larger.
+  Until the pixels are in, a pixelation or blur is a plain neutral box, never another style.

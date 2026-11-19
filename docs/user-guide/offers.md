@@ -1109,8 +1109,10 @@ photos are what holds the offer back) walks you through them one at a time:
   chose stays chosen on the next photo, and in the next walk, on this browser; until you choose
   one, covers are rectangles. Covers carried over from the previous photo keep their own shapes.
 - Each cover is **pixelated**, **blurred** or a **solid bar** — chosen per cover in the toolbar,
-  starting as the platform's *New covers start as*. What you see in the editor is an indication; the
-  real one is drawn into the offer's images.
+  starting as the platform's *New covers start as*. What you see in the editor is what goes on the
+  offer's images: a pixelation shows its real blocks and a blur its real strength, while you draw and
+  drag too. For a moment after the photo opens, a pixelated or blurred cover is a plain grey box. The
+  copy's page shows its covered photos the same way.
 - A **solid bar has a colour of its own**, so it need not clash with the stamp or the collage
   background: with a bar selected, or *Solid bar* chosen for the next cover, the toolbar shows
   **Colour** — black, white, grey and stamp-paper cream, or any other colour from the picker. A new

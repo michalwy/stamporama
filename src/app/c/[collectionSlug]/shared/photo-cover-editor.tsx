@@ -16,68 +16,20 @@ import {
   PHOTO_COVER_SHAPES,
   PHOTO_COVER_STYLE_LABELS,
   PHOTO_COVER_STYLES,
-  sameOriginPhotoUrl,
   type PhotoCover,
   type PhotoCoverShape,
   type PhotoCoverStyle,
 } from "@/lib/photo-cover-rules";
+import { CoverView, loadPhotoPixels, needsPhotoPixels } from "./photo-cover-view";
 import { Tooltip } from "./tooltip";
 import { usePersistedCollectionValue } from "./use-persisted-collection-value";
 
 // Drawing covers over a copy's photo (#1665; ADR-0066). Geometry is kept in fractions of the photo, as
 // it is stored, so the picture can be drawn at whatever size the dialog has room for.
 //
-// What is drawn here is an **indication** of each style, not its render: a bar is its colour, a blur is a
-// browser backdrop blur, a pixelation a blur under a coarse grid. The real one is drawn into the offer
-// images by the server (`photos/covers.ts`) and seen on the Photos card once they are regenerated.
-
-/** How one cover looks on screen — the overlay the editor and the copy's page both draw. */
-export function coverAppearance(cover: PhotoCover): CSSProperties {
-  const base: CSSProperties = {
-    position: "absolute",
-    left: `${cover.x * 100}%`,
-    top: `${cover.y * 100}%`,
-    width: `${cover.width * 100}%`,
-    height: `${cover.height * 100}%`,
-    borderRadius: cover.shape === "ellipse" ? "50%" : 0,
-    boxSizing: "border-box",
-  };
-  if (cover.style === "bar") return { ...base, background: cover.color ?? DEFAULT_PHOTO_COVER_COLOR };
-  if (cover.style === "blur") {
-    return { ...base, backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", background: "rgba(127,127,127,0.15)" };
-  }
-  return {
-    ...base,
-    backdropFilter: "blur(6px)",
-    WebkitBackdropFilter: "blur(6px)",
-    backgroundImage:
-      "linear-gradient(rgba(0,0,0,0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.25) 1px, transparent 1px)",
-    backgroundSize: "16% 16%",
-  };
-}
-
-/** A photo with its covers laid over it, read-only — the copy's page draws its thumbnails with it. */
-export function CoveredPhoto({
-  src,
-  covers,
-  alt,
-  style,
-}: {
-  src: string;
-  covers: readonly PhotoCover[];
-  alt: string;
-  style?: CSSProperties;
-}) {
-  return (
-    <span style={{ position: "relative", display: "inline-block", lineHeight: 0, ...style }}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- collection-scoped bytes, as every photo here */}
-      <img src={src} alt={alt} style={{ maxWidth: "100%", maxHeight: "100%", display: "block" }} />
-      {covers.map((cover, i) => (
-        <span key={i} aria-hidden style={coverAppearance(cover)} />
-      ))}
-    </span>
-  );
-}
+// Each cover is drawn as it comes out on the offer images (#2586) — a pixelation as its real blocks, a
+// blur at its real strength — painted from the photo's pixels by `CoverView` with the numbers the
+// server draws with, while it is drawn and dragged too.
 
 type Drag =
   | { kind: "draw"; startX: number; startY: number }
@@ -185,17 +137,6 @@ function colorOfPhotoAt(img: ImageBitmap, point: { x: number; y: number }): stri
   }
 }
 
-/** The photo's pixels, fetched from this origin and decoded; null when they cannot be had. */
-async function loadPhotoPixels(src: string): Promise<ImageBitmap | null> {
-  try {
-    const res = await fetch(sameOriginPhotoUrl(src), { credentials: "same-origin" });
-    if (!res.ok) return null;
-    return await createImageBitmap(await res.blob());
-  } catch {
-    return null;
-  }
-}
-
 const TOOLBAR_SELECT: CSSProperties = {
   fontSize: "0.8125rem",
   padding: "0.25rem 0.375rem",
@@ -265,6 +206,19 @@ export function PhotoCoverEditor({
   useEffect(() => {
     if (picking) void photoPixels();
   }, [picking, photoPixels]);
+  // The same pixels paint the covers as they come out on the offer images (#2586), fetched as soon as
+  // one is a pixelation or a blur — or is about to be drawn as one.
+  const [painting, setPainting] = useState<{ src: string; pixels: ImageBitmap } | null>(null);
+  const wantsPixels = needsPhotoPixels([...covers, draft]) || style !== "bar";
+  useEffect(() => {
+    if (!wantsPixels) return;
+    const picture = photoPixels();
+    void picture.then((pixels) => {
+      // Only while this is still the photo's read: a later one, or none, means it was closed.
+      if (pixels && pixelsRef.current?.picture === picture) setPainting({ src, pixels });
+    });
+  }, [wantsPixels, photoPixels, src]);
+  const coverPixels = painting?.src === src ? painting.pixels : null;
   useEffect(
     () => () => {
       const held = pixelsRef.current;
@@ -561,11 +515,12 @@ export function PhotoCoverEditor({
             style={{ width: "100%", height: "100%", display: "block", pointerEvents: "none" }}
           />
           {covers.map((cover, i) => (
-            <span
+            <CoverView
               key={i}
               data-cover={i}
+              cover={cover}
+              pixels={coverPixels}
               style={{
-                ...coverAppearance(cover),
                 cursor: disabled ? "default" : "move",
                 // With the eyedropper up a click goes through a cover to the photo under it.
                 pointerEvents: picking ? "none" : undefined,
@@ -573,7 +528,14 @@ export function PhotoCoverEditor({
               }}
             />
           ))}
-          {draft && <span aria-hidden style={{ ...coverAppearance(draft), outline: "1px dashed #fff", pointerEvents: "none" }} />}
+          {draft && (
+            <CoverView
+              aria-hidden
+              cover={draft}
+              pixels={coverPixels}
+              style={{ outline: "1px dashed #fff", pointerEvents: "none" }}
+            />
+          )}
           {selectedCover &&
             CORNERS.map((corner) => (
               <span
