@@ -412,9 +412,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   keeps the cell empty) — and each lot's sales from `SaleLine.offerId`) through `GET …/facebook-posts/[postId]`, under
   `offerKeys.all` so `invalidateAll` refreshes it. **Which whole-post moves it offers is
   `facebookPostMoves`** (pure, `facebook-post-rules.ts`), written to match the gates of
-  `publishFacebookPost`, `rejectOfferOrPost` and `withdrawOfferOrPost`; the moves themselves are the
-  existing actions asked of a lot — any lot to publish, a pending one to approve, reject or withdraw —
-  so nothing new runs server-side. **A lot closed while its post waited does not block the post's
+  `publishFacebookPost` and `rejectOfferOrPost`; the moves themselves are the existing actions asked of
+  a lot — any lot to publish, a pending one to approve or reject — so nothing new runs server-side for
+  them. *Withdraw post…* is the exception, with its own write (#2590, below). **A lot closed while its post waited does not block the post's
   approval** (#2290, settled with the collector on 2026-11-01): a buyer may answer a pending post, and
   its sale is recorded as any other. `isFacebookLotClosed` (sold or withdrawn) is let through by both
   `facebookPostMoves().approve` and `publishFacebookPost`'s *every lot must be Ready* gate — on an
@@ -476,6 +476,26 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   counted apart; *Sold* is the lots with a sale line and what the lines brought — a cancelled sale's
   lines are gone (#2500, ADR-0082) and the read filters `status = cancelled` and free extras besides.
   The integration test is `tests/integration/facebook-posts-list-figures.test.ts`.
+
+- **A whole post is withdrawn in any stage** (#2590, raised by the collector on 2026-11-19; the issue's
+  *to be confirmed* points implemented as written). **Withdraw post…** — a button in *The post* on the
+  post's screen, and the row's ⋮ on the list of posts — replaces the pending post's *Withdraw…* (#1779)
+  and is offered while any lot is still for sale (`facebookPostMoves().withdraw`; the list reads
+  `forSaleCount > 0`). Both open `WithdrawFacebookPostDialog` (`offers/posts/withdraw-post-dialog.tsx`),
+  which reads `readFacebookPostWithdrawal` first (`facebook-posts.ts`) and words it through
+  `facebookPostWithdrawalText` (pure). **Which lots go is `facebookPostWithdrawalPlan`** (pure,
+  `facebook-post-rules.ts`): every lot not closed, except an auction up (active or paused) with a
+  recorded bid — its price above zero (#1545), the same reading as `facebookBackToReadyPlan`'s
+  `bidsCleared` — which may still sell and stays up; sold and withdrawn lots stay. When only such
+  auctions are left the dialog has nothing to do and offers *Close*. `withdrawFacebookPost` reads the
+  plan again and takes each lot through `setOfferState(…, "withdrawn")`, as its own *Withdraw* goes, so
+  every gate and side effect of a single withdraw applies; asking again finishes a refusal halfway.
+  **Nothing is deleted**: the post keeps its lots, number and preview link, whose standing
+  (`facebookPostPreviewStanding`) is unchanged — over with something sold is still shown, withdrawn lots
+  *No longer available*; over with nothing sold says the offer is no longer current. One lot's
+  `withdrawOfferOrPost` (the offer screen, the phone, the bulk withdraw, the agent API) is untouched: a
+  pending lot still takes its pending post with it. The integration test is
+  `tests/integration/facebook-post-withdraw.test.ts`.
 
 - **A post is deleted with every offer in it** (#2060, decided with the collector on 2026-10-18), in
   any stage, from the ⋮ beside the post screen's title and from the row's ⋮ on the list of posts —

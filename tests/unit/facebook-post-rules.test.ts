@@ -4,6 +4,8 @@ import {
   describeFacebookAuctionCopies,
   describeRefusedLots,
   facebookPostDeleteRefusal,
+  facebookPostWithdrawalPlan,
+  facebookPostWithdrawalText,
   facebookLotAddRefusal,
   facebookLotOrderRefusal,
   facebookLotPrice,
@@ -881,7 +883,7 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(half.takeOut, false);
   });
 
-  it("offers approve, reject and withdraw while the post waits for approval, and nothing else", () => {
+  it("offers approve, reject and withdraw while the post waits for approval, and nothing else of its own", () => {
     const pending = facebookPostMoves(lots("pending", "pending"));
     assert.deepEqual(
       [pending.activate, pending.submit, pending.approve, pending.reject, pending.withdraw, pending.takeOut, pending.addLots],
@@ -902,11 +904,11 @@ describe("a multi-lot post's screen (#1842)", () => {
     assert.equal(facebookPostMoves(lots("pending", "paused")).approve, false);
   });
 
-  it("offers no move of the post's own once it is up but Back to Ready, and no take-out", () => {
+  it("offers no move of the post's own once it is up but Back to Ready and Withdraw post, and no take-out", () => {
     const up = facebookPostMoves(lots("active", "sold", "withdrawn"));
     assert.deepEqual(
-      [up.activate, up.submit, up.approve, up.reject, up.withdraw, up.takeOut, up.addLots],
-      [false, false, false, false, false, false, false]
+      [up.activate, up.submit, up.approve, up.reject, up.takeOut, up.addLots],
+      [false, false, false, false, false, false]
     );
     assert.equal(up.backToReady, true);
     assert.deepEqual(up.waiting, []);
@@ -1324,5 +1326,92 @@ describe("facebookPostDeleteRefusal (#2060)", () => {
       ]),
       "Lots 1 (#40), 3 (#42) and 4 (#43) have sold sets, so the post cannot be deleted. An offer with a sold set is withdrawn, never deleted."
     );
+  });
+});
+
+describe("Withdraw post… (#2590)", () => {
+  const frozen = (state: string) => ({ state, lotNo: 1, frozen: ["preparing", "ready"].includes(state) ? null : {} });
+
+  it("is offered in every stage while a lot is still for sale, and not once none is", () => {
+    for (const states of [
+      ["preparing", "sold"],
+      ["ready", "ready"],
+      ["pending", "withdrawn"],
+      ["active", "sold"],
+      ["paused"],
+    ]) {
+      assert.equal(facebookPostMoves(states.map(frozen)).withdraw, true, states.join(","));
+    }
+    assert.equal(facebookPostMoves(["sold", "withdrawn"].map(frozen)).withdraw, false);
+    assert.equal(facebookPostMoves([]).withdraw, false);
+  });
+
+  const lot = (state: string, listingType: "auction" | "fixed" = "auction", price = "0.00") => ({
+    state,
+    listingType,
+    price,
+  });
+
+  it("withdraws every lot still for sale and keeps the sold and withdrawn ones", () => {
+    const lots = [lot("preparing"), lot("sold"), lot("ready"), lot("withdrawn"), lot("pending")];
+    const plan = facebookPostWithdrawalPlan(lots);
+    assert.deepEqual(plan.withdrawing, [lots[0], lots[2], lots[4]]);
+    assert.deepEqual(plan.sold, [lots[1]]);
+    assert.deepEqual(plan.withBid, []);
+  });
+
+  it("leaves an auction up with a recorded bid, but not a quick buy or an auction not up", () => {
+    const bid = lot("active", "auction", "12.00");
+    const pausedBid = lot("paused", "auction", "5.00");
+    const noBid = lot("active", "auction", "0.00");
+    const quickBuy = lot("active", "fixed", "20.00");
+    const readyAuction = lot("ready", "auction", "3.00");
+    const plan = facebookPostWithdrawalPlan([bid, pausedBid, noBid, quickBuy, readyAuction]);
+    assert.deepEqual(plan.withBid, [bid, pausedBid]);
+    assert.deepEqual(plan.withdrawing, [noBid, quickBuy, readyAuction]);
+  });
+
+  const base = { postNo: 7, title: null, withdrawCount: 3, soldCount: 2, bidLots: [], submitted: false };
+
+  it("says how many lots go and how many sold lots stay", () => {
+    const text = facebookPostWithdrawalText(base);
+    assert.equal(text.nothing, false);
+    assert.match(text.withdraws, /^This withdraws all 3 lots still for sale\./);
+    assert.deepEqual(text.stays, ["The 2 sold lots stay sold, with their sales."]);
+    assert.equal(text.group, null, "a post never submitted has nothing in the group");
+  });
+
+  it("says the group's post is not touched once the post was submitted", () => {
+    assert.equal(
+      facebookPostWithdrawalText({ ...base, submitted: true }).group,
+      "The post in the Facebook group is not touched — remove or edit it there by hand."
+    );
+  });
+
+  it("names the auctions left up for their bids", () => {
+    const one = facebookPostWithdrawalText({ ...base, soldCount: 0, bidLots: [{ lotNo: 2, offerNo: 41 }] });
+    assert.match(one.withdraws, /^This withdraws 3 lots still for sale\./, "not all of them");
+    assert.deepEqual(one.stays, ["Lot 2 (#41) is an auction with a recorded bid, so it stays up until you end it."]);
+    const two = facebookPostWithdrawalText({
+      ...base,
+      soldCount: 1,
+      bidLots: [
+        { lotNo: 2, offerNo: 41 },
+        { lotNo: 4, offerNo: 43 },
+      ],
+    });
+    assert.deepEqual(two.stays, [
+      "The sold lot stays sold, with its sale.",
+      "Lots 2 (#41) and 4 (#43) are auctions with a recorded bid, so they stay up until you end them.",
+    ]);
+  });
+
+  it("has nothing to withdraw when every lot still for sale carries a bid", () => {
+    const text = facebookPostWithdrawalText({ ...base, withdrawCount: 0, bidLots: [{ lotNo: 1, offerNo: 9 }] });
+    assert.equal(text.nothing, true);
+  });
+
+  it("speaks of one lot in the singular", () => {
+    assert.match(facebookPostWithdrawalText({ ...base, withdrawCount: 1 }).withdraws, /^This withdraws the 1 lot still for sale\. Its copies/);
   });
 });

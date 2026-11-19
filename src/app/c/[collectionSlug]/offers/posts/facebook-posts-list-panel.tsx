@@ -25,6 +25,7 @@ import {
   type FacebookPostFilters,
 } from "../use-offers-query";
 import { DeleteFacebookPostDialog, deletedPostMessage } from "./delete-post-dialog";
+import { WithdrawFacebookPostDialog, withdrawnPostMessage } from "./withdraw-post-dialog";
 import { NewFacebookPostDialog } from "./new-post-dialog";
 import { postsViewNarrowings, type PostsNarrowing } from "./posts-view-params";
 import { usePostsView } from "./use-posts-view";
@@ -256,6 +257,7 @@ function FacebookPostRow({
 }) {
   const [hovered, setHovered] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const { invalidateAll } = useInvalidateOffers();
   const { toast } = useToast();
   const href = `/c/${collectionSlug}/offers/posts/${post.postNo}`;
@@ -315,6 +317,10 @@ function FacebookPostRow({
             <RowActionsMenu
               ariaLabel={`Post #${post.postNo} actions`}
               actions={[
+                // In any stage while a lot is still for sale (#2590).
+                ...(post.forSaleCount > 0
+                  ? [{ key: "withdraw", label: "Withdraw post…", icon: "withdraw" as const, onSelect: () => setWithdrawing(true) }]
+                  : []),
                 { key: "delete", label: "Delete post…", icon: "delete", danger: true, onSelect: () => setDeleting(true) },
               ]}
             />
@@ -381,6 +387,17 @@ function FacebookPostRow({
         </div>
         {post.figures.lotCount > 0 && <PostFigures post={post} />}
       </div>
+      {withdrawing && (
+        <WithdrawFacebookPostDialog
+          postId={post.postId}
+          onClose={() => setWithdrawing(false)}
+          onWithdrawn={(done) => {
+            setWithdrawing(false);
+            toast({ message: withdrawnPostMessage(done) });
+            void invalidateAll(collectionId);
+          }}
+        />
+      )}
       {deleting && (
         <DeleteFacebookPostDialog
           postId={post.postId}

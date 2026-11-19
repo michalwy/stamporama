@@ -858,10 +858,12 @@ export function isFacebookLotPosted(state: string): boolean {
  *    takes it, and at least one Ready (a refusal halfway through is finished by asking again). The
  *    screen draws one *Publish…* for `activate` (#1847); `submit` says whether its dialog may offer
  *    *Waiting for approval*;
- *  - `approve` / `reject` / `withdraw` — while any lot waits for the group's approval: the group
- *    approves or turns down the post, and withdrawing a pending post takes it back whole (#1779). A
- *    lot sold or withdrawn while the post waited blocks none of them (#2290): a buyer may answer a
- *    pending post, and each move acts on the lots still waiting and leaves a closed lot as it is;
+ *  - `approve` / `reject` — while any lot waits for the group's approval: the group approves or turns
+ *    down the post. A lot sold or withdrawn while the post waited blocks neither (#2290): a buyer may
+ *    answer a pending post, and each move acts on the lots still waiting and leaves a closed lot as it is;
+ *  - `withdraw` — *Withdraw post…* (#2590), in every stage while a lot is still for sale: every lot
+ *    still for sale is withdrawn and the sold ones stay (`facebookPostWithdrawalPlan`). It took a
+ *    pending post back whole before (#1779), and now does the same in any stage;
  *  - `backToReady` — while the post is up and a lot of it is still for sale (#1998): a Publish that
  *    was a mistake, or a post gone from the group, taken back to Ready (`facebookBackToReadyPlan`);
  *  - `backToPreparing` — while the post is not up and a lot of it is Ready (#2115): every Ready lot
@@ -899,7 +901,7 @@ export function facebookPostMoves(lots: readonly (FacebookLotStanding & { lotNo:
     submit: !pending && ready && onlyIn(["ready"]),
     approve: pending && lots.every((l) => ["ready", "pending", "active"].includes(l.state) || isFacebookLotClosed(l.state)),
     reject: pending,
-    withdraw: pending,
+    withdraw: lots.some((l) => !isFacebookLotClosed(l.state)),
     backToReady: !pending && lots.some((l) => isFacebookLotUp(l.state)),
     backToPreparing: !posted && ready,
     takeOut: !posted && lots.length > 1,
@@ -1252,6 +1254,82 @@ export function facebookPostDeleteRefusal(soldLots: readonly FacebookSoldLot[]):
   return soldLots.length === 1
     ? `Lot ${list} has a sold set, so the post cannot be deleted. An offer with a sold set is withdrawn, never deleted.`
     : `Lots ${list} have sold sets, so the post cannot be deleted. An offer with a sold set is withdrawn, never deleted.`;
+}
+
+/** What *Withdraw post…* does to a post's lots (#2590): every lot still for sale is withdrawn
+ *  (`withdrawing`), as its own *Withdraw* would — except an auction up with a recorded bid
+ *  (`withBid`), which may still sell and stays up until the collector ends it. Sold lots (`sold`) and
+ *  lots already withdrawn stay as they are. Each list keeps the order it was given. */
+export interface FacebookPostWithdrawalPlan<T> {
+  withdrawing: T[];
+  withBid: T[];
+  sold: T[];
+}
+
+export function facebookPostWithdrawalPlan<T extends { state: string; listingType: OfferListingType; price: string }>(
+  lots: readonly T[]
+): FacebookPostWithdrawalPlan<T> {
+  // A bid is the auction's own price once it is up (#1545); a zero is *no bid*.
+  const withBid = lots.filter((l) => isFacebookLotUp(l.state) && isAuctionListing(l.listingType) && Number(l.price) > 0);
+  return {
+    withdrawing: lots.filter((l) => !isFacebookLotClosed(l.state) && !withBid.includes(l)),
+    withBid,
+    sold: lots.filter((l) => l.state === "sold"),
+  };
+}
+
+/** What *Withdraw post…* says before anything moves (#2590). */
+export interface FacebookPostWithdrawal {
+  postNo: number;
+  title: string | null;
+  /** How many lots it withdraws — every lot still for sale but an auction with a bid. */
+  withdrawCount: number;
+  /** How many sold lots stay sold. */
+  soldCount: number;
+  /** The auctions up with a recorded bid, in lot order, which are left up. */
+  bidLots: FacebookSoldLot[];
+  /** Whether the post was submitted to the group, so its post there is the collector's to remove. */
+  submitted: boolean;
+}
+
+/** The lots named in a sentence: `2 (#41)`, `2 (#41) and 5 (#44)`, `1 (#3), 2 (#41) and 5 (#44)`. */
+function nameLots(lots: readonly FacebookSoldLot[]): string {
+  const named = lots.map((l) => `${l.lotNo} (#${l.offerNo})`);
+  return named.length === 1 ? named[0] : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+}
+
+/** The confirmation's sentences (#2590): what is withdrawn, what stays, and — for a post submitted to
+ *  the group — that the post there is not touched. `nothing` when no lot would be withdrawn (every lot
+ *  still for sale carries a bid), and the dialog then only closes. */
+export function facebookPostWithdrawalText(w: FacebookPostWithdrawal): {
+  nothing: boolean;
+  withdraws: string;
+  stays: string[];
+  group: string | null;
+} {
+  const lots = (n: number) => (n === 1 ? "1 lot" : `${n} lots`);
+  const stays: string[] = [];
+  if (w.soldCount > 0) {
+    stays.push(w.soldCount === 1 ? "The sold lot stays sold, with its sale." : `The ${w.soldCount} sold lots stay sold, with their sales.`);
+  }
+  if (w.bidLots.length > 0) {
+    stays.push(
+      w.bidLots.length === 1
+        ? `Lot ${nameLots(w.bidLots)} is an auction with a recorded bid, so it stays up until you end it.`
+        : `Lots ${nameLots(w.bidLots)} are auctions with a recorded bid, so they stay up until you end them.`
+    );
+  }
+  return {
+    nothing: w.withdrawCount === 0,
+    withdraws:
+      w.withdrawCount === 0
+        ? "No lot can be withdrawn: every lot still for sale is an auction with a recorded bid."
+        : `This withdraws ${w.bidLots.length > 0 ? lots(w.withdrawCount) : w.withdrawCount === 1 ? "the 1 lot" : `all ${lots(w.withdrawCount)}`} still for sale. ${w.withdrawCount === 1 ? "Its copies are" : "Their copies are"} free to be listed again; withdrawn is final, so selling them here again is a new offer.`,
+    stays,
+    group: w.submitted
+      ? "The post in the Facebook group is not touched — remove or edit it there by hand."
+      : null,
+  };
 }
 
 /** A copy already in an active Facebook offer — an auction or a quick buy (#1671) — and the offer. */

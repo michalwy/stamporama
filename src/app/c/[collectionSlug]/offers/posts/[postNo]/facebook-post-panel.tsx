@@ -45,6 +45,7 @@ import {
 } from "../../use-offers-query";
 import { FacebookPostKit, PHOTO_SIZE } from "../../[offerId]/facebook-post-kit";
 import { DeleteFacebookPostDialog, deletedPostMessage } from "../delete-post-dialog";
+import { WithdrawFacebookPostDialog, withdrawnPostMessage } from "../withdraw-post-dialog";
 import { AddLotsDialog } from "./add-lots-dialog";
 import { NewLotFlow, type NewLotPost, type NewLotSource } from "./new-lot-flow";
 import {
@@ -77,9 +78,11 @@ import type { CertificateStatusData } from "@/lib/certificate-statuses";
 // - **The post's title** (#1862), in its heading beside its number, edited in place — what tells the
 //   post apart from the others running at once. A post made before titles is named by number until it
 //   is given one, and its heading offers to name it.
-// - **The post's moves**, made as one — submit for approval, approve, reject, activate, withdraw (#1778,
-//   #1779) — through the same actions the offer screen uses, asked of a lot: the server takes the whole
-//   post with it, so the buttons are offered only where `facebookPostMoves` says the server would.
+// - **The post's moves**, made as one — submit for approval, approve, reject, activate (#1778, #1779) —
+//   through the same actions the offer screen uses, asked of a lot: the server takes the whole post
+//   with it, so the buttons are offered only where `facebookPostMoves` says the server would.
+//   *Withdraw post…* (#2590) is offered in every stage while a lot is still for sale: every such lot
+//   is withdrawn, the sold ones stay, and its dialog reads what it would do from the server first.
 //   *Back to Ready…* (#1998) takes a post that is up back — a mistaken Publish, or a post gone from the
 //   group; when lots sold or withdrawn stay behind, the others move into a new post, and the screen
 //   goes there. *Back to preparing* (#2115) is its counterpart before the post is up: every Ready lot
@@ -632,7 +635,7 @@ export function FacebookPostPanel({
     ];
   }
 
-  const anyMove = moves.activate || moves.approve || moves.reject || moves.withdraw || moves.backToReady;
+  const anyMove = moves.activate || moves.approve || moves.reject || moves.backToReady;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -711,7 +714,7 @@ export function FacebookPostPanel({
       {/* The moves the post makes as one (#1778, #1779). */}
       <section style={CARD} aria-label="The post's moves">
         <h3 style={CARD_TITLE}>The post</h3>
-        {(anyMove || moves.backToPreparing) && (
+        {(anyMove || moves.backToPreparing || moves.withdraw) && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             {/* One door (#1847): live or waiting for the group's approval is chosen in the dialog. */}
             {moves.activate && (
@@ -738,15 +741,6 @@ export function FacebookPostPanel({
                 Rejected — back to Ready
               </DialogSecondaryButton>
             )}
-            {moves.withdraw && (
-              <DialogSecondaryButton
-                type="button"
-                disabled={isPending}
-                onClick={() => setDialog({ kind: "withdrawPost" })}
-              >
-                Withdraw…
-              </DialogSecondaryButton>
-            )}
             {moves.backToReady && (
               <>
                 <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog({ kind: "backToReady" })}>
@@ -760,11 +754,17 @@ export function FacebookPostPanel({
                 Back to preparing
               </DialogSecondaryButton>
             )}
+            {/* In every stage while a lot is still for sale (#2590); it was the pending post's alone (#1779). */}
+            {moves.withdraw && (
+              <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog({ kind: "withdrawPost" })}>
+                Withdraw post…
+              </DialogSecondaryButton>
+            )}
           </div>
         )}
         {/* A post still being prepared can have Ready lots to take back and lots still short of Ready. */}
         {!anyMove && (
-          <p style={{ ...MUTED, margin: moves.backToPreparing ? "0.5rem 0 0" : 0 }}>
+          <p style={{ ...MUTED, margin: moves.backToPreparing || moves.withdraw ? "0.5rem 0 0" : 0 }}>
             {moves.waiting.length > 0
               ? `Every lot must be Ready before the post goes up: ${moves.waiting.map((n) => `lot ${n}`).join(", ")}.`
               : lots.length === 0
@@ -1004,16 +1004,15 @@ export function FacebookPostPanel({
         />
       )}
 
-      {dialog.kind === "withdrawPost" && pendingLot && (
-        <ConfirmDialog
-          title="Withdraw post"
-          message="This takes the post back from the group: every lot of it still waiting for approval is withdrawn. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
-          actionLabel="Withdraw"
-          pendingLabel="Withdrawing…"
-          isPending={isPending}
-          error={error}
-          onClose={close}
-          onConfirm={() => setLotState(pendingLot.offerId, "withdrawn", `Post #${postNo} withdrawn`)}
+      {dialog.kind === "withdrawPost" && (
+        <WithdrawFacebookPostDialog
+          postId={postId}
+          onClose={() => setDialog({ kind: "none" })}
+          onWithdrawn={(done) => {
+            setDialog({ kind: "none" });
+            toast({ message: withdrawnPostMessage(done) });
+            void invalidateAll(collectionId);
+          }}
         />
       )}
 
