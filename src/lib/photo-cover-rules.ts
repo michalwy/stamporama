@@ -108,6 +108,19 @@ export function normalizePlatformCoverColor(value: string | null | undefined): s
  *  averages is `2 × radius + 1` across. */
 export const EYEDROPPER_RADIUS = 3;
 
+/**
+ * The address the eyedropper reads the photo's pixels from: the same picture, asked for **from this
+ * origin** (`inline=1`, #614). The `<img>` on screen follows the photo route wherever it points, and
+ * on the redirecting storage backend that is a signed URL on the storage provider's origin — a picture
+ * that taints any canvas it is drawn into, so reading its pixels throws on every click (#2585).
+ */
+export function sameOriginPhotoUrl(src: string): string {
+  const hash = src.indexOf("#");
+  const bare = hash === -1 ? src : src.slice(0, hash);
+  if (/[?&]inline=/.test(bare)) return bare;
+  return `${bare}${bare.includes("?") ? "&" : "?"}inline=1`;
+}
+
 /** The square the eyedropper averages, in the photo's own pixels, around a point given in fractions of
  *  the photo — cut back at the photo's edges, never empty. */
 export function eyedropperRegion(

@@ -1122,7 +1122,8 @@ photos are what holds the offer back) walks you through them one at a time:
   colour, and the selected bar's if one is selected; the click draws nothing. The colour is the
   average of a few pixels around the click, so grain and printing dots even out, and it is read from
   the photo alone — clicking a cover takes the photo's colour under it. **Escape**, or the button
-  again, puts the eyedropper down without taking anything.
+  again, puts the eyedropper down without taking anything. If the browser cannot read the photo at
+  all, it says so — pick the colour by hand then.
 - **Enter** saves the photo and brings the next. With nothing drawn the button reads **Nothing to
   cover** — that counts as checked too, so a photo with nothing to hide is never asked about again.
   **Skip** and **Previous** move without saving.

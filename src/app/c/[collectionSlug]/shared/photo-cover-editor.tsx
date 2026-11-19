@@ -16,6 +16,7 @@ import {
   PHOTO_COVER_SHAPES,
   PHOTO_COVER_STYLE_LABELS,
   PHOTO_COVER_STYLES,
+  sameOriginPhotoUrl,
   type PhotoCover,
   type PhotoCoverShape,
   type PhotoCoverStyle,
@@ -162,12 +163,15 @@ export function CoverColorPicker({
 
 /**
  * The colour of the photo around a point given in fractions of it (#2493): the average of a small
- * square of the photo's own pixels, read from the image alone, so the covers drawn over it never
+ * square of the photo's own pixels, read from the picture alone, so the covers drawn over it never
  * colour what is taken. Null when the browser will not let the pixels be read.
+ *
+ * The picture is the one {@link loadPhotoPixels} fetched from this origin, **never the `<img>` on
+ * screen** — that one may come from the storage provider's origin and taint the canvas (#2585).
  */
-function colorOfPhotoAt(img: HTMLImageElement, point: { x: number; y: number }): string | null {
-  if (!img.naturalWidth || !img.naturalHeight) return null;
-  const region = eyedropperRegion(point, { width: img.naturalWidth, height: img.naturalHeight });
+function colorOfPhotoAt(img: ImageBitmap, point: { x: number; y: number }): string | null {
+  if (!img.width || !img.height) return null;
+  const region = eyedropperRegion(point, { width: img.width, height: img.height });
   const canvas = document.createElement("canvas");
   canvas.width = region.width;
   canvas.height = region.height;
@@ -176,6 +180,17 @@ function colorOfPhotoAt(img: HTMLImageElement, point: { x: number; y: number }):
   try {
     context.drawImage(img, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
     return averagePixelColor(context.getImageData(0, 0, region.width, region.height).data);
+  } catch {
+    return null;
+  }
+}
+
+/** The photo's pixels, fetched from this origin and decoded; null when they cannot be had. */
+async function loadPhotoPixels(src: string): Promise<ImageBitmap | null> {
+  try {
+    const res = await fetch(sameOriginPhotoUrl(src), { credentials: "same-origin" });
+    if (!res.ok) return null;
+    return await createImageBitmap(await res.blob());
   } catch {
     return null;
   }
@@ -221,7 +236,8 @@ export function PhotoCoverEditor({
 }) {
   const areaRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
+  // The photo's pixels for the eyedropper, fetched once per photo from this origin (#2585).
+  const pixelsRef = useRef<{ src: string; picture: Promise<ImageBitmap | null> } | null>(null);
   const { toast } = useToast();
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
   const [area, setArea] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
@@ -234,6 +250,29 @@ export function PhotoCoverEditor({
   const picking = pickingOn && !disabled;
   // Escape puts the eyedropper down without taking anything — and only that, not the dialog too.
   useEscapeLayer(() => setPicking(false), picking);
+  const photoPixels = useCallback((): Promise<ImageBitmap | null> => {
+    const held = pixelsRef.current;
+    if (held?.src === src) return held.picture;
+    const picture = loadPhotoPixels(src).then((bitmap) => {
+      // A failed read is not kept, so the next click asks again.
+      if (!bitmap && pixelsRef.current?.src === src) pixelsRef.current = null;
+      return bitmap;
+    });
+    pixelsRef.current = { src, picture };
+    return picture;
+  }, [src]);
+  // Fetched the moment the eyedropper is raised, so the click itself rarely waits.
+  useEffect(() => {
+    if (picking) void photoPixels();
+  }, [picking, photoPixels]);
+  useEffect(
+    () => () => {
+      const held = pixelsRef.current;
+      pixelsRef.current = null;
+      void held?.picture.then((bitmap) => bitmap?.close());
+    },
+    [src]
+  );
   const [lastColor, setLastColor] = usePersistedCollectionValue(COVER_COLOR_NAMESPACE, collectionId);
   // The colour the next bar is drawn in: the last one used, else the platform's.
   const color = normalizeCoverColor(lastColor) ?? defaultColor;
@@ -301,9 +340,13 @@ export function PhotoCoverEditor({
       // One click takes the colour and puts the eyedropper down; it draws, selects and moves nothing.
       e.preventDefault();
       setPicking(false);
-      const taken = imgRef.current ? colorOfPhotoAt(imgRef.current, p) : null;
-      if (taken) recolor(taken);
-      else toast({ message: "The colour of this photo could not be read.", tone: "error" });
+      void photoPixels().then((picture) => {
+        // The photo changed while its pixels were on the way: the click was for another picture.
+        if (pixelsRef.current?.src !== src) return;
+        const taken = picture ? colorOfPhotoAt(picture, p) : null;
+        if (taken) recolorRef.current(taken);
+        else toast({ message: "The colour of this photo could not be read — pick the colour by hand.", tone: "error" });
+      });
       return;
     }
     const corner = target.dataset.corner as Corner | undefined;
@@ -372,6 +415,11 @@ export function PhotoCoverEditor({
       onChange(covers.map((c, i) => (i === selected ? { ...c, color: next } : c)));
     }
   };
+  // The latest `recolor`, for a colour that arrives after the photo's pixels were fetched.
+  const recolorRef = useRef(recolor);
+  useLayoutEffect(() => {
+    recolorRef.current = recolor;
+  });
   const reshape = (next: PhotoCoverShape) => {
     setShape(next);
     if (selected != null) onChange(covers.map((c, i) => (i === selected ? { ...c, shape: next } : c)));
@@ -504,7 +552,6 @@ export function PhotoCoverEditor({
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- collection-scoped bytes, as every photo here */}
           <img
-            ref={imgRef}
             src={src}
             alt=""
             draggable={false}
