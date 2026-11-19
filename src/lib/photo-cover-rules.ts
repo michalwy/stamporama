@@ -43,6 +43,38 @@ export const PHOTO_COVER_SHAPE_LABELS: Record<PhotoCoverShape, string> = {
   ellipse: "Ellipse",
 };
 
+// ── A pixelation's or a blur's strength (#2587) ─────────────────────────────
+//
+// A step on a short scale, the same for both styles: 1 hides least, the last leaves nothing to
+// recognise. What each step means in blocks or blur is `photo-cover-render.ts`'s, which the server
+// and the screen both draw with. A bar has no strength.
+
+/** The styles that have a strength. */
+export type PhotoCoverStrengthStyle = Exclude<PhotoCoverStyle, "bar">;
+
+/** How many steps the strength slider has. */
+export const PHOTO_COVER_STRENGTH_STEPS = 6;
+
+/** The step every pixelation and blur had before #2587, and a new one starts at — so no offer image
+ *  changes until the collector moves a slider. */
+export const DEFAULT_PHOTO_COVER_STRENGTH = 3;
+
+export function hasCoverStrength(style: PhotoCoverStyle): style is PhotoCoverStrengthStyle {
+  return style !== "bar";
+}
+
+/** A strength as stored: a whole step on the scale, or null for anything else. */
+export function normalizeCoverStrength(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= PHOTO_COVER_STRENGTH_STEPS
+    ? value
+    : null;
+}
+
+/** A cover's strength as drawn: its own, else the default. */
+export function coverStrength(cover: Pick<PhotoCover, "strength">): number {
+  return normalizeCoverStrength(cover.strength) ?? DEFAULT_PHOTO_COVER_STRENGTH;
+}
+
 /** The smallest side a cover may have, as a share of the photo. A click without a drag would
  *  otherwise store a cover nobody can see, let alone grab. */
 export const MIN_COVER_SIZE = 0.005;
@@ -56,6 +88,12 @@ export interface PhotoCover {
   /** A bar's fill, lowercase `#rrggbb` (#1702). Present on a bar once cleaned, absent on any other
    *  style; the editor may keep one on a pixelation so switching back to a bar restores it. */
   color?: string;
+  /** A pixelation's or a blur's strength, a step from 1 to {@link PHOTO_COVER_STRENGTH_STEPS} (#2587).
+   *  Present on those once cleaned, absent on a bar. */
+  strength?: number;
+  /** The editor's memory of the strength each style had on this cover, so switching from blur to
+   *  pixelate and back restores each (#2587) — as a pixelation may keep a bar's colour. Never stored. */
+  keptStrengths?: Partial<Record<PhotoCoverStrengthStyle, number>>;
   /** Left edge, top edge, width and height, each a fraction of the photo's own size. */
   x: number;
   y: number;
@@ -164,7 +202,8 @@ function clamp01(n: number): number {
 
 /**
  * The covers as they will be stored, from whatever the browser sent: shape and style must be known,
- * the box is clipped to the photo, a bar carries its colour and nothing else carries one (#1702), and
+ * the box is clipped to the photo, a bar carries its colour and nothing else carries one (#1702), a
+ * pixelation or blur carries its strength and a bar none (#2587), and
  * a cover left smaller than {@link MIN_COVER_SIZE} on either side
  * after clipping is refused rather than silently dropped — the collector drew it, so losing it
  * without a word would leave a symbol showing they believe is hidden.
@@ -202,6 +241,17 @@ export function cleanPhotoCovers(input: unknown): PhotoCover[] {
         color = normalized;
       }
     }
+    let strength: number | undefined;
+    if (hasCoverStrength(cover.style)) {
+      // One sent without a strength — from a page opened before covers had one — is the strength
+      // every cover had then.
+      if (cover.strength == null) strength = DEFAULT_PHOTO_COVER_STRENGTH;
+      else {
+        const normalized = normalizeCoverStrength(cover.strength);
+        if (normalized == null) throw new PhotoCoverValidationError(`Cover ${index + 1} has an unusable strength.`);
+        strength = normalized;
+      }
+    }
     const [x, y, width, height] = numbers as number[];
     const left = clamp01(x);
     const top = clamp01(y);
@@ -214,6 +264,7 @@ export function cleanPhotoCovers(input: unknown): PhotoCover[] {
       shape: cover.shape,
       style: cover.style,
       ...(color ? { color } : {}),
+      ...(strength != null ? { strength } : {}),
       x: left,
       y: top,
       width: right - left,
@@ -223,11 +274,13 @@ export function cleanPhotoCovers(input: unknown): PhotoCover[] {
 }
 
 /** A stored cover row as the code reads it, or null when it names a shape or style this code does
- *  not know (the table's CHECKs make that unreachable). A bar without a usable colour is black. */
+ *  not know (the table's CHECKs make that unreachable). A bar without a usable colour is black; a
+ *  pixelation or blur without a usable strength has the default (#2587). */
 export function storedPhotoCover(row: {
   shape: string;
   style: string;
   color: string | null;
+  strength: number | null;
   x: number;
   y: number;
   width: number;
@@ -237,7 +290,7 @@ export function storedPhotoCover(row: {
   const { shape, style, x, y, width, height } = row;
   return style === "bar"
     ? { shape, style, color: normalizeCoverColor(row.color) ?? DEFAULT_PHOTO_COVER_COLOR, x, y, width, height }
-    : { shape, style, x, y, width, height };
+    : { shape, style, strength: normalizeCoverStrength(row.strength) ?? DEFAULT_PHOTO_COVER_STRENGTH, x, y, width, height };
 }
 
 /**
@@ -253,8 +306,8 @@ export function offerNeedsCovers(offerOverride: boolean | null, platformCoverSym
  * covers, sorted, each with its covers in their stored order. Empty — and therefore absent from the
  * hash — when the offer needs no covers or none of its photos has any, so neither the upgrade nor a
  * photo merely marked *nothing to cover* declares an image out of date that has not changed a pixel.
- * A bar's colour is named only when it is not black (#1702), so every bar drawn before bars had a
- * colour hashes as it did.
+ * A bar's colour is named only when it is not black (#1702), and a pixelation's or blur's strength only
+ * when it is not the default (#2587), so every cover drawn before either existed hashes as it did.
  */
 export function coverFingerprintRows(
   needsCovers: boolean,
@@ -268,11 +321,17 @@ export function coverFingerprintRows(
       ([photoId, covers]) =>
         [
           photoId,
-          covers.map((c) =>
-            c.style === "bar" && c.color && c.color !== DEFAULT_PHOTO_COVER_COLOR
-              ? ([c.shape, c.style, c.x, c.y, c.width, c.height, c.color] as const)
-              : ([c.shape, c.style, c.x, c.y, c.width, c.height] as const)
-          ),
+          covers.map((c): CoverFingerprintRow => {
+            if (c.style === "bar") {
+              return c.color && c.color !== DEFAULT_PHOTO_COVER_COLOR
+                ? [c.shape, c.style, c.x, c.y, c.width, c.height, c.color]
+                : [c.shape, c.style, c.x, c.y, c.width, c.height];
+            }
+            const strength = coverStrength(c);
+            return strength !== DEFAULT_PHOTO_COVER_STRENGTH
+              ? [c.shape, c.style, c.x, c.y, c.width, c.height, strength]
+              : [c.shape, c.style, c.x, c.y, c.width, c.height];
+          }),
         ] as const
     );
 }

@@ -344,7 +344,7 @@ export interface SourcePhoto {
   title: string | null;
   /** Whether the collector has gone over it for symbols (#1665), and what they covered. */
   coversCheckedAt: Date | null;
-  covers: { shape: string; style: string; color: string | null; x: number; y: number; width: number; height: number }[];
+  covers: { shape: string; style: string; color: string | null; strength: number | null; x: number; y: number; width: number; height: number }[];
   /** What it was scanned with (#2061): a profile, or a resolution typed for it, or neither. Neither
    *  and not `noScale` is a picture never given a scale, which {@link withDefaultScales} hands the
    *  collection's default profile before anything reads it (#2066). */
@@ -386,7 +386,7 @@ export const SOURCE_PHOTO_SELECT = {
   coversCheckedAt: true,
   covers: {
     orderBy: { sortOrder: "asc" },
-    select: { shape: true, style: true, color: true, x: true, y: true, width: true, height: true },
+    select: { shape: true, style: true, color: true, strength: true, x: true, y: true, width: true, height: true },
   },
   scanDpi: true,
   scanningProfile: { select: SOURCE_SCANNING_PROFILE_SELECT },

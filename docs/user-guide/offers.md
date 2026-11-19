@@ -1113,6 +1113,14 @@ photos are what holds the offer back) walks you through them one at a time:
   offer's images: a pixelation shows its real blocks and a blur its real strength, while you draw and
   drag too. For a moment after the photo opens, a pixelated or blurred cover is a plain grey box. The
   copy's page shows its covered photos the same way.
+- A **pixelation or blur has a strength of its own**, set with the **Strength** slider beside the
+  style: left hides less, right hides more. A pixelation goes from many small blocks down to two
+  large ones across; a blur from a light one to plain colour, where nothing is left to recognise.
+  The slider sets the selected cover, or the next one when none is selected, and each cover keeps its
+  own — two on one photo can differ. Switching a cover from blur to pixelate and back brings each
+  style's strength back. A new pixelation or blur starts on the slider's third step, the strength
+  every cover had before the slider existed, so covers drawn earlier look as they always did.
+  Changing a strength puts the offer's images out of date like any other change to covers.
 - A **solid bar has a colour of its own**, so it need not clash with the stamp or the collage
   background: with a bar selected, or *Solid bar* chosen for the next cover, the toolbar shows
   **Colour** — black, white, grey and stamp-paper cream, or any other colour from the picker. A new

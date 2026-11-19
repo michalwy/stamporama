@@ -113,6 +113,20 @@ to choose the same `PhotoCover.color`; nothing stored changes. *Amended by #2585
 fetched from this origin (`?inline=1`, as #614 does) rather than read off the `<img>`, which on the
 redirecting storage backend comes from another origin and cannot be read.
 
+*Amended by #2587:* a pixelation or a blur has a strength of its own, `PhotoCover.strength`, a step
+from 1 to 6 set with a slider in the editor; a bar has none (a CHECK holds both halves). What each step
+means lives in `photo-cover-render.ts`, beside the numbers the server and the screen already share: a
+pixelation of 12, 9, 6, 4, 3 or 2 blocks across the cover's shorter side, a blur whose sigma is 0.06,
+0.12, 0.2, 0.3 or 0.45 of that side, and at the last step the box in its one average colour — the
+strongest setting leaves nothing to recognise. Step 3 is the six blocks and fifth-of-a-side blur every
+cover had, so the migration gave every pixelation and blur step 3, a new one starts there, and the
+fingerprint names a strength only when it is not 3: no image generated before went out of date. A
+step, not the blocks or sigma themselves, is stored, so the scale is the code's to tune — but retuning
+a step changes every image drawn at it. Each style's strength is kept apart while editing, so a cover
+switched from blur to pixelate and back gets each back, as a bar's colour is kept. **Rejected: a
+number field**, decided with the issue — a handful of steps seen live in the editor is what the
+collector needs, not a figure to type.
+
 ## Consequences
 
 - A copy photo can be shown to a buyer only through offer images for the covers to matter; anything
@@ -120,7 +134,7 @@ redirecting storage backend comes from another origin and cannot be read.
 - A cover is shown in the editor and on the copy's page **as it comes out on the offer images**
   (*amended by #2586*; before it, a CSS backdrop blur stood in for both blur and pixelation, and the
   collector judged the style from a picture that did not show it). The blocks and the blur strength
-  live in one pure module, `photo-cover-render.ts`, which the server's `photos/covers.ts` and the
+  (and, since #2587, what each strength step means) live in one pure module, `photo-cover-render.ts`, which the server's `photos/covers.ts` and the
   browser both draw with; the browser paints each pixelation or blur from the photo's own pixels,
   fetched from this origin as the eyedropper's are. A pixelation has the server's blocks exactly; their
   colours are a plain mean where sharp resamples with Lanczos, a shade apart at hard edges. A blur is

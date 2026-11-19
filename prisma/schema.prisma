@@ -4201,6 +4201,9 @@ model PhotoCover {
   // A bar's fill as lowercase `#rrggbb` (#1702); null on pixelation and blur, which take theirs
   // from the photo. Required on a bar — a CHECK holds both halves.
   color     String?
+  // A pixelation's or a blur's strength, a step from 1 to 6 (#2587); 3 is what every cover had
+  // before. Null on a bar, which has none. A CHECK holds both halves.
+  strength  Int?
   x         Float
   y         Float
   width     Float

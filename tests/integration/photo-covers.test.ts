@@ -292,6 +292,53 @@ describe("covering symbols on offer photos (#1665)", () => {
     await prisma.photoCover.create({ data: { ...row, style: "bar", color: "#ffffff" } });
   });
 
+  it("keeps each pixelation's and blur's own strength, and a new strength puts the images out of date (#2587)", async () => {
+    const copy = await scannedCopy();
+    const offerId = await preparingOffer(coveredPlatformId, [copy.itemId]);
+    const box = { shape: "rect" as const, x: 0.1, y: 0.1, width: 0.3, height: 0.3 };
+    // A pixelation sent without a strength, from a page opened before strengths, is today's.
+    await savePhotoCovers(userId, copy.photoId, [
+      { ...box, style: "pixelate" },
+      { ...box, style: "blur", strength: 5, x: 0.5 },
+    ]);
+    const [state] = await listItemPhotoCovers(userId, copy.itemId);
+    assert.deepEqual(
+      state.covers.map((c) => [c.style, c.strength]),
+      [
+        ["pixelate", 3],
+        ["blur", 5],
+      ]
+    );
+    await generate(offerId);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, false);
+
+    // Today's strength said out loud changes no pixel, so nothing goes out of date.
+    await savePhotoCovers(userId, copy.photoId, [
+      { ...box, style: "pixelate", strength: 3 },
+      { ...box, style: "blur", strength: 5, x: 0.5 },
+    ]);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, false);
+
+    await savePhotoCovers(userId, copy.photoId, [
+      { ...box, style: "pixelate", strength: 6 },
+      { ...box, style: "blur", strength: 5, x: 0.5 },
+    ]);
+    assert.equal((await getOfferPhotoPlanState(userId, offerId)).outOfDate, true);
+  });
+
+  it("the database holds a pixelation or blur to a step on the scale, and a bar to none (#2587)", async () => {
+    const copy = await scannedCopy();
+    const row = { photoId: copy.photoId, shape: "rect", x: 0, y: 0, width: 0.5, height: 0.5 };
+    await assert.rejects(() => prisma.photoCover.create({ data: { ...row, style: "pixelate" } }));
+    await assert.rejects(() => prisma.photoCover.create({ data: { ...row, style: "blur", strength: 7 } }));
+    await assert.rejects(() => prisma.photoCover.create({ data: { ...row, style: "pixelate", strength: 0 } }));
+    await assert.rejects(() =>
+      prisma.photoCover.create({ data: { ...row, style: "bar", color: "#000000", strength: 3 } })
+    );
+    await prisma.photoCover.create({ data: { ...row, style: "pixelate", strength: 1 } });
+    await prisma.photoCover.create({ data: { ...row, style: "blur", strength: 6 } });
+  });
+
   it("remembers covers: the same piece on another offer needs nothing redone", async () => {
     const copy = await scannedCopy();
     const first = await preparingOffer(coveredPlatformId, [copy.itemId]);
