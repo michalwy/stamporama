@@ -1648,7 +1648,9 @@ document. Assigning is done by picking a copy from the list itself. There are th
   actually take **this** tile are listed: a tile with a front goes onto a copy that has no front, and
   one with both sides onto a copy with neither. If a copy you know is on the order is missing from the
   list, it already has the side this tile carries — the line above the list says which that is, and
-  each row says what the copy already holds. This stays available for a copy on a **closed** lot:
+  each row says what the copy already holds. Each row names its copy the way every copy row does: its
+  catalogue numbers as prefixed chips — *Mi·PL 28*, *Sc 105* — with the main catalogue's first and
+  highlighted, and its condition as a coloured chip. This stays available for a copy on a **closed** lot:
   closing froze the money, not the photographs. Nothing is asked about lots here; the copy has one.
 - **Set aside to check** — the piece you cannot tell apart from its picture: a watermark, two shades
   of the same blue, a paper difference. Press it and a field opens **right where the button was**,
