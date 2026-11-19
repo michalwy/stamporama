@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { DEFAULT_PHOTO_COVER_COLOR, sameOriginPhotoUrl, type PhotoCover } from "@/lib/photo-cover-rules";
-import { coverPixelBox, paintCover, PIXELATE_BLOCKS, type Rgba } from "@/lib/photo-cover-render";
+import { coverStrength, DEFAULT_PHOTO_COVER_COLOR, sameOriginPhotoUrl, type PhotoCover } from "@/lib/photo-cover-rules";
+import { coverPixelBox, paintCover, PIXELATE_BLOCKS_BY_STRENGTH, type Rgba } from "@/lib/photo-cover-render";
 
 // A cover drawn on screen as it comes out on the offer images (#2586; ADR-0066): a bar in its colour, a
-// pixelation as its real blocks, a blur at its real strength — painted from the photo's own pixels with
+// pixelation as its real blocks, a blur at its real strength (#2587) — painted from the photo's own pixels with
 // the numbers the server draws with (`photo-cover-render.ts`). The editor and the copy's page both draw
 // covers through this.
 
@@ -50,9 +50,9 @@ export function needsPhotoPixels(covers: readonly (PhotoCover | null)[]): boolea
   return covers.some((cover) => cover != null && cover.style !== "bar");
 }
 
-/** The largest a box is read at, across its shorter side, before it is worked on: a pixelation's
- *  blocks are averaged from at least this much, a blur is worked at far less. */
-const READ_SIDE = PIXELATE_BLOCKS * 48;
+/** The largest a box is read at, across its shorter side, before it is worked on: even the finest
+ *  pixelation's blocks are averaged from a couple of dozen pixels each, a blur is worked at far less. */
+const READ_SIDE = Math.max(...PIXELATE_BLOCKS_BY_STRENGTH) * 24;
 
 let scratch: HTMLCanvasElement | null = null;
 
@@ -80,13 +80,14 @@ function paint(
   canvas: HTMLCanvasElement,
   kind: "pixelate" | "blur",
   share: { x: number; y: number; width: number; height: number },
+  strength: number,
   pixels: ImageBitmap | null
 ): boolean {
   if (!pixels) return false;
   const box = coverPixelBox(share, pixels.width, pixels.height);
   const region = readRegion(pixels, box);
   if (!region) return false;
-  const out = paintCover(kind, region, box);
+  const out = paintCover(kind, region, box, strength);
   canvas.width = out.width;
   canvas.height = out.height;
   const context = canvas.getContext("2d");
@@ -127,13 +128,14 @@ export function CoverView({
 } & Omit<React.HTMLAttributes<HTMLSpanElement>, "style" | "children">) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { style: kind, x, y, width, height } = cover;
+  const strength = coverStrength(cover);
 
   // Painted straight onto the canvas, which stays hidden until it holds the cover, over the neutral box.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (kind === "bar" || !canvas) return;
-    canvas.style.visibility = paint(canvas, kind, { x, y, width, height }, pixels) ? "visible" : "hidden";
-  }, [kind, x, y, width, height, pixels]);
+    canvas.style.visibility = paint(canvas, kind, { x, y, width, height }, strength, pixels) ? "visible" : "hidden";
+  }, [kind, x, y, width, height, strength, pixels]);
 
   const look: CSSProperties =
     kind === "bar"

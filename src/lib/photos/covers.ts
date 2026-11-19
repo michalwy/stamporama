@@ -1,13 +1,13 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { DEFAULT_PHOTO_COVER_COLOR, type PhotoCover } from "../photo-cover-rules";
+import { coverStrength, DEFAULT_PHOTO_COVER_COLOR, type PhotoCover } from "../photo-cover-rules";
 import { blurSigma, coverPixelBox, pixelateGrid, type PixelBox } from "../photo-cover-render";
 
 // Drawing a photo's covers into its pixels (#1665; ADR-0066) — for an offer image only. The bytes
 // handed in are a copy's stored `full` derivative and are never written back: what comes out is fed
 // straight to the collage renderer, so the copy's and the stamp's own photo stay as they were.
 //
-// The blocks and the blur strength are `photo-cover-render.ts`'s, which the editor draws with too, so
-// what is drawn on screen is what comes out here (#2586).
+// The blocks and the blur at each strength (#2587) are `photo-cover-render.ts`'s, which the editor draws
+// with too, so what is drawn on screen is what comes out here (#2586).
 
 interface Raw {
   data: Buffer;
@@ -31,14 +31,14 @@ async function coveredRegion(
       .toBuffer();
   }
   const region = await sharp(image.data, { raw }).extract(box).png().toBuffer();
+  const strength = coverStrength(cover);
   if (cover.style === "blur") {
-    return sharp(region)
-      .blur(blurSigma(box))
-      .png()
-      .toBuffer();
+    const sigma = blurSigma(box, strength);
+    // The strongest blur is the box in its one average colour — the blocks below, one of them.
+    if (sigma != null) return sharp(region).blur(sigma).png().toBuffer();
   }
   // Pixelate: average down to a handful of blocks, then blow them back up without smoothing.
-  const { columns, rows } = pixelateGrid(box);
+  const { columns, rows } = cover.style === "blur" ? { columns: 1, rows: 1 } : pixelateGrid(box, strength);
   const small = await sharp(region)
     .resize(columns, rows, { fit: "fill" })
     .png()

@@ -6,8 +6,11 @@ import { Icon } from "@/app/icons";
 import { useToast } from "@/app/toast-provider";
 import {
   averagePixelColor,
+  coverStrength,
   DEFAULT_PHOTO_COVER_COLOR,
+  DEFAULT_PHOTO_COVER_STRENGTH,
   eyedropperRegion,
+  hasCoverStrength,
   MIN_COVER_SIZE,
   normalizeCoverColor,
   normalizePhotoCoverShape,
@@ -15,11 +18,14 @@ import {
   PHOTO_COVER_SHAPE_LABELS,
   PHOTO_COVER_SHAPES,
   PHOTO_COVER_STYLE_LABELS,
+  PHOTO_COVER_STRENGTH_STEPS,
   PHOTO_COVER_STYLES,
   type PhotoCover,
   type PhotoCoverShape,
+  type PhotoCoverStrengthStyle,
   type PhotoCoverStyle,
 } from "@/lib/photo-cover-rules";
+import { BLUR_SIGMA_SHARE_BY_STRENGTH, PIXELATE_BLOCKS_BY_STRENGTH } from "@/lib/photo-cover-render";
 import { CoverView, loadPhotoPixels, needsPhotoPixels } from "./photo-cover-view";
 import { Tooltip } from "./tooltip";
 import { usePersistedCollectionValue } from "./use-persisted-collection-value";
@@ -28,7 +34,7 @@ import { usePersistedCollectionValue } from "./use-persisted-collection-value";
 // it is stored, so the picture can be drawn at whatever size the dialog has room for.
 //
 // Each cover is drawn as it comes out on the offer images (#2586) — a pixelation as its real blocks, a
-// blur at its real strength — painted from the photo's pixels by `CoverView` with the numbers the
+// blur at its real strength, whichever strength its slider is at (#2587) — painted from the photo's pixels by `CoverView` with the numbers the
 // server draws with, while it is drawn and dragged too.
 
 type Drag =
@@ -146,6 +152,12 @@ const TOOLBAR_SELECT: CSSProperties = {
   color: "var(--color-text-primary)",
 };
 
+/** What a strength step means, in words, for a screen reader and the slider's hint (#2587). */
+function strengthText(style: PhotoCoverStrengthStyle, strength: number): string {
+  if (style === "pixelate") return `${PIXELATE_BLOCKS_BY_STRENGTH[strength - 1]} blocks across`;
+  return BLUR_SIGMA_SHARE_BY_STRENGTH[strength - 1] == null ? "Plain colour" : `Blur ${strength} of ${PHOTO_COVER_STRENGTH_STEPS}`;
+}
+
 /**
  * Keyed on the photo by its caller, so each photo starts with nothing selected and the platform's
  * style. A bar starts in the colour last given to one on this browser, or the platform's the first
@@ -154,8 +166,9 @@ const TOOLBAR_SELECT: CSSProperties = {
  * The editor: the photo as large as the space allows, covers drawn by dragging, a cover selected by
  * clicking it, moved by dragging it and resized by its corners, removed with Delete — or all at
  * once with *Clear all*, which a proposal carried from the previous photo needs (#1703). The shape,
- * style and bar colour of the *next* cover are chosen in the toolbar, which also restyles the
- * selected one. A bar's colour can also be taken from the photo with the eyedropper (#2493).
+ * style, bar colour and pixelation or blur strength (#2587) of the *next* cover are chosen in the
+ * toolbar, which also restyles the selected one. A bar's colour can also be taken from the photo with
+ * the eyedropper (#2493). A new pixelation or blur starts at the default strength on every photo.
  */
 export function PhotoCoverEditor({
   collectionId,
@@ -183,6 +196,11 @@ export function PhotoCoverEditor({
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
   const [area, setArea] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [style, setStyle] = useState<PhotoCoverStyle>(defaultStyle);
+  // The strength the next pixelation and the next blur are drawn at (#2587), each its own.
+  const [strengths, setStrengths] = useState<Record<PhotoCoverStrengthStyle, number>>({
+    pixelate: DEFAULT_PHOTO_COVER_STRENGTH,
+    blur: DEFAULT_PHOTO_COVER_STRENGTH,
+  });
   const [selected, setSelected] = useState<number | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [draft, setDraft] = useState<PhotoCover | null>(null);
@@ -233,9 +251,10 @@ export function PhotoCoverEditor({
   const [lastShape, setShape] = usePersistedCollectionValue(COVER_SHAPE_NAMESPACE, collectionId);
   // The shape the next cover is drawn in: the last one chosen, else a rectangle.
   const shape = normalizePhotoCoverShape(lastShape);
-  /** The next cover as the toolbar stands — a bar in the current colour, anything else in none. */
+  /** The next cover as the toolbar stands — a bar in the current colour, anything else at the current
+   *  strength for its style. */
   const next = (box: { x: number; y: number; width: number; height: number }): PhotoCover =>
-    style === "bar" ? { shape, style, color, ...box } : { shape, style, ...box };
+    style === "bar" ? { shape, style, color, ...box } : { shape, style, strength: strengths[style], ...box };
 
   useLayoutEffect(() => {
     const el = areaRef.current;
@@ -355,12 +374,29 @@ export function PhotoCoverEditor({
   const restyle = (next: PhotoCoverStyle) => {
     setStyle(next);
     // A cover turned into a bar gets the current colour unless it was a bar of its own colour before.
+    // Its strength is kept for its old style and the new style's comes back — its own from before, else
+    // the toolbar's (#2587).
     if (selected != null) {
       onChange(
-        covers.map((c, i) =>
-          i === selected ? { ...c, style: next, ...(next === "bar" && !c.color ? { color } : {}) } : c
-        )
+        covers.map((c, i) => {
+          if (i !== selected) return c;
+          const { strength, keptStrengths, ...rest } = c;
+          const kept = hasCoverStrength(c.style) && strength != null ? { ...keptStrengths, [c.style]: strength } : keptStrengths;
+          return {
+            ...rest,
+            style: next,
+            ...(next === "bar" && !c.color ? { color } : {}),
+            ...(hasCoverStrength(next) ? { strength: kept?.[next] ?? strengths[next] } : {}),
+            ...(kept ? { keptStrengths: kept } : {}),
+          };
+        })
       );
+    }
+  };
+  const restrength = (kind: PhotoCoverStrengthStyle, next: number) => {
+    setStrengths((current) => ({ ...current, [kind]: next }));
+    if (selected != null && covers[selected]?.style === kind) {
+      onChange(covers.map((c, i) => (i === selected ? { ...c, strength: next } : c)));
     }
   };
   const recolor = (next: string) => {
@@ -380,6 +416,13 @@ export function PhotoCoverEditor({
   };
 
   const selectedCover = selected != null ? covers[selected] : null;
+  const shownStyle = selectedCover?.style ?? style;
+  const shownStrength =
+    selectedCover && hasCoverStrength(selectedCover.style)
+      ? coverStrength(selectedCover)
+      : hasCoverStrength(shownStyle)
+        ? strengths[shownStyle]
+        : DEFAULT_PHOTO_COVER_STRENGTH;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", height: "100%", minHeight: 0 }}>
@@ -405,7 +448,7 @@ export function PhotoCoverEditor({
         </label>
         <select
           id="cover-style"
-          value={selectedCover?.style ?? style}
+          value={shownStyle}
           disabled={disabled}
           onChange={(e) => restyle(e.target.value as PhotoCoverStyle)}
           style={TOOLBAR_SELECT}
@@ -416,7 +459,28 @@ export function PhotoCoverEditor({
             </option>
           ))}
         </select>
-        {(selectedCover?.style ?? style) === "bar" && (
+        {hasCoverStrength(shownStyle) && (
+          <>
+            <label style={{ color: "var(--color-text-secondary)" }} htmlFor="cover-strength">
+              Strength
+            </label>
+            <Tooltip content={`${strengthText(shownStyle, shownStrength)} · left hides less, right hides more`}>
+              <input
+                id="cover-strength"
+                type="range"
+                min={1}
+                max={PHOTO_COVER_STRENGTH_STEPS}
+                step={1}
+                value={shownStrength}
+                aria-valuetext={strengthText(shownStyle, shownStrength)}
+                disabled={disabled}
+                onChange={(e) => restrength(shownStyle, Number(e.target.value))}
+                style={{ width: "7rem", accentColor: "var(--color-action-primary)" }}
+              />
+            </Tooltip>
+          </>
+        )}
+        {shownStyle === "bar" && (
           <>
             <label style={{ color: "var(--color-text-secondary)" }} htmlFor="cover-color">
               Colour

@@ -73,10 +73,11 @@ export interface FingerprintSet extends SetOrderRow {
 }
 
 /** Everything the generator read, in whatever order the caller happened to read it. */
-/** One cover as hashed: shape, style and box, then a bar's colour when it is not black (#1702). */
+/** One cover as hashed: shape, style and box, then a bar's colour when it is not black (#1702), or a
+ *  pixelation's or blur's strength when it is not the default (#2587). */
 export type CoverFingerprintRow =
   | readonly [string, string, number, number, number, number]
-  | readonly [string, string, number, number, number, number, string];
+  | readonly [string, string, number, number, number, number, string | number];
 
 export interface OfferPhotoFingerprintInput {
   sets: readonly FingerprintSet[];

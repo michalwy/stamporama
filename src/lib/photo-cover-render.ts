@@ -5,21 +5,30 @@
 //
 // No Prisma, no DOM, no sharp: pixels come in and go out as plain RGBA arrays.
 
-import type { PhotoCover } from "./photo-cover-rules";
+import { DEFAULT_PHOTO_COVER_STRENGTH, normalizeCoverStrength, type PhotoCover } from "./photo-cover-rules";
 
-/** How many blocks a pixelated cover is across its shorter side. Few enough that a portrait or a
- *  symbol cannot be read back out of it, many enough that it still reads as a covered stamp. */
-export const PIXELATE_BLOCKS = 6;
+/** How many blocks a pixelated cover is across its shorter side, at each strength step from 1 (#2587):
+ *  from many small blocks to two large ones, which leave nothing to recognise. Step 3's six is what
+ *  every pixelation had before strengths — few enough that a portrait or a symbol cannot be read back
+ *  out of it on most stamps, many enough that it still reads as a covered stamp. */
+export const PIXELATE_BLOCKS_BY_STRENGTH: readonly number[] = [12, 9, 6, 4, 3, 2];
 
-/** A blur's strength as a share of the cover's shorter side — strong enough to leave only colour. */
-export const BLUR_SIGMA_SHARE = 0.2;
+/** A blur's Gaussian sigma as a share of the cover's shorter side, at each strength step from 1
+ *  (#2587); null at the last, which is no blur but the box in its one average colour — a blur of plain
+ *  colour, leaving nothing to recognise. Step 3's 0.2 is what every blur had before strengths. */
+export const BLUR_SIGMA_SHARE_BY_STRENGTH: readonly (number | null)[] = [0.06, 0.12, 0.2, 0.3, 0.45, null];
+
+/** A step's entry in a table indexed from 1, an unknown step read as the default (#2587). */
+function atStrength<T>(table: readonly T[], strength: number): T {
+  return table[(normalizeCoverStrength(strength) ?? DEFAULT_PHOTO_COVER_STRENGTH) - 1];
+}
 
 /** Where a Gaussian's mask is cut off, as a share of its peak — sharp's own default for `blur`, which
  *  the server uses, so the screen cuts it at the same place. */
 export const BLUR_MIN_AMPLITUDE = 0.2;
 
-/** How many pixels across its shorter side the screen blurs a cover at. The blur is a fifth of that
- *  side, so working at this size and drawing the result larger loses nothing the eye can see, and it
+/** How many pixels across its shorter side the screen blurs a cover at. Even the lightest blur is a
+ *  few of these pixels wide, so working at this size and drawing the result larger loses nothing the eye can see, and it
  *  keeps the work the same however large the photo, so a cover can be dragged smoothly. */
 export const BLUR_WORK_SIDE = 64;
 
@@ -50,18 +59,23 @@ export function coverPixelBox(
   return { left, top, width: right - left, height: bottom - top };
 }
 
-/** How many blocks a pixelated box is cut into, across and down. */
-export function pixelateGrid(box: { width: number; height: number }): { columns: number; rows: number } {
-  const block = Math.max(1, Math.ceil(Math.min(box.width, box.height) / PIXELATE_BLOCKS));
+/** How many blocks a pixelated box is cut into, across and down, at a strength step. */
+export function pixelateGrid(
+  box: { width: number; height: number },
+  strength: number
+): { columns: number; rows: number } {
+  const block = Math.max(1, Math.ceil(Math.min(box.width, box.height) / atStrength(PIXELATE_BLOCKS_BY_STRENGTH, strength)));
   return {
     columns: Math.max(1, Math.ceil(box.width / block)),
     rows: Math.max(1, Math.ceil(box.height / block)),
   };
 }
 
-/** A blurred box's Gaussian sigma, in the photo's pixels. */
-export function blurSigma(box: { width: number; height: number }): number {
-  return Math.max(1, Math.min(box.width, box.height) * BLUR_SIGMA_SHARE);
+/** A blurred box's Gaussian sigma, in the photo's pixels, at a strength step — or null at the step
+ *  that leaves the box in its one average colour (see {@link BLUR_SIGMA_SHARE_BY_STRENGTH}). */
+export function blurSigma(box: { width: number; height: number }, strength: number): number | null {
+  const share = atStrength(BLUR_SIGMA_SHARE_BY_STRENGTH, strength);
+  return share == null ? null : Math.max(1, Math.min(box.width, box.height) * share);
 }
 
 /** For each target pixel along one axis, the source pixels it covers and how much of each. */
@@ -205,22 +219,25 @@ export function gaussianBlur(src: Rgba, sigma: number, minAmplitude: number = BL
  * What the screen draws for a pixelated or blurred cover, from the pixels under it.
  *
  * `region` is the box's pixels, read at any size no larger than the box; `box` is the box's size in the
- * photo's own pixels, which fixes the blocks and the blur. A pixelation comes back as its blocks, one
- * pixel each, to be stretched over the box without smoothing — the server's blocks exactly. A blur comes
- * back at most {@link BLUR_WORK_SIDE} pixels across its shorter side, to be stretched over the box
- * smoothly.
+ * photo's own pixels, which with `strength` fixes the blocks and the blur. A pixelation comes back as
+ * its blocks, one pixel each, to be stretched over the box without smoothing — the server's blocks
+ * exactly. A blur comes back at most {@link BLUR_WORK_SIDE} pixels across its shorter side, to be
+ * stretched over the box smoothly; the blur of plain colour as one pixel of the box's average colour.
  */
 export function paintCover(
   style: "pixelate" | "blur",
   region: Rgba,
-  box: { width: number; height: number }
+  box: { width: number; height: number },
+  strength: number
 ): Rgba {
   if (style === "pixelate") {
-    const { columns, rows } = pixelateGrid(box);
+    const { columns, rows } = pixelateGrid(box, strength);
     return averageDown(region, columns, rows);
   }
+  const sigma = blurSigma(box, strength);
+  if (sigma == null) return averageDown(region, 1, 1);
   const scale = Math.min(1, BLUR_WORK_SIDE / Math.min(box.width, box.height));
   const work = averageDown(region, Math.min(region.width, box.width * scale), Math.min(region.height, box.height * scale));
   // The sigma is the box's, in the photo's pixels, carried to the work size.
-  return gaussianBlur(work, blurSigma(box) * (work.width / box.width));
+  return gaussianBlur(work, sigma * (work.width / box.width));
 }

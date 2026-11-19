@@ -30,7 +30,7 @@ function storedCovers(rows: readonly Parameters<typeof storedPhotoCover>[0][]): 
 
 const COVER_ROWS = {
   orderBy: { sortOrder: "asc" },
-  select: { shape: true, style: true, color: true, x: true, y: true, width: true, height: true },
+  select: { shape: true, style: true, color: true, strength: true, x: true, y: true, width: true, height: true },
 } as const;
 
 /**
@@ -57,7 +57,18 @@ export async function savePhotoCovers(
   await prisma.$transaction([
     prisma.photoCover.deleteMany({ where: { photoId } }),
     prisma.photoCover.createMany({
-      data: covers.map((cover, sortOrder) => ({ photoId, sortOrder, ...cover, color: cover.color ?? null })),
+      data: covers.map((cover, sortOrder) => ({
+        photoId,
+        sortOrder,
+        shape: cover.shape,
+        style: cover.style,
+        color: cover.color ?? null,
+        strength: cover.strength ?? null,
+        x: cover.x,
+        y: cover.y,
+        width: cover.width,
+        height: cover.height,
+      })),
     }),
     prisma.photo.update({ where: { id: photoId }, data: { coversCheckedAt: new Date() } }),
   ]);

@@ -12,6 +12,7 @@ import {
   eyedropperRegion,
   sameOriginPhotoUrl,
   DEFAULT_PHOTO_COVER_COLOR,
+  DEFAULT_PHOTO_COVER_STRENGTH,
   NO_CARRIED_COVERS,
   normalizeCoverColor,
   normalizePhotoCoverShape,
@@ -30,10 +31,12 @@ import { fingerprintOfferPhotoInputs, type OfferPhotoFingerprintInput } from "..
 // Covering symbols on offer photos (#1665): the pure rules, the renderer on real pixels, and the
 // two places the feature reaches into the photo plan — its fingerprint and the ready gate.
 
-/** A cover as stored: a bar carries its colour (black unless said), any other style none. */
+/** A cover as stored: a bar carries its colour (black unless said), any other style its strength. */
 const rect = (over: Partial<PhotoCover> = {}): PhotoCover => {
   const cover: PhotoCover = { shape: "rect", style: "bar", x: 0.25, y: 0.25, width: 0.5, height: 0.5, ...over };
-  return cover.style === "bar" ? { color: DEFAULT_PHOTO_COVER_COLOR, ...cover } : cover;
+  return cover.style === "bar"
+    ? { color: DEFAULT_PHOTO_COVER_COLOR, ...cover }
+    : { strength: DEFAULT_PHOTO_COVER_STRENGTH, ...cover };
 };
 
 describe("cleanPhotoCovers", () => {
@@ -90,7 +93,7 @@ describe("a solid cover's colour (#1702)", () => {
   });
 
   it("reads a stored row forgivingly: a bar without a usable colour is black, a blur has none", () => {
-    const row = { shape: "rect", style: "bar", x: 0, y: 0, width: 0.5, height: 0.5 };
+    const row = { shape: "rect", style: "bar", strength: null, x: 0, y: 0, width: 0.5, height: 0.5 };
     assert.equal(storedPhotoCover({ ...row, color: null })?.color, "#000000");
     assert.equal(storedPhotoCover({ ...row, color: "#808080" })?.color, "#808080");
     assert.equal(storedPhotoCover({ ...row, style: "blur", color: "#808080" })?.color, undefined);
@@ -104,6 +107,46 @@ describe("a solid cover's colour (#1702)", () => {
     assert.equal(normalizePlatformCoverColor("#ffffff"), "#ffffff");
     assert.equal(normalizePlatformCoverColor("garbage"), "#000000");
     assert.equal(normalizePlatformCoverColor(null), "#000000");
+  });
+});
+
+describe("a pixelation's or a blur's strength (#2587)", () => {
+  it("is kept on a pixelation or a blur, each its own", () => {
+    const [a, b] = cleanPhotoCovers([rect({ style: "pixelate", strength: 6 }), rect({ style: "blur", strength: 1 })]);
+    assert.equal(a.strength, 6);
+    assert.equal(b.strength, 1);
+  });
+
+  it("is today's on a cover sent without one — from a page opened before covers had a strength", () => {
+    const bare: PhotoCover = { ...rect({ style: "blur" }) };
+    delete bare.strength;
+    assert.equal(cleanPhotoCovers([bare])[0].strength, DEFAULT_PHOTO_COVER_STRENGTH);
+  });
+
+  it("refuses one that is not a step on the scale", () => {
+    for (const strength of [0, 7, 2.5, Number.NaN]) {
+      assert.throws(() => cleanPhotoCovers([rect({ style: "pixelate", strength })]), PhotoCoverValidationError);
+    }
+    assert.throws(
+      () => cleanPhotoCovers([{ ...rect({ style: "pixelate" }), strength: "3" }]),
+      PhotoCoverValidationError
+    );
+  });
+
+  it("is dropped from a bar, and the editor's memory of other styles' strengths is never stored", () => {
+    const [bar] = cleanPhotoCovers([{ ...rect(), strength: 5, keptStrengths: { blur: 5 } }]);
+    assert.equal("strength" in bar, false);
+    assert.equal("keptStrengths" in bar, false);
+    const [blur] = cleanPhotoCovers([rect({ style: "blur", strength: 4, keptStrengths: { pixelate: 2 } })]);
+    assert.equal("keptStrengths" in blur, false);
+  });
+
+  it("reads a stored row forgivingly: unusable or missing is today's, a bar has none", () => {
+    const row = { shape: "rect", style: "pixelate", color: null, x: 0, y: 0, width: 0.5, height: 0.5 };
+    assert.equal(storedPhotoCover({ ...row, strength: 5 })?.strength, 5);
+    assert.equal(storedPhotoCover({ ...row, strength: null })?.strength, DEFAULT_PHOTO_COVER_STRENGTH);
+    assert.equal(storedPhotoCover({ ...row, strength: 42 })?.strength, DEFAULT_PHOTO_COVER_STRENGTH);
+    assert.equal(storedPhotoCover({ ...row, style: "bar", strength: 5 })?.strength, undefined);
   });
 });
 
@@ -238,6 +281,18 @@ describe("the covers in an offer's photo fingerprint", () => {
     const cream = fingerprintOfferPhotoInputs({ ...base, covers: rows(rect({ color: "#f3ead3" })) });
     assert.notEqual(white, black);
     assert.notEqual(cream, white);
+  });
+
+  it("changes when a strength changes, but today's strength hashes as every cover did before (#2587)", () => {
+    const rows = (cover: PhotoCover) => coverFingerprintRows(true, new Map([["f1", [cover]]]));
+    for (const style of ["pixelate", "blur"] as const) {
+      assert.deepEqual(rows(rect({ style })), [["f1", [["rect", style, 0.25, 0.25, 0.5, 0.5]]]]);
+      const today = fingerprintOfferPhotoInputs({ ...base, covers: rows(rect({ style })) });
+      const stronger = fingerprintOfferPhotoInputs({ ...base, covers: rows(rect({ style, strength: 5 })) });
+      const lighter = fingerprintOfferPhotoInputs({ ...base, covers: rows(rect({ style, strength: 1 })) });
+      assert.notEqual(stronger, today);
+      assert.notEqual(lighter, stronger);
+    }
   });
 
   it("does not depend on the order the photos were read in", () => {
