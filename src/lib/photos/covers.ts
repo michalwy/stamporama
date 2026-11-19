@@ -1,16 +1,13 @@
 import sharp, { type OverlayOptions } from "sharp";
 import { DEFAULT_PHOTO_COVER_COLOR, type PhotoCover } from "../photo-cover-rules";
+import { blurSigma, coverPixelBox, pixelateGrid, type PixelBox } from "../photo-cover-render";
 
 // Drawing a photo's covers into its pixels (#1665; ADR-0066) — for an offer image only. The bytes
 // handed in are a copy's stored `full` derivative and are never written back: what comes out is fed
 // straight to the collage renderer, so the copy's and the stamp's own photo stay as they were.
-
-/** How many blocks a pixelated cover is across its shorter side. Few enough that a portrait or a
- *  symbol cannot be read back out of it, many enough that it still reads as a covered stamp. */
-const PIXELATE_BLOCKS = 6;
-
-/** A blur's strength as a share of the cover's shorter side — strong enough to leave only colour. */
-const BLUR_SIGMA_SHARE = 0.2;
+//
+// The blocks and the blur strength are `photo-cover-render.ts`'s, which the editor draws with too, so
+// what is drawn on screen is what comes out here (#2586).
 
 interface Raw {
   data: Buffer;
@@ -19,19 +16,10 @@ interface Raw {
   channels: 1 | 2 | 3 | 4;
 }
 
-/** The cover's box in pixels, clipped to the image and never empty. */
-function pixelBox(cover: PhotoCover, width: number, height: number) {
-  const left = Math.min(width - 1, Math.max(0, Math.floor(cover.x * width)));
-  const top = Math.min(height - 1, Math.max(0, Math.floor(cover.y * height)));
-  const right = Math.min(width, Math.max(left + 1, Math.ceil((cover.x + cover.width) * width)));
-  const bottom = Math.min(height, Math.max(top + 1, Math.ceil((cover.y + cover.height) * height)));
-  return { left, top, width: right - left, height: bottom - top };
-}
-
 async function coveredRegion(
   image: Raw,
   cover: PhotoCover,
-  box: { left: number; top: number; width: number; height: number }
+  box: PixelBox
 ): Promise<Buffer> {
   const raw = { width: image.width, height: image.height, channels: image.channels };
   if (cover.style === "bar") {
@@ -43,19 +31,16 @@ async function coveredRegion(
       .toBuffer();
   }
   const region = await sharp(image.data, { raw }).extract(box).png().toBuffer();
-  const shorter = Math.min(box.width, box.height);
   if (cover.style === "blur") {
     return sharp(region)
-      .blur(Math.max(1, shorter * BLUR_SIGMA_SHARE))
+      .blur(blurSigma(box))
       .png()
       .toBuffer();
   }
   // Pixelate: average down to a handful of blocks, then blow them back up without smoothing.
-  const block = Math.max(1, Math.ceil(shorter / PIXELATE_BLOCKS));
+  const { columns, rows } = pixelateGrid(box);
   const small = await sharp(region)
-    .resize(Math.max(1, Math.ceil(box.width / block)), Math.max(1, Math.ceil(box.height / block)), {
-      fit: "fill",
-    })
+    .resize(columns, rows, { fit: "fill" })
     .png()
     .toBuffer();
   return sharp(small)
@@ -96,7 +81,7 @@ export async function applyPhotoCovers(
 
   const overlays: OverlayOptions[] = [];
   for (const cover of covers) {
-    const box = pixelBox(cover, image.width, image.height);
+    const box = coverPixelBox(cover, image.width, image.height);
     let region = await coveredRegion(image, cover, box);
     if (cover.shape === "ellipse") region = await maskEllipse(region, box.width, box.height);
     overlays.push({ input: region, left: box.left, top: box.top });

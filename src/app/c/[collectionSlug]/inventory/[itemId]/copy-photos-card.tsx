@@ -9,7 +9,7 @@ import type { CopyPhotoScales } from "@/lib/photo-scales";
 import { defaultProfileIdOf, lacksPhotoScale, photoScaleLabel } from "@/lib/photo-scale";
 import { DETAIL_BUTTON, DetailCard } from "@/app/c/[collectionSlug]/shared/detail-page";
 import { PhotoStrip, photoFullUrl } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
-import { CoveredPhoto } from "@/app/c/[collectionSlug]/shared/photo-cover-editor";
+import { CoveredPhoto } from "@/app/c/[collectionSlug]/shared/photo-cover-view";
 import { PhotoCoverWalkDialog } from "@/app/c/[collectionSlug]/shared/photo-cover-walk-dialog";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { CopyPhotoScalesDialog } from "./copy-photo-scales-dialog";
