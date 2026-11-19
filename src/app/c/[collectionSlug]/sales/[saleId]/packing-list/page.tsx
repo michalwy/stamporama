@@ -22,7 +22,7 @@ import {
   type PackingSet,
 } from "@/lib/packing-list";
 import { formatEntityNo } from "@/lib/quick-jump";
-import { saleLineHeading } from "@/lib/sale-line-name";
+import { saleLinePackingHeading } from "@/lib/sale-line-name";
 import { saleStatusMeta } from "../../sale-status";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { SalePackingSheet } from "./sale-packing-sheet";
@@ -94,14 +94,14 @@ export default async function PackingListPage({ params }: PackingListPageProps) 
     new Map(formats.map((f) => [f.id, f.pieceKind]))
   );
   // Each set named as the sale screen names its line (#2189): the offer and its title, the set's
-  // numbers under it, the price.
+  // numbers under it, the price — but without which of the offer's sets it is (#2593).
   const positions = packingSetOrder(sale.lines);
   const sets = new Map<string, PackingSet>(
     sale.lines.map((line) => [
       line.id,
       {
         id: line.id,
-        title: saleLineHeading(line.name),
+        title: saleLinePackingHeading(line.name),
         numbers: line.name.numbers,
         onNoOffer: line.offerSetId === null,
         freeExtra: line.freeExtra,

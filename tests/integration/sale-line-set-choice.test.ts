@@ -406,6 +406,8 @@ describe("choosing which set left on a sale line (#697)", () => {
     const [one] = (await getSaleDetail(userId, partial))!.lines;
     assert.equal(one.name.offerNo, offerNo);
     assert.equal(one.name.title, "🇵🇱 Polska: Zestaw — set 2 of 3");
+    // The packing list prints the same line without which set it is (#2593).
+    assert.equal(one.name.packingTitle, "🇵🇱 Polska: Zestaw");
 
     // Retitled since: the sale follows.
     await patchOffer(userId, offerId, { name: "🇵🇱 Polska: Zestaw kasowany" });

@@ -4,7 +4,9 @@ import { formatEntityNo } from "./quick-jump";
 // copies' catalogue numbers — *Fi·PL 377-78,380-85,…* reads as nothing on a parcel of seventy copies,
 // while *#2848 · 🇵🇱 Polska: Zestaw znaczków kasowanych* is the listing the buyer bought. The numbers
 // are not dropped: they move to a muted second line. One rule for the sale's screen and its printed
-// packing list, so the two name a line alike.
+// packing list, so the two name a line alike — except for which of the offer's sets this is
+// (#2593): the packing list drops *— set k of n*, since the copies listed under the heading already
+// say what goes in the parcel, and keeps only a set's own name.
 //
 // A sale's free extras (#2420) are one line, and it is named by what it is: **Free extras**, the
 // same fixed words on every platform, with the copies' numbers on the second line as on any set.
@@ -40,6 +42,9 @@ export interface SaleLineName {
   /** The offer's title, with which of its sets this is where that needs saying — else the set's
    *  own label. Printed after the number. */
   title: string;
+  /** {@link title} without *— set k of n* (#2593): the offer's title and the set's own name, if it
+   *  has one — what the packing list prints. Equal to `title` wherever there is no ordinal. */
+  packingTitle: string;
   /** The set's catalogue numbers, muted under the heading; null where the heading already says them. */
   numbers: string | null;
 }
@@ -48,19 +53,43 @@ export interface SaleLineName {
 export function saleLineName(line: SaleLineNameInput): SaleLineName {
   const { offer } = line;
   if (line.freeExtra) {
-    return { offerNo: null, title: FREE_EXTRAS_LINE_TITLE, numbers: secondLine(FREE_EXTRAS_LINE_TITLE, line.setNumbers) };
+    return {
+      offerNo: null,
+      title: FREE_EXTRAS_LINE_TITLE,
+      packingTitle: FREE_EXTRAS_LINE_TITLE,
+      numbers: secondLine(FREE_EXTRAS_LINE_TITLE, line.setNumbers),
+    };
   }
-  if (!offer) return { offerNo: null, title: line.setLabel, numbers: secondLine(line.setLabel, line.setNumbers) };
-  const which = offer.set
-    ? ` — set ${offer.set.position} of ${offer.set.count}${offer.set.ownName ? ` · ${offer.set.ownName}` : ""}`
-    : "";
-  const title = `${offer.title}${which}`;
-  return { offerNo: offer.offerNo, title, numbers: secondLine(title, line.setNumbers) };
+  if (!offer) {
+    return {
+      offerNo: null,
+      title: line.setLabel,
+      packingTitle: line.setLabel,
+      numbers: secondLine(line.setLabel, line.setNumbers),
+    };
+  }
+  const ownName = offer.set?.ownName ? ` · ${offer.set.ownName}` : "";
+  const title = offer.set ? `${offer.title} — set ${offer.set.position} of ${offer.set.count}${ownName}` : offer.title;
+  return {
+    offerNo: offer.offerNo,
+    title,
+    packingTitle: `${offer.title}${ownName}`,
+    numbers: secondLine(title, line.setNumbers),
+  };
 }
 
-/** The whole heading as one string, for a surface that prints it plain (the packing list). */
+/** The whole heading as one string, for a surface that prints it plain. */
 export function saleLineHeading(name: SaleLineName): string {
-  return name.offerNo === null ? name.title : `${formatEntityNo(name.offerNo)} · ${name.title}`;
+  return withNo(name.offerNo, name.title);
+}
+
+/** The heading the packing list prints (#2593): {@link saleLineHeading} without *— set k of n*. */
+export function saleLinePackingHeading(name: SaleLineName): string {
+  return withNo(name.offerNo, name.packingTitle);
+}
+
+function withNo(offerNo: number | null, title: string): string {
+  return offerNo === null ? title : `${formatEntityNo(offerNo)} · ${title}`;
 }
 
 function secondLine(heading: string, numbers: string): string | null {

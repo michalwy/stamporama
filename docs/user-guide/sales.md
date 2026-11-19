@@ -640,7 +640,8 @@ line; hover it to read them in full.
 
 - **When the offer held several sets and this sale took only some**, the name says which:
   `#2848 · <offer title> — set 2 of 5`, followed by the set's own name where it has one. A sale that
-  took every set of the offer leaves this out.
+  took every set of the offer leaves this out. The [printed packing list](#grouping-by-sold-set)
+  leaves it out too: the copies under the heading already say what goes in the parcel.
 - The offer's title is read **as it is now**: retitle the offer and the sale follows.
 - A [set sold off no offer](#selling-copies-that-are-on-no-offer), and a set whose offer has since
   been deleted, keeps the set's own name, with no link.
@@ -800,7 +801,10 @@ the head of the chips row turns the sheet into **one section per sold set** inst
 - Each section is [named as the sale screen names the set](#how-a-sold-set-is-named) — the
   **offer**'s number and title, with the set's catalogue numbers on a muted line under it (or the
   set's own name and *on no offer*, for a [set sold off no offer](#selling-copies-that-are-on-no-offer))
-  — and carries its **price** at the far end, so a packed set can be matched to the buyer's order.
+  — but **without *set 2 of 5***: the heading only has to say which listing the buyer bought, and the
+  copies under it say the rest. A set with a name of its own keeps it after the title. Two sets of
+  the same offer in one sale print two headings that read alike, each over its own copies. Each
+  section carries its **price** at the far end, so a packed set can be matched to the buyer's order.
 - The sections follow the order of the sale's lines, except that **sets sold through one offer sit
   one after another**.
 - Inside a set, the copies are in **location, then ref** order, so a set is still picked down the

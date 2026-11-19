@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { offerSetOrdinal, saleLineHeading, saleLineName } from "../../src/lib/sale-line-name";
+import { offerSetOrdinal, saleLineHeading, saleLineName, saleLinePackingHeading } from "../../src/lib/sale-line-name";
 
 // A sale line named by the offer it sold through (#2189) ---------------------------------------
 
@@ -14,7 +14,7 @@ describe("saleLineName", () => {
       setNumbers: NUMBERS,
       offer: { offerNo: 2848, title: TITLE, set: null },
     });
-    assert.deepEqual(name, { offerNo: 2848, title: TITLE, numbers: NUMBERS });
+    assert.deepEqual(name, { offerNo: 2848, title: TITLE, packingTitle: TITLE, numbers: NUMBERS });
     assert.equal(saleLineHeading(name), `#2848 · ${TITLE}`);
   });
 
@@ -34,21 +34,41 @@ describe("saleLineName", () => {
     );
   });
 
+  it("leaves which set it is off the packing list's heading, keeping the set's own name (#2593)", () => {
+    const offer = { offerNo: 1506, title: TITLE };
+    const plain = saleLineName({
+      setLabel: NUMBERS,
+      setNumbers: NUMBERS,
+      offer: { ...offer, set: { position: 1, count: 2, ownName: null } },
+    });
+    assert.equal(saleLineHeading(plain), `#1506 · ${TITLE} — set 1 of 2`);
+    assert.equal(saleLinePackingHeading(plain), `#1506 · ${TITLE}`);
+    const named = saleLineName({
+      setLabel: "Chopin pair",
+      setNumbers: NUMBERS,
+      offer: { ...offer, set: { position: 2, count: 2, ownName: "Chopin pair" } },
+    });
+    assert.equal(saleLineHeading(named), `#1506 · ${TITLE} — set 2 of 2 · Chopin pair`);
+    assert.equal(saleLinePackingHeading(named), `#1506 · ${TITLE} · Chopin pair`);
+    assert.equal(named.numbers, NUMBERS);
+  });
+
   it("keeps the set's own label on a set sold off no offer, or from a deleted one", () => {
     const name = saleLineName({ setLabel: NUMBERS, setNumbers: NUMBERS, offer: null });
-    assert.deepEqual(name, { offerNo: null, title: NUMBERS, numbers: null });
+    assert.deepEqual(name, { offerNo: null, title: NUMBERS, packingTitle: NUMBERS, numbers: null });
     assert.equal(saleLineHeading(name), NUMBERS);
   });
 
   it("still shows the numbers under a set whose own title heads the line", () => {
     const name = saleLineName({ setLabel: "Chopin pair", setNumbers: NUMBERS, offer: null });
-    assert.deepEqual(name, { offerNo: null, title: "Chopin pair", numbers: NUMBERS });
+    assert.deepEqual(name, { offerNo: null, title: "Chopin pair", packingTitle: "Chopin pair", numbers: NUMBERS });
   });
 
   it("names a sale's free-extras line Free extras, its copies' numbers under it (#2420)", () => {
     const name = saleLineName({ setLabel: NUMBERS, setNumbers: NUMBERS, offer: null, freeExtra: true });
-    assert.deepEqual(name, { offerNo: null, title: "Free extras", numbers: NUMBERS });
+    assert.deepEqual(name, { offerNo: null, title: "Free extras", packingTitle: "Free extras", numbers: NUMBERS });
     assert.equal(saleLineHeading(name), "Free extras");
+    assert.equal(saleLinePackingHeading(name), "Free extras");
   });
 
   it("prints no second line when there are no numbers", () => {
