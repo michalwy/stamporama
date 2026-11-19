@@ -71,6 +71,8 @@ import {
   type LotCopiesParams,
 } from "@/app/c/[collectionSlug]/purchases/[purchaseId]/use-lot-copies-query";
 import { TextArea, TextInput } from "./text-input";
+import { CatalogNumberChips } from "./catalog-number-chips";
+import { ConditionChip } from "./dictionary-chip";
 
 /**
  * A tile — or a **run of them** — and what can become of it (#567) — three ends, and since #597 one
@@ -856,6 +858,8 @@ export function TileIdentifyDialog({
             <Muted>Checking what this lot already holds…</Muted>
           ) : mode === "assign" ? (
             <AssignList
+              collectionId={collectionId}
+              maps={vendorMaps}
               copies={candidates}
               roles={roles}
               fromAuction={fromAuction}
@@ -1108,6 +1112,8 @@ function IdentifyIntro({
 // ── Assigning to a copy already on the lot ───────────────────────────────────────────────────
 
 function AssignList({
+  collectionId,
+  maps,
   copies,
   roles,
   fromAuction,
@@ -1117,6 +1123,9 @@ function AssignList({
   onLoadMore,
   onPick,
 }: {
+  collectionId: string;
+  /** For the rows' catalogue chips — the dialog already holds them for the history panel. */
+  maps: AreaVendorMaps;
   /** Already narrowed to copies holding none of `roles` — the dialog above owns the query, because
    * whether this list holds anything is what chose to show it. */
   copies: ItemListItem[];
@@ -1145,7 +1154,14 @@ function AssignList({
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         {copies.map((copy) => (
-          <CopyRow key={copy.id} copy={copy} disabled={disabled} onPick={() => onPick(copy.id)} />
+          <CopyRow
+            key={copy.id}
+            collectionId={collectionId}
+            maps={maps}
+            copy={copy}
+            disabled={disabled}
+            onPick={() => onPick(copy.id)}
+          />
         ))}
       </div>
       {hasMore && (
@@ -1191,15 +1207,26 @@ function listScope(roles: TilePhotoRole[]): string {
 }
 
 function CopyRow({
+  collectionId,
+  maps,
   copy,
   disabled,
   onPick,
 }: {
+  collectionId: string;
+  maps: AreaVendorMaps;
   copy: ItemListItem;
   disabled: boolean;
   onPick: () => void;
 }) {
-  const numbers = copy.catalogNumbers.map((n) => n.number).join(" · ");
+  /** Every number as the prefixed chips every stamp and copy row draws (#1525, #2595) — the main
+   * catalogue's first and highlighted. Bare numbers joined by dots could not say which catalogue a
+   * number came from, and two copies' *28*s could not be told apart. */
+  const chips = catalogChipLabels(
+    copy.catalogNumbers,
+    maps.vendorMapFor(copy.areaId, copy.issueId),
+    copy.areaId ? (maps.primaryVendorByArea.get(copy.areaId) ?? null) : null
+  );
   return (
     <button
       type="button"
@@ -1227,15 +1254,31 @@ function CopyRow({
       >
         {formatItemNo(copy.itemNo)}
       </span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: "0.8125rem" }}>
-        {numbers && <strong>{numbers}</strong>}
-        {numbers && copy.stampName ? " — " : ""}
-        {copy.stampName ?? (numbers ? "" : "Unnamed stamp")}
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "0.3rem",
+          fontSize: "0.8125rem",
+        }}
+      >
+        <CatalogNumberChips chips={chips} />
+        {copy.stampName ? (
+          <span>{copy.stampName}</span>
+        ) : (
+          chips.length === 0 && <span>Unnamed stamp</span>
+        )}
+        {/* The condition in its dictionary colour, as on every other list (#728) — a piece has
+            none (#2383). */}
         {copy.conditionAbbreviation && (
-          <span style={{ color: "var(--color-text-muted)" }}>
-            {" "}
-            · {copy.conditionAbbreviation}
-          </span>
+          <ConditionChip
+            collectionId={collectionId}
+            conditionId={copy.conditionId}
+            label={copy.conditionAbbreviation}
+          />
         )}
       </span>
       {/* What the copy already holds — the reason this path exists at all. From the shared helper,
