@@ -138,6 +138,9 @@ interface OfferRowProps {
   assistantRun: AssistantRun | null;
   /** Why the Assistant cannot be asked right now — not installed, not connected — or null. */
   assistantUnavailable: string | null;
+  /** Why the selection bar's last *Remove sets sold elsewhere* or *Fix everything* left this ticked
+   *  offer alone (#2581), or null. */
+  leftAloneNote?: string | null;
   /** Bulk selection: when present the row gains a checkbox in the gutter the list's select-all
    * shares. **Every** row gets one, terminal offers included — unlike the copies list (#373), where
    * one eligibility rule covers every bulk action, the two actions here disagree (a withdrawn offer
@@ -169,6 +172,7 @@ export function OfferRow({
   onAssistantRun,
   assistantRun,
   assistantUnavailable,
+  leftAloneNote = null,
   selection,
 }: OfferRowProps) {
     const [hovered, setHovered] = useState(false);
@@ -436,6 +440,7 @@ export function OfferRow({
             </Tooltip>
           )}
           {assistantRun && <AssistantRunChip run={assistantRun} />}
+          {leftAloneNote && <LeftAloneChip reason={leftAloneNote} />}
           {/* An auction (#449) — shown because the figure at the end of this line is then a standing
               bid rather than a price the seller set. "In bidding" beside it is the other question:
               whether anyone has actually bid (#215). */}
@@ -525,6 +530,27 @@ export function OfferRow({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Why a bulk fix left this ticked offer alone (#2581) — on its row, so it is read where the offer is. */
+function LeftAloneChip({ reason }: { reason: string }) {
+  return (
+    <span
+      role="status"
+      style={{
+        ...CHIP,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.25rem",
+        color: "var(--color-warning)",
+        border: "1px solid var(--color-warning)",
+        whiteSpace: "normal",
+      }}
+    >
+      <Icon name="warning" size="sm" />
+      Left alone: {reason}
+    </span>
   );
 }
 

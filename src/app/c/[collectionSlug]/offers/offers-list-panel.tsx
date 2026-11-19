@@ -26,6 +26,12 @@ import {
 } from "@/lib/offer-assistant-runs";
 import type { OfferListItem } from "@/lib/offers";
 import {
+  planFixEverything,
+  planSoldElsewhereRemoval,
+  type LeftAlone,
+  type PlannedFix,
+} from "@/lib/offer-fix-everything";
+import {
   type ManualOfferTarget,
   OFFER_STATES,
   OFFER_STATE_LABEL,
@@ -62,6 +68,7 @@ import { LISTING_ELEMENT_ID, useAssistantPresence } from "./assistant-handoff";
 import { CLOSE_ELEMENT_ID } from "./assistant-close-handoff";
 import { assistantHint } from "./assistant-listing";
 import { useAssistantRuns } from "./use-assistant-runs";
+import { FixEverythingDialog, RemoveSoldElsewhereBulkDialog } from "./fix-offers-dialogs";
 import { useLastUsedPlatform } from "./use-last-used-platform";
 import { useInvalidatePurchases } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 import type { StampConditionData } from "@/lib/conditions";
@@ -92,6 +99,10 @@ type DialogState =
   | { kind: "addToPost" }
   /** Update or close listings via the Assistant (#1969) — one row's, or the ticked ones it suits. */
   | { kind: "assistantRun"; act: AssistantRunAct; offers: OfferListItem[]; skipped: number }
+  /** The ticked offers' sets sold elsewhere removed (#2581) — those it suits, and those it leaves. */
+  | { kind: "removeSoldElsewhere"; run: OfferListItem[]; leftAlone: LeftAlone<OfferListItem>[] }
+  /** Each ticked offer given its own fix (#2581). */
+  | { kind: "fixEverything"; fixes: PlannedFix<OfferListItem>[]; leftAlone: LeftAlone<OfferListItem>[] }
   | { kind: "quickOffer" };
 
 /** What a bulk run refused, named against the row it belongs to. Kept as a list rather than a
@@ -424,10 +435,14 @@ export function OffersListPanel({
   // on a filter change, which the selection itself now survives: the strip is a report of a run
   // against a list that is no longer on screen, while the ticks are the collector's own.
   const [bulkSkips, setBulkSkips] = useState<BulkSkip[]>([]);
+  // Why the last *Remove sets sold elsewhere* or *Fix everything* left a ticked offer alone (#2581),
+  // by offer — drawn on the offer's own row, where it is still ticked. Cleared as the strip is.
+  const [leftAloneNotes, setLeftAloneNotes] = useState<ReadonlyMap<string, string>>(new Map());
   const [skipsSig, setSkipsSig] = useState(filterSignature);
   if (skipsSig !== filterSignature) {
     setSkipsSig(filterSignature);
     if (bulkSkips.length > 0) setBulkSkips([]);
+    if (leftAloneNotes.size > 0) setLeftAloneNotes(new Map());
   }
 
   const toggleSelected = useCallback((offer: OfferListItem) => {
@@ -444,12 +459,14 @@ export function OffersListPanel({
   const clearSelection = useCallback(() => {
     setSelection(new Map());
     setBulkSkips([]);
+    setLeftAloneNotes(new Map());
   }, []);
   const allLoadedSelected = rows.length > 0 && rows.every((r) => selection.has(r.id));
   // Ticks or unticks exactly the loaded rows and leaves the hidden ticks alone (`offer-selection.ts`
   // carries why replacing the whole map is wrong in both directions).
   const toggleAllLoaded = useCallback(() => {
     setBulkSkips([]);
+    setLeftAloneNotes(new Map());
     setSelection((prev) => toggleRowsInView(prev, rows));
   }, [rows]);
 
@@ -674,6 +691,133 @@ export function OffersListPanel({
     setSelection((prev) => keptAfterBulkRun(prev, offers.map((o) => o.id), []));
     setBulkSkips([]);
     setDialog({ kind: "none" });
+  }
+
+  /* ── Remove sets sold elsewhere and Fix everything (#2581) ──────────────────────────────────────
+   * Both are made only of what one offer's own actions do, and both leave a ticked offer they do not
+   * suit alone: still ticked, with the reason on its row. */
+  const queuedOfferIds = useMemo(
+    () =>
+      new Set(
+        assistantRuns.runs
+          .filter((r) => r.status === "queued" || r.status === "running")
+          .map((r) => r.offerId)
+      ),
+    [assistantRuns.runs]
+  );
+  const removalPlan = useMemo(() => planSoldElsewhereRemoval(selectedInView), [selectedInView]);
+  const fixPlan = useMemo(
+    () => planFixEverything(selectedInView, { assistantUnavailable, queued: queuedOfferIds }),
+    [selectedInView, assistantUnavailable, queuedOfferIds]
+  );
+
+  /** What a run left alone or refused, on each offer's row. */
+  function noteLeftAlone(notes: { offerId: string; reason: string }[]) {
+    setLeftAloneNotes(new Map(notes.map((n) => [n.offerId, n.reason])));
+  }
+
+  /** Remove the sets sold elsewhere from each offer in `entries` at once (#1805's own action, over a
+   *  selection) — the refused ones named and kept ticked. */
+  async function removeSoldElsewhere(entries: OfferListItem[]) {
+    const { removeOffersSetsSoldElsewhereAction } = await import("@/app/actions/offers");
+    return removeOffersSetsSoldElsewhereAction(
+      entries.map((o) => ({ offerId: o.id, setIds: o.soldElsewhere?.setIds ?? [] }))
+    );
+  }
+
+  function runRemoveSoldElsewhere(run: OfferListItem[], leftAlone: LeftAlone<OfferListItem>[]) {
+    setActionError(undefined);
+    startTransition(async () => {
+      const result = await removeSoldElsewhere(run);
+      invalidateAll(collectionId);
+      if (result.succeeded.length === 0) {
+        setActionError(
+          result.skipped.length === 1
+            ? result.skipped[0].message
+            : `None of these ${run.length} offers could lose their sets sold elsewhere.`
+        );
+        return;
+      }
+      setDialog({ kind: "none" });
+      setBulkSkips([]);
+      noteLeftAlone([
+        ...leftAlone.map((l) => ({ offerId: l.offer.id, reason: l.reason })),
+        ...result.skipped.map((s) => ({ offerId: s.offerId, reason: s.message })),
+      ]);
+      setSelection((prev) =>
+        keptAfterBulkRun(
+          prev,
+          run.map((o) => o.id),
+          result.skipped.map((s) => s.offerId)
+        )
+      );
+      const done = new Set(result.succeeded);
+      const sets = run.filter((o) => done.has(o.id)).reduce((n, o) => n + (o.soldElsewhere?.setIds.length ?? 0), 0);
+      const n = result.succeeded.length;
+      toast({
+        message: `${sets} ${sets === 1 ? "set" : "sets"} sold elsewhere removed from ${n} ${n === 1 ? "offer" : "offers"}`,
+      });
+    });
+  }
+
+  /** Every planned fix at once: the Assistant's closes and updates join its queue, the removals and
+   *  withdrawals run here. A failure stops nothing else — it is named on its row and stays ticked. */
+  function runFixEverything(fixes: PlannedFix<OfferListItem>[], leftAlone: LeftAlone<OfferListItem>[]) {
+    const of = (fix: string) => fixes.filter((f) => f.fix === fix).map((f) => f.offer);
+    const closes = of("close");
+    const updates = of("update");
+    const removes = of("remove");
+    const withdraws = of("withdraw");
+    setActionError(undefined);
+    assistantRuns.enqueue(
+      [...closes, ...updates].map((o) => ({
+        offerId: o.id,
+        offerNo: o.offerNo,
+        label: o.name ?? o.label,
+        act: closes.includes(o) ? ("close" as const) : ("update" as const),
+        saleId: o.assistant?.closeSaleId ?? null,
+        removeSetIds: closes.includes(o) ? [] : (o.assistant?.soldElsewhereSetIds ?? []),
+      }))
+    );
+    const queuedIds = [...closes, ...updates].map((o) => o.id);
+    setSelection((prev) => keptAfterBulkRun(prev, queuedIds, []));
+    setBulkSkips([]);
+    noteLeftAlone(leftAlone.map((l) => ({ offerId: l.offer.id, reason: l.reason })));
+    setDialog({ kind: "none" });
+    if (removes.length === 0 && withdraws.length === 0) return;
+    startTransition(async () => {
+      const { withdrawOffersAction } = await import("@/app/actions/offers");
+      const removed = removes.length > 0 ? await removeSoldElsewhere(removes) : { succeeded: [], skipped: [] };
+      const withdrawn =
+        withdraws.length > 0
+          ? await withdrawOffersAction(withdraws.map((o) => o.id))
+          : { succeeded: [], skipped: [] };
+      invalidateAll(collectionId);
+      const refused = [...removed.skipped, ...withdrawn.skipped];
+      setLeftAloneNotes((prev) => {
+        const next = new Map(prev);
+        for (const s of refused) next.set(s.offerId, s.message);
+        return next;
+      });
+      setSelection((prev) =>
+        keptAfterBulkRun(
+          prev,
+          [...removes, ...withdraws].map((o) => o.id),
+          refused.map((s) => s.offerId)
+        )
+      );
+      const sets = removes
+        .filter((o) => removed.succeeded.includes(o.id))
+        .reduce((n, o) => n + (o.soldElsewhere?.setIds.length ?? 0), 0);
+      const parts = [
+        ...(removed.succeeded.length > 0
+          ? [`${sets} ${sets === 1 ? "set" : "sets"} removed from ${removed.succeeded.length} ${removed.succeeded.length === 1 ? "offer" : "offers"}`]
+          : []),
+        ...(withdrawn.succeeded.length > 0 ? [`${withdrawn.succeeded.length} withdrawn`] : []),
+        ...(refused.length > 0 ? [`${refused.length} failed`] : []),
+      ];
+      if (parts.length > 0) toast({ message: parts.join(" · ") });
+    });
   }
 
   function closeDialog() {
@@ -1265,6 +1409,48 @@ export function OffersListPanel({
                           </Tooltip>
                         );
                       })}
+                      {/* The sets sold elsewhere off every ticked offer the offer's own action suits
+                          (#2581), naming how many; the others stay ticked, untouched. */}
+                      {removalPlan.run.length > 0 && (
+                        <Tooltip content="Remove only the sets whose copies sold through another offer, from each ticked offer that keeps something to sell. You confirm first.">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionError(undefined);
+                              setDialog({
+                                kind: "removeSoldElsewhere",
+                                run: removalPlan.run,
+                                leftAlone: removalPlan.leftAlone,
+                              });
+                            }}
+                            disabled={isPending}
+                            style={BULK_BTN}
+                          >
+                            <Icon name="delete" size="sm" /> Remove sets sold elsewhere from{" "}
+                            {removalPlan.run.length}
+                          </button>
+                        </Tooltip>
+                      )}
+                      {/* Each ticked offer given the fix its situation calls for (#2581). */}
+                      {fixPlan.fixes.length > 0 && (
+                        <Tooltip content="Give each ticked offer the fix its situation calls for — close, update, remove the sets sold elsewhere, or withdraw one never listed. You confirm first.">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionError(undefined);
+                              setDialog({
+                                kind: "fixEverything",
+                                fixes: fixPlan.fixes,
+                                leftAlone: fixPlan.leftAlone,
+                              });
+                            }}
+                            disabled={isPending}
+                            style={BULK_BTN}
+                          >
+                            <Icon name="check" size="sm" /> Fix everything ({fixPlan.fixes.length})
+                          </button>
+                        </Tooltip>
+                      )}
                       <Tooltip content="Take these listings down. Withdrawn is final — to sell here again, create a new offer.">
                         <button
                           type="button"
@@ -1356,6 +1542,7 @@ export function OffersListPanel({
                 onNarrowToPost={post ? undefined : (postNo) => updateParams({ post: String(postNo) })}
                 onAssistantRun={askAssistantRun}
                 assistantRun={runByOffer.get(offer.id) ?? null}
+                leftAloneNote={selection.has(offer.id) ? (leftAloneNotes.get(offer.id) ?? null) : null}
                 assistantUnavailable={assistantUnavailable}
                 selection={{
                   selected: selection.has(offer.id),
@@ -1587,6 +1774,29 @@ export function OffersListPanel({
           error={actionError}
           onClose={closeDialog}
           onConfirm={() => runBulk(dialog.kind === "bulkWithdraw" ? "withdraw" : "delete")}
+        />
+      )}
+
+      {dialog.kind === "removeSoldElsewhere" && (
+        <RemoveSoldElsewhereBulkDialog
+          run={dialog.run}
+          leftAlone={dialog.leftAlone}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onConfirm={() => runRemoveSoldElsewhere(dialog.run, dialog.leftAlone)}
+        />
+      )}
+
+      {dialog.kind === "fixEverything" && (
+        <FixEverythingDialog
+          fixes={dialog.fixes}
+          leftAlone={dialog.leftAlone}
+          queueBusy={assistantRuns.busy}
+          isPending={isPending}
+          error={actionError}
+          onClose={closeDialog}
+          onConfirm={() => runFixEverything(dialog.fixes, dialog.leftAlone)}
         />
       )}
 
