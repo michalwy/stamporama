@@ -127,6 +127,20 @@ const HINT_STYLE: React.CSSProperties = {
   color: "var(--color-text-muted)",
 };
 
+/** The line atop the list while a filter change's result is on its way (#2579). */
+const REFRESHING_STYLE: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  margin: 0,
+  padding: "0.5rem 1.5rem",
+  textAlign: "center",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-muted)",
+  background: "var(--color-bg-elevated)",
+  borderBottom: "1px solid var(--color-border)",
+};
+
 /** One side's terms in cents of the sale's currency, as the rules read them. */
 function termsInCents(d: FreeExtraTermsData | null): FreeExtraPlatformDefaults | null {
   return (
@@ -310,7 +324,10 @@ export function FreeExtrasDialog({
   const { data: certificateStatuses = [] } = useCollectionCertificateStatuses(collectionId);
   const { data: formats = [] } = useCollectionFormats(collectionId);
 
-  const { data, isLoading, isFetching, error: loadError } = useFreeExtraCandidates(collectionId, saleId, filters);
+  const { data, isLoading, isPlaceholderData, error: loadError } = useFreeExtraCandidates(collectionId, saleId, filters);
+  // The list still holds the previous filters' answer while the new one is on its way (#2579): it is
+  // marked as such, cannot be ticked or proposed from, and never passes for the new filters' answer.
+  const refreshing = isPlaceholderData;
   const { primaryVendorByArea, vendorMapFor } = useAreaVendorMaps(areas, collectionId);
 
   const [count, setCount] = useState("");
@@ -358,6 +375,7 @@ export function FreeExtrasDialog({
   }
 
   function propose() {
+    if (refreshing) return;
     const parsed = parseFreeExtraLimits({ count, budget, budgetKind }, orderCents);
     if (!parsed.ok) {
       setLimitsError(parsed.message);
@@ -488,7 +506,7 @@ export function FreeExtrasDialog({
               />
               <button
                 type="submit"
-                disabled={!data || isPending}
+                disabled={!data || refreshing || isPending}
                 style={baseBtn}
               >
                 Propose
@@ -578,12 +596,18 @@ export function FreeExtrasDialog({
             </div>
           )}
 
-          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", opacity: isFetching && !isLoading ? 0.6 : undefined }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }} aria-busy={refreshing || undefined}>
+            {refreshing && (
+              <p role="status" style={REFRESHING_STYLE}>
+                Refreshing for the new filters…
+              </p>
+            )}
+            <div inert={refreshing} style={{ opacity: refreshing ? 0.45 : undefined }}>
             {isLoading ? (
               <p style={HINT_STYLE}>Loading copies…</p>
             ) : loadError ? (
               <p style={{ ...HINT_STYLE, color: "var(--color-error)" }}>{loadError.message}</p>
-            ) : rows.length === 0 && seriesRows.length === 0 && narrowed ? (
+            ) : rows.length === 0 && seriesRows.length === 0 && refreshing ? null : rows.length === 0 && seriesRows.length === 0 && narrowed ? (
               <p style={HINT_STYLE}>No copies to give away match these filters.</p>
             ) : rows.length === 0 && seriesRows.length === 0 ? (
               <p style={HINT_STYLE}>
@@ -695,6 +719,7 @@ export function FreeExtrasDialog({
                   : ""}
               </p>
             )}
+            </div>
           </div>
         </div>
       </div>

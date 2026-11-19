@@ -182,9 +182,12 @@ export function useFreeExtraCandidates(collectionId: string, saleId: string, fil
     gcTime: 0,
     retry: false,
     placeholderData: keepPreviousData,
-    queryFn: async () => {
+    // A read the filters have since moved past is cancelled (#2579): only the last filters' answer
+    // is ever shown, and the server is not kept busy with the ones in between.
+    queryFn: async ({ signal }) => {
       const res = await fetch(
-        `/api/collections/${collectionId}/sales/${saleId}/free-extras${query ? `?${query}` : ""}`
+        `/api/collections/${collectionId}/sales/${saleId}/free-extras${query ? `?${query}` : ""}`,
+        { signal }
       );
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error ?? "Failed to load copies");

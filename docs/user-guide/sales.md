@@ -200,6 +200,9 @@ A copy you ticked stays ticked when a filter hides it: the summary still counts 
 says how many ticked copies are hidden by the filters. A whole series is listed when all its copies
 are in the filters; whether a set is complete is still counted over all your copies, so a filter
 never frees a copy that would break one. The filters start empty each time the dialog opens.
+While a filter change is on its way, the list says **Refreshing for the new filters…** and stays
+greyed out: the copies still shown are the previous filters' answer, cannot be ticked, and
+**Propose** waits until the new list is in.
 
 When the sale's platform states [free-extras settings](platforms.md#offers-and-sales), the dialog
 opens with them: the **Budget** is filled in as the platform's percentage of the order, capped at its

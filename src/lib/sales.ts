@@ -2044,9 +2044,12 @@ export async function listFreeExtraCandidates(
   const inOtherAxes = (id: string) => matchingOtherAxes === null || matchingOtherAxes.has(id);
   const inFilters = (id: string) => inOtherAxes(id) && freeExtraYearSelects(filters, yearOf.get(id) ?? null);
 
+  // Only the copies within every filter but the year are valued (#2579): a loose copy outside them is
+  // never shown nor counted, and a set is shown — and counted in the year facets — only when all its
+  // copies are within them, so one with a copy outside them is dropped either way.
   const valuations = await valuateItemsByIds(
     collectionId,
-    rows.map((r) => r.id)
+    rows.flatMap((r) => (inOtherAxes(r.id) ? [r.id] : []))
   );
   const candidateOf = new Map<string, FreeExtraCandidate>();
   let unvaluedCount = 0;

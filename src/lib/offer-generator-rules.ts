@@ -181,18 +181,39 @@ function takeSets(
   used: Set<string>,
   sets: GeneratedSet[]
 ): void {
-  const groups = new Map<string, GeneratorCopy[]>();
+  // Each group is indexed by every stamp of its copies' variant chains, so a checklist is asked only
+  // of the copies that can fill one of its slots — `checklistSlots` ignores every other copy, so the
+  // answer is the same, without walking the whole pool once per checklist (#2579). A copy keeps its
+  // place in the pool so that, as before, copies sharing a copy number stay in the pool's order.
+  const groups = new Map<string, { copies: { copy: GeneratorCopy; at: number }[]; byStamp: Map<string, number[]> }>();
   for (const copy of pool) {
     const key = combinationKey(combinationOf(copy, mixing));
-    const group = groups.get(key);
-    if (group) group.push(copy);
-    else groups.set(key, [copy]);
+    let group = groups.get(key);
+    if (!group) {
+      group = { copies: [], byStamp: new Map() };
+      groups.set(key, group);
+    }
+    const index = group.copies.length;
+    group.copies.push({ copy, at: index });
+    for (const stampId of new Set(copy.variantChain)) {
+      const list = group.byStamp.get(stampId);
+      if (list) list.push(index);
+      else group.byStamp.set(stampId, [index]);
+    }
   }
+  const keys = [...groups.keys()].sort();
   for (const checklist of series) {
-    for (const key of [...groups.keys()].sort()) {
+    for (const key of keys) {
       const group = groups.get(key)!;
+      const touching = new Set<number>();
+      for (const stampId of checklist.stampIds) for (const index of group.byStamp.get(stampId) ?? []) touching.add(index);
+      if (touching.size === 0) continue;
+      const relevant = [...touching]
+        .map((index) => group.copies[index])
+        .sort((a, b) => byItemNo(a.copy, b.copy) || a.at - b.at)
+        .map(({ copy }) => copy);
       for (;;) {
-        const remaining = group.filter((copy) => !used.has(copy.itemId)).sort(byItemNo);
+        const remaining = relevant.filter((copy) => !used.has(copy.itemId));
         const slots = checklistSlots(remaining, checklist);
         if (slots.size === 0 || [...slots.values()].some((candidates) => candidates.length === 0)) break;
         const picked = lean
