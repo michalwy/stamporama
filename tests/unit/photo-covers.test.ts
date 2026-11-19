@@ -10,6 +10,7 @@ import {
   averagePixelColor,
   EYEDROPPER_RADIUS,
   eyedropperRegion,
+  sameOriginPhotoUrl,
   DEFAULT_PHOTO_COVER_COLOR,
   NO_CARRIED_COVERS,
   normalizeCoverColor,
@@ -367,6 +368,13 @@ describe("carrying covers to the next photo (#1703)", () => {
 });
 
 describe("the eyedropper (#2493)", () => {
+  it("reads the photo from this origin, so a redirecting store cannot taint the canvas (#2585)", () => {
+    assert.equal(sameOriginPhotoUrl("/api/collections/c/photos/p/full"), "/api/collections/c/photos/p/full?inline=1");
+    assert.equal(sameOriginPhotoUrl("/api/collections/c/photos/p/full?v=2"), "/api/collections/c/photos/p/full?v=2&inline=1");
+    assert.equal(sameOriginPhotoUrl("/api/collections/c/photos/p/full?inline=1"), "/api/collections/c/photos/p/full?inline=1");
+    assert.equal(sameOriginPhotoUrl("/api/collections/c/photos/p/full#x"), "/api/collections/c/photos/p/full?inline=1");
+  });
+
   it("averages a square a few pixels across around the pixel clicked", () => {
     const side = 2 * EYEDROPPER_RADIUS + 1;
     assert.ok(side >= 3 && side <= 9, "a few pixels across, not one");

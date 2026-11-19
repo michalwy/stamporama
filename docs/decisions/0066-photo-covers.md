@@ -109,7 +109,9 @@ out of date, as any change to covers does.
 
 *Amended by #2493:* the editor can also take a bar's colour from the photo with an eyedropper — the
 average of a few pixels around the click, read from the photo without its covers. It is one more way
-to choose the same `PhotoCover.color`; nothing stored changes.
+to choose the same `PhotoCover.color`; nothing stored changes. *Amended by #2585:* the pixels are
+fetched from this origin (`?inline=1`, as #614 does) rather than read off the `<img>`, which on the
+redirecting storage backend comes from another origin and cannot be read.
 
 ## Consequences
 
