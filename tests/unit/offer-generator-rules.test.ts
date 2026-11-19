@@ -133,6 +133,30 @@ describe("assembleSets (#1287)", () => {
     assert.deepEqual(ids(sets), [["own", "a"], ["v", "b"]]);
   });
 
+  it("asks each checklist only of the copies that can fill it, with the same answer (#2579)", () => {
+    // A variant two levels down still fills its grandparent's slot, after the slot's own stamp; a copy
+    // whose chain holds two of the checklist's stamps fills the nearer one; copies sharing a copy
+    // number keep the pool's order; a later checklist is asked only of what the earlier one left.
+    const triple: LotChecklist = { checklistId: "triple", stampIds: ["s1", "s2", "s3"] };
+    const { sets, singles } = assembleSets(
+      [
+        copy("deep", "s1vv", { chain: ["s1vv", "s1v", "s1"], itemNo: 1 }),
+        copy("near", "s2v", { chain: ["s2v", "s2", "s3"], itemNo: 2 }),
+        copy("first", "s3", { itemNo: 3 }),
+        copy("second", "s3", { itemNo: 3 }),
+        copy("other", "s9", { itemNo: 4 }),
+        copy("own", "s1", { itemNo: 5 }),
+        copy("b", "s2", { itemNo: 6 }),
+      ],
+      [triple, pair]
+    );
+    assert.deepEqual(ids(sets), [
+      ["own", "b", "first"],
+      ["deep", "near", "second"],
+    ]);
+    assert.deepEqual(ids(singles), [["other"]]);
+  });
+
   it("never lets a multi-stamp copy fill a slot (#745)", () => {
     const { sets, singles } = assembleSets([copy("cover", "s1", { multiStamp: true }), copy("c2", "s2")], [pair]);
     assert.equal(sets.length, 0);
