@@ -23,6 +23,8 @@ import {
   createFacebookPost,
   deleteFacebookPost,
   readFacebookPostDeletion,
+  readFacebookPostWithdrawal,
+  withdrawFacebookPost,
   refreshFacebookPostTexts,
   removeFacebookLot,
   setFacebookPostLayout,
@@ -32,7 +34,7 @@ import {
   type FacebookBackToReady,
   type FacebookLotsAdded,
 } from "@/lib/facebook-posts";
-import type { FacebookPostDeletion } from "@/lib/facebook-post-rules";
+import type { FacebookPostDeletion, FacebookPostWithdrawal } from "@/lib/facebook-post-rules";
 import { refreshFacebookGroupLotPhotos, refreshFacebookLotPhotos } from "@/lib/facebook-lot-photos";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
@@ -226,6 +228,30 @@ export async function deleteFacebookPostAction(
     return { status: "success", ...(await deleteFacebookPost(session.user.id, postId)) };
   } catch (err) {
     return failure(err, "Failed to delete the post.");
+  }
+}
+
+/** What withdrawing a whole post would do (#2590). */
+export async function readFacebookPostWithdrawalAction(
+  postId: string
+): Promise<({ status: "success" } & FacebookPostWithdrawal) | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await readFacebookPostWithdrawal(session.user.id, postId)) };
+  } catch (err) {
+    return failure(err, "Failed to read the post.");
+  }
+}
+
+/** Withdraw every lot of a post still for sale (#2590); sold lots stay. */
+export async function withdrawFacebookPostAction(
+  postId: string
+): Promise<{ status: "success"; postNo: number; withdrawn: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await withdrawFacebookPost(session.user.id, postId)) };
+  } catch (err) {
+    return failure(err, "Failed to withdraw the post.");
   }
 }
 

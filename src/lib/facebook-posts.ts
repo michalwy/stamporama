@@ -26,6 +26,7 @@ import {
   facebookPostRefusal,
   facebookPostStage,
   facebookPostTitleRefusal,
+  facebookPostWithdrawalPlan,
   hasFacebookPostGoneUp,
   isFacebookLotClosed,
   isFacebookLotLeftOut,
@@ -33,6 +34,7 @@ import {
   type FacebookApprovalClosing,
   type FacebookPostDeletion,
   type FacebookPostStage,
+  type FacebookPostWithdrawal,
   type FacebookSoldLot,
   type FacebookTitleEdge,
   type FacebookTitleWordsMode,
@@ -1541,4 +1543,68 @@ export async function withdrawOfferOrPost(ownerId: string, offerId: string): Pro
   });
   for (const lot of lots) await setOfferState(ownerId, lot.id, "withdrawn");
   return lots.map((lot) => lot.id);
+}
+
+/** A post's lots as *Withdraw post…* reads them (#2590), in lot order. */
+async function readWithdrawalLots(postId: string) {
+  const lots = await prisma.offer.findMany({
+    where: { facebookPostId: postId },
+    orderBy: [{ facebookLotNo: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      offerNo: true,
+      facebookLotNo: true,
+      state: true,
+      listingType: true,
+      price: true,
+      facebookPostSnapshot: true,
+    },
+  });
+  return lots.map((l, i) => ({
+    ...l,
+    lotNo: l.facebookLotNo ?? i + 1,
+    listingType: normalizeListingType(l.listingType),
+    price: l.price.toFixed(2),
+  }));
+}
+
+/** What withdrawing a whole post would do (#2590) — what *Withdraw post…* shows before the collector
+ *  confirms: how many lots go, how many sold lots stay, the auctions left up for their bids, and
+ *  whether the post was submitted to the group. */
+export async function readFacebookPostWithdrawal(ownerId: string, postId: string): Promise<FacebookPostWithdrawal> {
+  await assertPostOwner(ownerId, postId);
+  const post = await prisma.facebookPost.findUniqueOrThrow({
+    where: { id: postId },
+    select: { postNo: true, title: true },
+  });
+  const lots = await readWithdrawalLots(postId);
+  const plan = facebookPostWithdrawalPlan(lots);
+  return {
+    postNo: post.postNo,
+    title: post.title,
+    withdrawCount: plan.withdrawing.length,
+    soldCount: plan.sold.length,
+    bidLots: plan.withBid.map((l) => ({ lotNo: l.lotNo, offerNo: l.offerNo })),
+    submitted: hasFacebookPostGoneUp(lots),
+  };
+}
+
+/**
+ * Withdraw a whole post (#2590), in any stage — a post abandoned before it went up, or one taken down
+ * in the group with lots unsold. Every lot still for sale is withdrawn, each through `setOfferState`
+ * as its own *Withdraw* goes, so its copies are free to be listed again; sold lots and lots already
+ * withdrawn stay as they are, and so does an auction up with a recorded bid, which may still sell.
+ * Nothing is deleted: the post keeps its lots, its number and its preview link. The post in the
+ * Facebook group is not touched. The plan is read again here, so a lot sold since the dialog opened
+ * stays sold; a refusal halfway is finished by asking again.
+ */
+export async function withdrawFacebookPost(
+  ownerId: string,
+  postId: string
+): Promise<{ postNo: number; withdrawn: number }> {
+  await assertPostOwner(ownerId, postId);
+  const post = await prisma.facebookPost.findUniqueOrThrow({ where: { id: postId }, select: { postNo: true } });
+  const { withdrawing } = facebookPostWithdrawalPlan(await readWithdrawalLots(postId));
+  for (const lot of withdrawing) await setOfferState(ownerId, lot.id, "withdrawn");
+  return { postNo: post.postNo, withdrawn: withdrawing.length };
 }

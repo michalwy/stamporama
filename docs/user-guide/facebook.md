@@ -551,10 +551,11 @@ show, and from the
 - **The post** — where it stands (being prepared, ready to post, waiting for approval, up in the group,
   or over), the group, the post's link once it has one, and the moves the post makes as one, each
   offered only while it can be made: **Publish…** once every lot is Ready, **Back to preparing** while
-  a lot is Ready and the post is not up yet ([below](#taking-a-ready-post-back-to-preparing)), and
-  **Approved…**, **Rejected — back to Ready** and **Withdraw…** while the post waits for
-  the group's approval, and **Back to Ready…** while it is up
-  ([above](#taking-a-post-that-is-up-back-to-ready)). While some lot is not Ready yet, it says which.
+  a lot is Ready and the post is not up yet ([below](#taking-a-ready-post-back-to-preparing)),
+  **Approved…** and **Rejected — back to Ready** while the post waits for the group's approval,
+  **Back to Ready…** while it is up ([above](#taking-a-post-that-is-up-back-to-ready)), and
+  **Withdraw post…** in any stage while a lot is still for sale
+  ([below](#withdrawing-a-post)). While some lot is not Ready yet, it says which.
 - **Post kit** — the layout (laid out in its text as below, or in captions
   ([below](#a-post-with-several-lots-in-captions))), the **post text** for the whole post — each lot's
   text in lot order, each from its own type's template, or from its offer's own where it has one —
@@ -701,7 +702,7 @@ as one too: submitting, approving, rejecting or withdrawing it — or any lot of
 whole post, and approving writes the final link in place of the pending one and the closing time you
 settle on into every auction of the post. A buyer may answer a post before the group approves it: a lot
 sold — or withdrawn — while the post waited stays as it is, and **Approved…**, **Rejected — back to
-Ready** and **Withdraw…** are still offered and act on the lots still waiting. Once every lot has sold
+Ready** and **Withdraw post…** are still offered and act on the lots still for sale. Once every lot has sold
 there is nothing left to approve. Once the post is up, each lot is its own result again —
 withdrawing one lot leaves the others.
 
@@ -862,6 +863,27 @@ withdrawn instead.
 A lot cannot be moved to another group while it is in a post of several; take it out first. An offer
 alone in its post moves to another group with its post, until it is up. Nor can it change
 from auction to quick buy, or back, while it is in a post whose lots share one type.
+
+#### Withdrawing a post
+
+A post you give up on — abandoned before it went up, or taken down in the group with some lots unsold —
+is withdrawn as a whole with **Withdraw post…**, in **The post** on its screen or from the post's **⋮**
+on the list of posts. It is offered in every stage — being prepared, ready, waiting for approval and
+up — as long as at least one lot is still for sale.
+
+It **withdraws every lot still for sale**, as each lot's own **Withdraw** does, so their copies are free
+to be listed again. **Sold lots stay sold**, with their sales, and lots already withdrawn stay as they
+are. One exception: an **auction up with a recorded bid** may still sell, so it is left up until you end
+it — sell it to the winner, or withdraw it.
+
+The confirmation names the post, how many lots will be withdrawn, how many sold lots stay, and any
+auction left up for its bid. For a post that was submitted to the group, it says that **the post in the
+Facebook group is not touched**: remove or edit it there by hand.
+
+Nothing is deleted. The post stays on the list of posts with its lots, its number and its preview link:
+a buyer opening an earlier link sees which lots sold, and the withdrawn ones are marked **No longer
+available**. A post with nothing sold says only that the offer is no longer current. To remove a post
+from which nothing has sold, delete it instead.
 
 #### Deleting a post
 
