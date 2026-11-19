@@ -33,6 +33,15 @@ const PHONE_MARK_CHIP: React.CSSProperties = {
   background: "var(--color-accent-soft)",
 };
 
+/** Work waiting on the document (#2582) — tiles to identify, scans to cut — tinted so the list
+ * says it at a glance. */
+const WAITING_CHIP: React.CSSProperties = {
+  ...CHIP,
+  color: "var(--color-warning)",
+  borderColor: "var(--color-warning-border, var(--color-border))",
+  background: "var(--color-warning-soft)",
+};
+
 const META_INLINE: React.CSSProperties = {
   fontSize: "0.75rem",
   color: "var(--color-text-muted)",
@@ -213,6 +222,20 @@ export function PurchaseRow({ purchase: p, collectionSlug, isLast, onEdit, onDel
           <span style={CHIP}>
             {p.copyCount} cop{p.copyCount === 1 ? "y" : "ies"}
           </span>
+          {/* Identification waiting (#2582), whether or not *To identify* is on: tiles still to
+              identify (parked ones included), and scans nothing has been cut from yet. */}
+          {p.tilesToIdentify > 0 && (
+            <Tooltip content="Scan tiles still to identify, parked ones included">
+              <span style={WAITING_CHIP}>{p.tilesToIdentify} to identify</span>
+            </Tooltip>
+          )}
+          {p.scansToCut > 0 && (
+            <Tooltip content="Scans not yet cut into tiles">
+              <span style={WAITING_CHIP}>
+                {p.scansToCut} scan{p.scansToCut === 1 ? "" : "s"} to cut
+              </span>
+            </Tooltip>
+          )}
           {p.expenseCount > 0 && (
             <span style={CHIP}>
               {p.expenseCount} expense{p.expenseCount === 1 ? "" : "s"}

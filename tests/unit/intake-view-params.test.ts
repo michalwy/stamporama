@@ -49,6 +49,7 @@ describe("resolveIntakeView", () => {
         status: "in_transit",
         platform: "p1,none",
         supplier: "s1",
+        toIdentify: "1",
         sortBy: "createdAt",
         sortDir: "asc",
       })
@@ -58,6 +59,7 @@ describe("resolveIntakeView", () => {
       statuses: ["in_transit"],
       platforms: ["p1", INTAKE_PARTY_NONE],
       suppliers: ["s1"],
+      toIdentify: true,
       sortBy: "createdAt",
       sortDir: "asc",
     });
@@ -91,6 +93,20 @@ describe("resolveIntakeView", () => {
     assert.deepEqual(resolved.statuses, ["completed"]);
   });
 
+  it("reads To identify only from a 1 (#2582)", () => {
+    assert.equal(resolveIntakeView(reader({ toIdentify: "1" })).toIdentify, true);
+    assert.equal(resolveIntakeView(reader({ toIdentify: "0" })).toIdentify, false);
+    assert.equal(resolveIntakeView(reader({ toIdentify: "yes" })).toIdentify, false);
+  });
+
+  it("keeps To identify under every type and status — it combines with them (#2582)", () => {
+    const resolved = resolveIntakeView(
+      reader({ type: "opening_balance", status: "completed", supplier: "none", toIdentify: "1" })
+    );
+    assert.equal(resolved.toIdentify, true);
+    assert.deepEqual(resolved.statuses, ["completed"]);
+  });
+
   it("falls back to the default for a value that no longer exists", () => {
     const resolved = resolveIntakeView(
       reader({ type: "gift", status: "lost", sortBy: "price", sortDir: "sideways" })
@@ -106,6 +122,8 @@ describe("intakeViewUpdatesFor", () => {
     assert.deepEqual(intakeViewUpdatesFor({ sortDir: "desc" }), { sortDir: "" });
     assert.deepEqual(intakeViewUpdatesFor({ suppliers: ["s1", "s2"] }), { supplier: "s1,s2" });
     assert.deepEqual(intakeViewUpdatesFor({ platforms: [] }), { platform: "" });
+    assert.deepEqual(intakeViewUpdatesFor({ toIdentify: true }), { toIdentify: "1" });
+    assert.deepEqual(intakeViewUpdatesFor({ toIdentify: false }), { toIdentify: "" });
   });
 
   it("clears the status when Opening balances is picked, in the same write", () => {
@@ -159,17 +177,23 @@ describe("the narrowed-list band", () => {
 
   it("names every filter in force, in toolbar order", () => {
     const narrowings = intakeViewNarrowings(
-      view({ type: "purchase", statuses: ["arrived"], platforms: ["p1"], suppliers: ["none"] })
+      view({
+        type: "purchase",
+        statuses: ["arrived"],
+        platforms: ["p1"],
+        suppliers: ["none"],
+        toIdentify: true,
+      })
     );
     assert.deepEqual(
       narrowings.map((n) => n.key),
-      ["type", "statuses", "platforms", "suppliers"]
+      ["type", "statuses", "platforms", "suppliers", "toIdentify"]
     );
   });
 
   it("clears exactly what it announces, and never the sort", () => {
     const cleared = intakeViewClearUpdates();
-    assert.deepEqual(Object.keys(cleared).sort(), ["platform", "status", "supplier", "type"]);
+    assert.deepEqual(Object.keys(cleared).sort(), ["platform", "status", "supplier", "toIdentify", "type"]);
     assert.ok(Object.values(cleared).every((v) => v === ""));
     // Every param the band's filters travel as is one this screen remembers, so clearing reaches the
     // memory too and the filter does not come back from it.
@@ -202,6 +226,11 @@ describe("intakeViewUrlUpdates — the restore written back into the address (#8
       supplier: "s1,none",
       sortDir: "asc",
     });
+  });
+
+  it("writes a restored To identify as 1 (#2582)", () => {
+    assert.deepEqual(intakeViewUrlUpdates(view({ toIdentify: true }), reader({})), { toIdentify: "1" });
+    assert.equal(intakeViewUrlUpdates(view({ toIdentify: true }), reader({ toIdentify: "1" })), null);
   });
 
   it("writes a restored status set as one comma list", () => {

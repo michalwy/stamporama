@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ScansData } from "@/lib/scan-sheets";
 import { isScanUploadPending } from "@/lib/scan-upload-status-rules";
+import { purchaseKeys } from "@/app/c/[collectionSlug]/purchases/use-purchases-query";
 
 /** How often the section asks again while a scan of the order is waiting or being prepared (#1567).
  * Each ask answers at once; the scan's preparation itself never sits inside a request. */
@@ -42,11 +43,19 @@ export function useScans(collectionId: string, purchaseId: string, enabled = tru
 
 /** Invalidate a collection's scan reads after an upload, a cut, a pairing, a re-cut or a rename.
  * Deliberately the whole namespace and not one order's: a stale strip is exactly the failure this
- * exists to prevent, and a namespace nobody is watching is only marked stale. */
+ * exists to prevent, and a namespace nobody is watching is only marked stale.
+ *
+ * **The Intake documents list goes with it** (#2582): its rows say how many tiles wait and how many
+ * scans are uncut, and its *To identify* filter lists by them, so identifying a document's last
+ * tile must take the document off that list when the collector goes back to it — not up to the
+ * cache's thirty seconds later. Only marked stale while the list is not on screen. */
 export function useInvalidateScans() {
   const queryClient = useQueryClient();
   return {
     invalidateScans: (collectionId: string) =>
-      queryClient.invalidateQueries({ queryKey: scansKeys.all(collectionId) }),
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: scansKeys.all(collectionId) }),
+        queryClient.invalidateQueries({ queryKey: purchaseKeys.lists(collectionId) }),
+      ]),
   };
 }

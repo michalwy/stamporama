@@ -214,6 +214,12 @@ An opening balance shows its **title**, the **date**, an *Opening balance* mark 
 one once it is marked completed), the note icon when it has a note, how many **lots** and **copies** it has, and its **opening value** — the lots' values added up. When no lot has a value it says *No
 opening value* rather than `0.00`, and when only some do, a chip says how many lots have none.
 
+A document with scans still waiting for identification says so on its row, whatever the filters:
+**14 to identify** counts its scan tiles not yet identified — parked ones included, since they were
+set aside rather than decided — and **2 scans to cut** counts its scans nothing has been cut from yet.
+The figures count tiles, not stamps: a block or a cover on one tile is one. A discarded tile is done
+and is not counted.
+
 - **Filter** by type with the *Purchases* / *Trades* / *Opening balances* toggles. *Purchases* are
   the orders you recorded or settled from an auction; *Trades* are the orders closing a trade
   created.
@@ -232,6 +238,13 @@ opening value* rather than `0.00`, and when only some do, a chip says how many l
   shows under *No platform* and *No supplier* and never under a named one. The supplier filter has a
   search box, since that list grows long. Only platforms and suppliers that appear on at least one
   document are offered.
+- **To identify** shows only the documents with identification waiting: a scan tile still to
+  identify (parked ones included) or a scan not yet cut. It is for the second pass, when the cards
+  were scanned days ago and you sit down to identify them. Every type is covered — purchases, trades
+  and opening balances — and the document's status does not matter: a completed document with a
+  tile left is listed too. It works together with the type, status, platform and supplier filters,
+  and a document leaves the list once its last waiting tile is identified or discarded and its
+  scans are cut.
 - **Sort** by purchase date or by the date the record was added, ascending or descending.
 
 **The list comes back as you left it.** Your filters and sort are remembered for the collection,

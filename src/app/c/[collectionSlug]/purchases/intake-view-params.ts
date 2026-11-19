@@ -40,6 +40,9 @@ export interface IntakeView {
   platforms: string[];
   /** Supplier ids, on the same terms as {@link platforms}. */
   suppliers: string[];
+  /** Only the documents holding work waiting for identification (#2582) — a tile still to identify
+   *  or a scan not yet cut, whatever the document's type or status. */
+  toIdentify: boolean;
   sortBy: PurchaseSortBy;
   sortDir: "asc" | "desc";
 }
@@ -55,6 +58,7 @@ export const INTAKE_VIEW_DEFAULTS: IntakeView = {
   statuses: [],
   platforms: [],
   suppliers: [],
+  toIdentify: false,
   sortBy: "purchasedAt",
   sortDir: "desc",
 };
@@ -72,6 +76,7 @@ const VIEW_PARAM: { [K in keyof Required<IntakeView>]-?: string } = {
   statuses: "status",
   platforms: "platform",
   suppliers: "supplier",
+  toIdentify: "toIdentify",
   sortBy: "sortBy",
   sortDir: "sortDir",
 };
@@ -106,6 +111,7 @@ export function resolveIntakeView(readParam: (key: string) => string | null): In
     ),
     platforms: parseIntakePartyIds(readParam(VIEW_PARAM.platforms)),
     suppliers: parseIntakePartyIds(readParam(VIEW_PARAM.suppliers)),
+    toIdentify: readParam(VIEW_PARAM.toIdentify) === "1",
     sortBy: INTAKE_SORTS.includes(sortRaw as PurchaseSortBy)
       ? (sortRaw as PurchaseSortBy)
       : INTAKE_VIEW_DEFAULTS.sortBy,
@@ -168,6 +174,8 @@ function serialize(key: keyof IntakeView, view: Partial<IntakeView>): string {
   if (value === undefined) return "";
   if (Array.isArray(value)) return value.join(",");
   if (value === INTAKE_VIEW_DEFAULTS[key]) return "";
+  // A switched-on flag travels as `1`, the other lists' spelling (`sale-view-params.ts`).
+  if (value === true) return "1";
   return String(value);
 }
 
@@ -207,7 +215,8 @@ export function intakeViewUpdatesFor(
 export type IntakeNarrowing =
   | { key: "type"; value: IntakeDocumentType }
   | { key: "statuses"; value: PurchaseStatus[] }
-  | { key: "platforms" | "suppliers"; value: string[] };
+  | { key: "platforms" | "suppliers"; value: string[] }
+  | { key: "toIdentify" };
 
 /**
  * Every setting currently narrowing the list, in the order the toolbar reads. The sort is not one —
@@ -219,6 +228,7 @@ export function intakeViewNarrowings(view: IntakeView): IntakeNarrowing[] {
   if (view.statuses.length > 0) out.push({ key: "statuses", value: view.statuses });
   if (view.platforms.length > 0) out.push({ key: "platforms", value: view.platforms });
   if (view.suppliers.length > 0) out.push({ key: "suppliers", value: view.suppliers });
+  if (view.toIdentify) out.push({ key: "toIdentify" });
   return out;
 }
 
@@ -233,6 +243,7 @@ export function intakeViewClearUpdates(): Record<string, string> {
     [VIEW_PARAM.statuses]: "",
     [VIEW_PARAM.platforms]: "",
     [VIEW_PARAM.suppliers]: "",
+    [VIEW_PARAM.toIdentify]: "",
   };
 }
 

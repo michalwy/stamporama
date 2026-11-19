@@ -2937,8 +2937,9 @@ function isSheetCut(
 }
 
 /** {@link isSheetCut}, negated, as a `where` — and with its bytes still there, since a purged sheet
- * has nothing left to cut. */
-const UNCUT_SHEET_WHERE = {
+ * has nothing left to cut. Also the Intake documents list's *N scans to cut* (#2582), so the list,
+ * the dashboard and the cards count the same sheets. */
+export const UNCUT_SHEET_WHERE = {
   purgedAt: null,
   OR: [
     { recutPending: true },
