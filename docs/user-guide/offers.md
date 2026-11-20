@@ -3331,7 +3331,7 @@ number*, *Location ref* and *Listing URL*. All are ticked to begin with, and the
 fields**; untick the ones you do not mean and the box matches only what is left — with only
 *Catalogue number* ticked, `865` finds the offers holding a copy numbered `865` and not offer #865 or
 a listing whose address ends in the same digits. **All fields** at the top of its list ticks them all
-again. One field always stays ticked. While the search is narrowed the control is drawn in the accent
+again; **Only**, shown at the right of a field as you point at it, ticks that field alone and leaves the list open. One field always stays ticked. While the search is narrowed the control is drawn in the accent
 colour and names the one field ticked, or how many are (*2 fields*), so a search that finds nothing
 because of it shows why at a glance. `#200` is still offer #200 whatever is ticked. The choice is
 remembered for this list in each collection, apart from the phrase in the box: clearing the box

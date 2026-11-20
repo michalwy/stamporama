@@ -221,7 +221,7 @@ name*, *Catalogue number* and *Note* — the same control as on the [Copies](inv
 All are ticked to begin with, and the control reads **All fields**; untick the ones you do not
 mean and the box matches only what is left, so with only *Catalogue number* ticked, `A038` finds
 the wants for stamps numbered `A038` and not a stamp, a series or a note that happens to contain
-the same characters. **All fields** at the top of its list ticks them all again, and one field
+the same characters. **All fields** at the top of its list ticks them all again; **Only**, shown at the right of a field as you point at it, ticks that field alone and leaves the list open, and one field
 always stays ticked. While the search is narrowed the control is drawn in the accent colour and
 names the one field ticked, or how many are (*2 fields*). A catalogue number typed with a catalog
 abbreviation is still narrowed to that catalog within *Catalogue number*. The choice is remembered

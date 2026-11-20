@@ -1233,7 +1233,7 @@ wins over the remembered one, and clearing the box clears the memory of it.
 ticked to begin with, and the control reads **All fields**; untick the ones you do not mean and the
 box matches only what is left — with only *Order number* ticked, a number finds the sale with that
 marketplace order and not a buyer or a stamp that happens to contain the same characters. **All
-fields** at the top of its list ticks them all again. One field always stays ticked. While the
+fields** at the top of its list ticks them all again; **Only**, shown at the right of a field as you point at it, ticks that field alone and leaves the list open. One field always stays ticked. While the
 search is narrowed the control is drawn in the accent colour and names the one field ticked, or how
 many are (*2 fields*), so a search that finds nothing because of it shows why at a glance. The
 choice is remembered for this list in each collection, apart from the phrase itself: clearing the

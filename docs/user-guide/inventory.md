@@ -170,7 +170,7 @@ right, from *which copies* to *how they are shown*.
   control reads **All fields**; untick the ones you do not mean and the box matches only what is
   left — with only *Location ref* ticked, `A038` finds the copies filed under `A038` and not a
   stamp or catalogue number that happens to contain the same characters. **All fields** at the top
-  of its list ticks them all again. One field always stays ticked. While the search is narrowed the
+  of its list ticks them all again; **Only**, shown at the right of a field as you point at it, ticks that field alone and leaves the list open. One field always stays ticked. While the search is narrowed the
   control is drawn in the accent colour and names the one field ticked, or how many are
   (*2 fields*), so a search that finds nothing because of it shows why at a glance. `#123` is still
   the copy's number whatever is ticked, and a catalogue number typed with a vendor prefix is still

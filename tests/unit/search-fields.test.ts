@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  onlySearchField,
   parseSearchFields,
   readListSearchParams,
   readQuotedSearch,
@@ -54,6 +55,21 @@ describe("toggleSearchField", () => {
 
   it("never unticks the last field", () => {
     assert.deepEqual(toggleSearchField(["locationRef"], "locationRef", keys), ["locationRef"]);
+  });
+});
+
+// #2597: Only — one field ticked, every other one unticked, from any starting choice.
+describe("onlySearchField", () => {
+  it("ticks the one field alone, whatever was ticked before", () => {
+    assert.deepEqual(onlySearchField("catalogNumber", keys), ["catalogNumber"]);
+    assert.equal(
+      searchFieldsLabel(onlySearchField("catalogNumber", keys), COPY_SEARCH_FIELDS),
+      "Catalogue number"
+    );
+  });
+
+  it("changes nothing on the field already alone", () => {
+    assert.deepEqual(onlySearchField("locationRef", keys), ["locationRef"]);
   });
 });
 

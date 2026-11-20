@@ -587,7 +587,7 @@ Finally:
   with, and the control reads **All fields**; untick the ones you do not mean and the box matches
   only what is left — with only *Listing address* ticked, `allegro` finds the lots whose address is
   on Allegro and not every lot of a sale on the Allegro platform. **All fields** at the top of its
-  list ticks them all again. One field always stays ticked. While the search is narrowed the
+  list ticks them all again; **Only**, shown at the right of a field as you point at it, ticks that field alone and leaves the list open. One field always stays ticked. While the search is narrowed the
   control is drawn in the accent colour and names the one field ticked, or how many are
   (*2 fields*), so a search that finds nothing because of it shows why at a glance. `#12` is still
   the lot numbered 12 whatever is ticked. The choice is remembered for this list in each
@@ -696,7 +696,7 @@ filters do, so coming back to the screen finds it as you left it.
 and *Platform*. All are ticked to begin with, and the control reads **All fields**; untick the ones
 you do not mean and the box matches only what is left — with only *Seller* ticked, `Gärtner` finds
 the house's sales and not a platform or a sale name that happens to say the same. **All fields** at
-the top of its list ticks them all again, and one field always stays ticked. While the search is
+the top of its list ticks them all again; **Only**, shown at the right of a field as you point at it, ticks that field alone and leaves the list open, and one field always stays ticked. While the search is
 narrowed the control is drawn in the accent colour and names the one field ticked, or how many are
 (*2 fields*). The choice is remembered for this list in each collection, apart from the search and
 the status chips, and is not carried in the address bar: it is how the box reads what you type, not
