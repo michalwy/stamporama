@@ -855,6 +855,14 @@ there, since one skipped scan puts every pair after it one file off:
 - **Swap** exchanges a pair's front and back, for a card scanned back first.
 - With an odd number of files, the last front has no back.
 
+Each front and back has a **small picture of the scan** beside its file name, so a wrong pair, a
+missing back or a card scanned back first shows at a glance. Rest the pointer on a picture to see the
+scan enlarged, with its file name and *front* or *back* under it. **Backs are shown turned the way
+they will sit on the card**, as **How the backs are scanned** says — a card turned top to bottom shows
+its backs upside down from the scan — and changing that answer turns them at once. **No back** and
+**Swap** move the pictures with the files. The pictures are made on your computer, before anything
+uploads; a scan your browser cannot show keeps a plain *No preview* frame, and the list works the same.
+
 **How the backs are scanned** is asked once in the list, for every card, set to the collection's last
 answer as **Add back scan** sets it (see *Backs* below). **Add N cards** sends them: each front with
 its back right behind it, one card per front, numbered in the order of the list and named as fronts
