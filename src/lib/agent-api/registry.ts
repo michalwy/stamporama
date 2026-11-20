@@ -34,7 +34,8 @@
 // drafting a listing and drafting one before pricing and wording it, and recording it sold last
 // (#1949): the sales already recorded, the buyer, and the sale — then proposals (#2303), in the
 // order one is put together for a buyer who asked for more: the proposals kept, one read, a new one,
-// its lots added or made, priced and taken out, and last what the buyer took — then the conversation with the
+// its lots added or made, priced and taken out, and last what the buyer took — then the contact read in full
+// (#2610): found, then read with everything done with them — then the conversation with the
 // buyer (#2149): what is already in the log, a conversation recorded, a correction, a move, a
 // deletion, and an entry's files attached and removed (#2150) — then the exchange workflow in
 // **its** order, which is the one #712's *Done when* describes: what am I looking for, what does
@@ -127,6 +128,7 @@ import {
   removeProposalLotOperation,
   setProposalLotPriceOperation,
 } from "./operations/proposals";
+import { findContactsOperation, getContactOperation } from "./operations/contacts";
 import {
   addConversationEntriesOperation,
   attachConversationFilesOperation,
@@ -314,6 +316,8 @@ export const OPERATIONS: readonly Operation[] = [
   removeProposalLotOperation,
   getProposalSaleOptionsOperation,
   convertProposalToSaleOperation,
+  findContactsOperation,
+  getContactOperation,
   listConversationEntriesOperation,
   addConversationEntriesOperation,
   updateConversationEntryOperation,

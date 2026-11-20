@@ -14,7 +14,8 @@
 //    *Convert to sale…* dialog's own default, the lot's price, and its own correction, a figure typed
 //    over it. An unpriced lot named alone is refused rather than sold at nought.
 //  - **The contact is two fields.** The contact behind a proposal also carries an email, a phone and
-//    an address — a private person's details, out of this surface's reach as a buyer's are (#1949).
+//    notes — a private person's details, out of these projections' reach as a buyer's are (#1949);
+//    `get_contact` is the one read that carries them (#2610).
 //    The projections name their fields; **do not replace a mapper here with a spread**.
 
 import { OPEN_OFFER_STATES } from "../offer-rules";
