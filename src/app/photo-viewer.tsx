@@ -65,6 +65,7 @@ export function ThumbPreview({
   thumbSrc,
   label,
   style,
+  turn = 0,
   children,
 }: {
   /** Full-size image to show in the popup. Empty/absent falls back to a plain label hint. */
@@ -76,6 +77,10 @@ export function ThumbPreview({
   label: React.ReactNode;
   /** Trigger wrapper styles, forwarded to `Tooltip` — see its note on why they belong there. */
   style?: React.CSSProperties;
+  /** Degrees clockwise the picture is drawn turned by, both pictures alike — the box is square, so a
+   * turned picture still fits it. For a picture whose bytes do not stand the way it is meant to be
+   * seen: a back scan before it is cut (#2599). */
+  turn?: 0 | 90 | 180 | 270;
   children: React.ReactNode;
 }) {
   if (!src) {
@@ -102,6 +107,7 @@ export function ThumbPreview({
               backgroundRepeat: "no-repeat",
               backgroundPosition: "center",
               backgroundSize: "contain",
+              transform: turn ? `rotate(${turn}deg)` : undefined,
             }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -5,7 +5,9 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Icon, type IconSize } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
-import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { THUMB_OBJECT_FIT, ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
+import { useScanPreviews, type ScanPreview } from "./use-scan-previews";
+import { scanPreviewTurn } from "@/lib/scan-preview";
 import { usePurchaseScansUi } from "./purchase-ui-state";
 import { Segmented } from "./segmented";
 import { useScanTileSize } from "./use-scan-tile-size";
@@ -3156,6 +3158,7 @@ function AlternatingPairsDialog({
   const [turnover, setTurnover] = useState<BackTurnover>(lastBackTurnover);
   const pairs = pairAlternating(order, noBack);
   const backs = pairs.filter((p) => p.back != null).length;
+  const previews = useScanPreviews(files);
   const cell: React.CSSProperties = {
     padding: "0.375rem 0.5rem",
     borderBottom: "1px solid var(--color-border)",
@@ -3194,9 +3197,25 @@ function AlternatingPairsDialog({
               {pairs.map((pair, i) => (
                 <tr key={`${i}:${pair.front.name}`}>
                   <td style={{ ...cell, color: "var(--color-text-muted)" }}>{i + 1}</td>
-                  <td style={cell}>{pair.front.name}</td>
                   <td style={cell}>
-                    {pair.back ? pair.back.name : <Muted>No back</Muted>}
+                    <PairScan
+                      file={pair.front}
+                      side="front"
+                      preview={previews.get(pair.front)}
+                      turnover={turnover}
+                    />
+                  </td>
+                  <td style={cell}>
+                    {pair.back ? (
+                      <PairScan
+                        file={pair.back}
+                        side="back"
+                        preview={previews.get(pair.back)}
+                        turnover={turnover}
+                      />
+                    ) : (
+                      <Muted>No back</Muted>
+                    )}
                   </td>
                   <td style={cell}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -3234,6 +3253,81 @@ function AlternatingPairsDialog({
         onAction={() => onAdd(pairs, turnover)}
       />
     </DialogShell>
+  );
+}
+
+/** Edge of a scan's thumbnail in the pairs list (#2599) — enough to tell a front from a back and one
+ * card from the next, small enough that the list still reads as a list. */
+const PAIR_THUMB = "3rem";
+
+/**
+ * One file of the pairs list (#2599): its thumbnail beside its name. Hovering the thumbnail shows the
+ * scan enlarged, captioned with the name and the side. A back is drawn turned as its cut will be
+ * (`scanPreviewTurn`), so it appears as it will sit on the card and follows *How the backs are
+ * scanned* at once. While the picture is being made the frame is empty; a scan the browser cannot
+ * draw keeps a plain frame that says so, and the list works the same.
+ */
+function PairScan({
+  file,
+  side,
+  preview,
+  turnover,
+}: {
+  file: File;
+  side: "front" | "back";
+  preview: ScanPreview | undefined;
+  turnover: BackTurnover;
+}) {
+  const src = preview && preview !== "failed" ? preview : null;
+  const turn = scanPreviewTurn(side, turnover);
+  const label = `${file.name} — ${side}`;
+  const frame: React.CSSProperties = {
+    width: PAIR_THUMB,
+    height: PAIR_THUMB,
+    flexShrink: 0,
+    borderRadius: "0.25rem",
+    overflow: "hidden",
+    background: "var(--color-bg-page)",
+    border: "1px solid var(--color-border)",
+    boxSizing: "border-box",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <ThumbPreview src={src} thumbSrc={src} label={label} turn={turn} style={frame}>
+        {src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            alt={label}
+            draggable={false}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: THUMB_OBJECT_FIT,
+              display: "block",
+              transform: turn ? `rotate(${turn}deg)` : undefined,
+            }}
+          />
+        ) : (
+          <span
+            aria-label={preview === "failed" ? `${label}: no preview` : label}
+            style={{
+              fontSize: "0.625rem",
+              lineHeight: 1.2,
+              textAlign: "center",
+              color: "var(--color-text-muted)",
+              padding: "0.125rem",
+            }}
+          >
+            {preview === "failed" ? "No preview" : null}
+          </span>
+        )}
+      </ThumbPreview>
+      <span>{file.name}</span>
+    </div>
   );
 }
 
