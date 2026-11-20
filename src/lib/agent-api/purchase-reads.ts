@@ -140,8 +140,9 @@ export function resolveSeller(
   candidates: readonly SellerCandidate[],
   parameter: string,
   /** Who the contact is and the operation that adds one — a buyer is added by
-   *  `find_or_create_buyer` (#1949), and the refusal names the right one. */
-  newcomer: { readonly who: string; readonly operation: string } = { who: "seller", operation: "create_seller" }
+   *  `find_or_create_buyer` (#1949), and the refusal names the right one. Null where a call only
+   *  reads a contact (#2610): the refusal then points at `find_contacts` rather than at a write. */
+  newcomer: { readonly who: string; readonly operation: string } | null = { who: "seller", operation: "create_seller" }
 ): string {
   const trimmed = value.trim();
   const byId = candidates.find((candidate) => candidate.id === trimmed);
@@ -166,6 +167,16 @@ export function resolveSeller(
   }
 
   const close = closeContacts([trimmed], candidates).slice(0, MAX_SELLER_SUGGESTIONS);
+  if (newcomer === null) {
+    throw invalidRequest(
+      close.length > 0
+        ? `No contact in this collection is called "${trimmed}". These are close: ${close
+            .map((candidate) => candidate.name)
+            .join(", ")}. Send one of them as "${parameter}" if it is the one meant, or look the contact up with \`find_contacts\`.`
+        : `No contact in this collection is called "${trimmed}", and none is close to it. Look the contact up with \`find_contacts\` — by part of the name, a role, a market or a Facebook profile link.`,
+      close.map((candidate) => candidate.name)
+    );
+  }
   throw invalidRequest(
     close.length > 0
       ? `No contact in this collection is called "${trimmed}". These are close: ${close

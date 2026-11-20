@@ -615,7 +615,12 @@ describe("the purchase operations (#1390)", () => {
       ]);
       const forbidden = new Set(["close", "reopen", "arrive", "arrived", "delete", "copy", "copies", "contact", "status"]);
       for (const op of OPERATIONS) {
-        const words = op.name.split("_").filter((word) => !LOT_COPY_OPS.has(op.name) || (word !== "copy" && word !== "copies"));
+        // #2610 opened reading a contact (`get_contact`): a read names one and changes nothing, so the
+        // word is forbidden only to an operation that writes.
+        const words = op.name
+          .split("_")
+          .filter((word) => !LOT_COPY_OPS.has(op.name) || (word !== "copy" && word !== "copies"))
+          .filter((word) => op.writes || word !== "contact");
         assert.ok(
           !words.some((word) => forbidden.has(word) && /purchase|lot|seller|contact/.test(op.name)),
           `${op.name} reads as a purchase act this surface does not take`

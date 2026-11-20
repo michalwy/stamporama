@@ -9,7 +9,7 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras and #2551 a purchase lot's copies; both wrappers exist and the registry carries **one hundred and fifty-three operations** (measured off `OPERATIONS` when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras, #2551 a purchase lot's copies and #2610 a contact read in full; both wrappers exist and the registry carries **one hundred and fifty-five operations** (measured off `OPERATIONS` when #2610 landed and added `find_contacts` and `get_contact`; one hundred and fifty-three when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
 operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #2511's `withdraw_offer`, #2531's `sell_copies`, #2532's `find_free_extras` and `add_free_extras`, #2551's three lot-copy writes, #1168's bid recommendation, and #1037's catalog-number
@@ -148,6 +148,7 @@ src/lib/agent-api/
   conversation-log-reads.ts  an entry a field per line, naming a sale, an entry read back (#2149); a file the same way, base64 (#2150)
   sale-attachment-reads.ts  a sale's file read back, a batch of files answered (#2198)
   proposal-reads.ts a proposal row and record, naming a proposal, an offer and a lot, the lots a buyer took (#2303)
+  contact-reads.ts  a contact row and record, the role words (#2610)
   variant-tree.ts   what keeps a variant or a base stamp from being deleted, and the refusals (#2140, #2171)
   issue-tree.ts     an issue named in a sentence; the refusals for a move's prefix clash and an issue not empty (#2169, #2172)
   issue-formats.ts  `none`, an issue format named to write or to filter by, the filter parameter, the refusal for a word already answered to (#2445)
@@ -186,12 +187,13 @@ src/lib/agent-api/
     conversation-log.ts  the five conversation-log operations (#2149) and the two for files (#2150)  ← server-side
     sale-attachments.ts  a sale's files: list and add (#2198)  ← server-side
     proposals.ts    the three proposal reads and six writes (#2303)    ← server-side
+    contacts.ts     find_contacts / get_contact (#2610)                ← server-side
     issue-formats.ts  the issue-format dictionary: create, update, order (#2445)  ← server-side
     stamp-list.ts   list_stamps, the Stamps list read (#2445)           ← server-side
 ```
 
 **`collection-reads.ts`, `offer-reads.ts`, `want-reads.ts`, `trade-reads.ts`, `bid-reads.ts`,
-`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `sale-attachment-reads.ts`, `proposal-reads.ts`, `variant-tree.ts`, `issue-tree.ts`, `issue-formats.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `batch.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
+`auction-reads.ts`, `auction-writes.ts`, `purchase-reads.ts`, `sale-reads.ts`, `conversation-log-reads.ts`, `sale-attachment-reads.ts`, `proposal-reads.ts`, `contact-reads.ts`, `variant-tree.ts`, `issue-tree.ts`, `issue-formats.ts`, `shipping-reads.ts`, `size-reads.ts`, `catalog-edits.ts`, `colnect-ids.ts`, `batch.ts`, `translations.ts`, `checklist-reads.ts`, `catalog-prices.ts`, `missing-catalog-prices.ts`, `issue-list-reads.ts`, `area-reads.ts` and `catalog-resolve.ts` are on the pure side and are typed structurally** rather than against
 `ItemListItem` and friends, which is the shape `src/lib/issue-stamp-match.ts` already reaches for and
 for its stated reason — *so it unit-tests without Prisma*. An `import type` from a `server-only`
 module would pass the purity walk (it is erased before it runs), and it is still not what this side
@@ -1285,6 +1287,49 @@ drives the scenario through the real route. The trades' *no send-shaped name* gu
 *no sale-named write* guard exempt these operations by name, each saying why: a Proposal is not a
 trade proposal, and the conversion records a sale as `sell_offer` does.
 
+## Reading a contact (#2610)
+
+**Two reads over the address book**: the people and firms the collection buys from, sells to, trades
+with and bids at. The scenario is *what do we know about Jan, and what has he bought?*
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `find_contacts` | no | contacts by words in the name or full name, a role, a market or a Facebook profile link |
+| `get_contact` | no | one contact as its edit dialog shows it, its Facebook profiles, and the numbers of what was done with it |
+
+**`get_contact` is the one place a contact is read in full** — email, phone and notes included, which
+the collector opened to the Assistant on 2026-11-21. Everywhere else a contact stays two fields: a
+seller, a buyer, a proposal's contact, a trade's partner in the vocabulary. `find_contacts`' row is no
+wider (`id`, `name`, `fullName`, `roles`, `market`, `path`): a list is how a contact is found, not how
+one is read. The projections in `contact-reads.ts` name their fields, and the unit test checks that
+the domain read's extra fields (`collectionId`, `referenceCount`) do not pass through.
+
+**The contact is `getContactListItem`**, the read behind the contact's page and its *Edit* dialog, so
+the agent is told what the collector sees. `auctionPlatform` — the platform the contact was last
+tracked on at auction, remembered by the app rather than set in the dialog — is read beside it.
+
+**What was done with the contact is numbers, newest first**, narrowed as the contact's page narrows
+it: `purchases` are the orders it supplied — never a trade's incoming half, which is under its trade,
+so `list_purchases` with `seller` can name one more than `get_contact` does; `sales`, `trades` and
+`proposals` by their numbers; `auctionSales` by `id`, `name` and `status`, since they have no number;
+`conversationEntries` as a count. The list operations narrowed to the contact read each in turn. A
+buyer of three hundred sales is three hundred short integers rather than three hundred rows. **The
+contact page's figures for a period** (spent, earned) are not here — the collector's call on #2610.
+
+**Roles are words**, `seller`, `buyer`, `exchange_partner`, `auction_house` and `other`, in the
+dialog's order — the same spelling for `role=` and for the answer.
+
+**A contact is named as every other operation names one** — `resolveSeller`, an id or what it is
+filed under or its full name exactly — over every contact, whatever its roles. An unknown name is
+refused with the close ones and pointed at `find_contacts`: `resolveSeller` takes `null` as its
+newcomer for a read, so the refusal names no operation that would create somebody. A Facebook profile
+is looked up through `find_contacts`' `facebook_profile`, normalised as *Sell* normalises one (#1777),
+rather than in the path, where a link does not sit well.
+
+`tests/integration/agent-api-contacts.test.ts` drives both through the real route on a *read only*
+token: *buyers in market DE*, a contact read in full, a trade's incoming half left out of the
+purchases, and a contact of another collection unseen.
+
 ## The conversation log (#2149)
 
 **What was said with a buyer, read and written in full** (ADR-0073). The log is mostly the
@@ -2220,8 +2265,9 @@ scaled to the length — loose on purpose, because it only ever suggests and nev
 
 **A contact is two fields.** A marketplace seller is filed under their login (#463), so
 `create_seller` writes the login as `name` and the name it was given as `fullName`; without a login,
-the name is the name. Nothing reads or writes `email`, `phone` or `notes` (a contact has no address
-field), and `updateContact` and `deleteContact` are on the forbidden map. The integration suite gives
+the name is the name. Nothing here reads or writes `email`, `phone` or `notes` (a contact has no
+address field) — `get_contact` is the one read that carries them (#2610, *Reading a contact*) — and
+`updateContact` and `deleteContact` are on the forbidden map. The integration suite gives
 a seller all three private fields and searches every answer it received for them.
 
 **Money is the purchase screen's.** `get_purchase` states `PurchaseDetail.spend` and each

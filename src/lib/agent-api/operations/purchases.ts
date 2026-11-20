@@ -95,7 +95,8 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 //
 // **A contact is read and written as two fields.** What it is filed under — a marketplace login,
 // where the seller has one (#463) — and, beside a login, the person's name as `fullName`. Email,
-// phone and notes stay the collector's, and no operation edits or deletes a contact.
+// phone and notes are not this module's — `get_contact` (#2610) is the one read that carries them —
+// and no operation edits or deletes a contact.
 //
 // ## Refusals
 //

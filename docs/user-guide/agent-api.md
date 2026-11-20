@@ -182,8 +182,8 @@ or whether it is for your collection, for sale or for trade — those wait for y
 arrives. It does not close or reopen a lot,
 mark an order in transit or arrived, or delete a purchase, and it will not remove a lot that already
 holds copies or has closed. It does not touch the order a closed trade created beyond its note, nor an
-opening balance at all, and it never sees or
-changes a contact's email, phone, address or notes, nor edits or deletes a contact you already have.
+opening balance at all, and it never
+changes a contact's email, phone or notes, nor edits or deletes a contact you already have.
 Everything it writes is on the purchase's own screen, where you can change it back.
 
 On **sales**, it can record what sold — say, after going through your offers on Facebook and
@@ -271,6 +271,21 @@ It can:
 
 Every entry it writes is marked *Assistant*. Nothing waits for your review: an entry changes no sale,
 status or amount.
+
+On **your contacts**, it can answer *what do we know about Jan, and what has he bought?* A **read
+only** token is enough. It can:
+
+- **find contacts** by part of the name or the full name, by role (seller, buyer, exchange partner,
+  auction house, other), by market — *buyers in Germany* — or by a Facebook profile link;
+- **read a contact in full**, as the contact's **Edit** dialog shows it: name, full name, email,
+  phone, notes, roles and market, the auction defaults (currency, shipping, buyer's premium) and the
+  platform they were last tracked on, their own free-extras terms, and their Facebook profiles;
+- **see what you have done with them**: the numbers of their purchases, sales, trades and proposals,
+  the auction sales tracked with them, and how many conversation entries are logged — each of which it
+  can then open with the tools above.
+
+It does not show the figures for a period that the contact's page shows (spent, earned), and it does
+not change a contact.
 
 On **shipping and packing**, it can set up the data you would otherwise type in yourself under
 [Settings → Carriers](collections.md#carriers), on a platform's shipping options and under
@@ -738,8 +753,9 @@ Two things it will never do, however you ask, and they are absent rather than sw
 - **It never reaches a counterparty.** It can build and balance a trade; it does not send a
   proposal, share a link, agree or close a trade, answer what a partner wrote on one, or write to
   Colnect. Nor does it bid on anything: working out what a lot is worth and keeping your watchlist
-  is as far as it goes, and typing a figure into an auction house's box stays with you. It also never sees a partner's email address, telephone number or the notes you keep
-  about them — the only thing it is told about a person is their name.
+  is as far as it goes, and typing a figure into an auction house's box stays with you. A partner's email address, telephone number and the notes you keep
+  about them it reads only when it looks the contact up — see *your contacts* above — and it never
+  changes them.
 
 And with a **read only** token it changes nothing at all, which is the setting to start from.
 

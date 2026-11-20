@@ -7,10 +7,11 @@
 // Three of them are worth a test:
 //
 //  - **A buyer is two fields and a link, never more.** The contact behind a buyer also carries an
-//    email, a phone, an address and notes — a private person's details, out of this surface's reach
-//    as a seller's are (#1390). The Facebook profile link is the one exception, because it is how a
-//    buyer there is recognised (#1777) and the agent read it off Facebook in the first place. The
-//    projections name their fields; **do not replace a mapper here with a spread**.
+//    email, a phone and notes — a private person's details, out of these projections' reach as a
+//    seller's are (#1390); `get_contact` is the one read that carries them (#2610). The Facebook
+//    profile link is the one exception, because it is how a buyer there is recognised (#1777) and
+//    the agent read it off Facebook in the first place. The projections name their fields; **do not
+//    replace a mapper here with a spread**.
 //  - **Money is the sale screen's.** `gross` is the lines in the sale's own currency and `net` what
 //    the sale brought in, in the collection's base currency, exactly as the list and the screen state
 //    them; nothing here recomputes either.
