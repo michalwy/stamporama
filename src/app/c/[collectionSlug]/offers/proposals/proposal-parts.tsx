@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { DialogActions, DialogBody, DialogShell, LabelWithError } from "@/app/dialog-shell";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ContactSelect } from "@/app/c/[collectionSlug]/inventory/contact-select";
-import { PROPOSAL_STATUS_LABEL, type ProposalStatus } from "@/lib/proposal-rules";
+import { buyerPickedText, PROPOSAL_STATUS_LABEL, type ProposalLotPick, type ProposalStatus } from "@/lib/proposal-rules";
 
 // What the list of proposals, a proposal's screen and a contact's page share (#2287).
 
@@ -41,6 +41,38 @@ export function ProposalStatusChip({ status }: { status: ProposalStatus }) {
   return (
     <Tooltip content={meta.title}>
       <span style={style}>{PROPOSAL_STATUS_LABEL[status]}</span>
+    </Tooltip>
+  );
+}
+
+const PICK_STYLE: React.CSSProperties = {
+  ...CHIP,
+  color: "var(--color-accent)",
+  borderColor: "var(--color-accent-border, var(--color-border))",
+  background: "var(--color-accent-soft, var(--color-bg-page))",
+};
+
+/** *Buyer picked 3 lots* (#2601), on a proposal's row in the list and above its lots — what the buyer
+ *  ticked on the live page. */
+export function BuyerPickedChip({ count, suffix }: { count: number; suffix?: string }) {
+  return (
+    <Tooltip content="The lots the buyer ticked on the proposal's live page — Convert to sale starts from them">
+      <span style={PICK_STYLE}>
+        {buyerPickedText(count)}
+        {suffix ? ` · ${suffix}` : ""}
+      </span>
+    </Tooltip>
+  );
+}
+
+/** A lot the buyer ticked (#2601): *Picked by the buyer*, or *Picked, no longer available* for one sold
+ *  elsewhere or withdrawn since. */
+export function LotPickChip({ pick }: { pick: Exclude<ProposalLotPick, null> }) {
+  return pick === "picked" ? (
+    <span style={PICK_STYLE}>Picked by the buyer</span>
+  ) : (
+    <Tooltip content="The buyer ticked it, but it has since been sold or withdrawn">
+      <span style={CHIP}>Picked, no longer available</span>
     </Tooltip>
   );
 }

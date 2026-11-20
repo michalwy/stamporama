@@ -35,7 +35,8 @@ import {
   useProposalScreen,
   useSettleProposalLot,
 } from "../use-proposals-query";
-import { ProposalStatusChip } from "../proposal-parts";
+import { BuyerPickedChip, LotPickChip, ProposalStatusChip } from "../proposal-parts";
+import { formatRelative } from "../../../auctions/auction-format";
 import { LotGroupSummaryBar } from "../../lots/lot-group-summary-bar";
 import { PostPriceTotalsBar } from "../../posts/[postNo]/post-price-totals-bar";
 import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
@@ -391,6 +392,15 @@ export function ProposalPanel({
               </div>
             )}
           </div>
+          {/* What the buyer ticked on the live page (#2601), timed from their last change. */}
+          {screen.buyerPicks && (
+            <div style={{ margin: "0.75rem 0 0" }}>
+              <BuyerPickedChip
+                count={screen.buyerPicks.count}
+                suffix={screen.buyerPicks.changedAt ? formatRelative(screen.buyerPicks.changedAt, new Date()) : undefined}
+              />
+            </div>
+          )}
           {/* What the lots come to (#2326), whatever the proposal's state. */}
           <div style={{ margin: "0.75rem 0 0" }}>
             <LotGroupSummaryBar collectionId={collectionId} group={{ kind: "proposal", id: proposalId }} />
@@ -438,6 +448,7 @@ export function ProposalPanel({
                         />
                       }
                       photoStyle={{ flex: "0 1 auto", minWidth: "6rem", maxWidth: "24rem" }}
+                      badge={lot.pick && <LotPickChip pick={lot.pick} />}
                       facts={lotFacts(lot, !!pricing)}
                       actions={lotActions(lot)}
                       pricing={pricing}

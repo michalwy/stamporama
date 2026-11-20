@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buyerPickedText,
   isProposalOpen,
+  proposalBuyerPickRefusal,
+  proposalLotPick,
   parseProposalLotPacking,
   parseProposalNo,
   proposalNewLotSets,
@@ -260,5 +263,29 @@ describe("new lots from copies (#2299)", () => {
     assert.equal(parseProposalLotPacking("together"), "together");
     assert.equal(parseProposalLotPacking("perCopy"), null);
     assert.equal(parseProposalLotPacking(null), null);
+  });
+});
+
+describe("the buyer's picks (#2601)", () => {
+  it("are taken while the proposal is open, a tick only on a lot still offered", () => {
+    assert.equal(proposalBuyerPickRefusal("preparing", "ready", true), null);
+    assert.equal(proposalBuyerPickRefusal("sent", "preparing", true), null);
+    assert.equal(proposalBuyerPickRefusal("sent", "withdrawn", true), "This lot is no longer available.");
+    assert.equal(proposalBuyerPickRefusal("sent", "sold", true), "This lot is no longer available.");
+    assert.equal(proposalBuyerPickRefusal("sent", "withdrawn", false), null);
+    assert.equal(proposalBuyerPickRefusal("sold", "ready", true), "This offer is closed.");
+    assert.equal(proposalBuyerPickRefusal("declined", "ready", false), "This offer is closed.");
+  });
+
+  it("read to the collector as picked, or picked and no longer available", () => {
+    assert.equal(proposalLotPick(null, "ready"), null);
+    assert.equal(proposalLotPick(new Date(), "ready"), "picked");
+    assert.equal(proposalLotPick(new Date(), "sold"), "unavailable");
+    assert.equal(proposalLotPick("2026-11-21T10:00:00Z", "withdrawn"), "unavailable");
+  });
+
+  it("are counted as the buyer picked them", () => {
+    assert.equal(buyerPickedText(1), "Buyer picked 1 lot");
+    assert.equal(buyerPickedText(3), "Buyer picked 3 lots");
   });
 });

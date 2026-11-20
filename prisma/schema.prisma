@@ -3180,6 +3180,9 @@ model Proposal {
   // The sale its accepted lots went into (#2289) — a new Direct sale or the buyer's open sale on any
   // platform. Null until it is sold, and again if that sale is deleted (`SetNull`).
   saleId       String?
+  // When the buyer last ticked or unticked a lot on the live page (#2601) — what *Buyer picked 3 lots
+  // · 2 h ago* is timed from. Null while they never have.
+  buyerPicksChangedAt DateTime?
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -5761,6 +5764,9 @@ model Offer {
   // it is sent the buyer holds the numbers. Null off a proposal; left as it was when a proposal is
   // deleted under it, which nothing reads.
   proposalLotNo  Int?
+  // When the proposal's buyer ticked this lot on the live page (#2601; ADR-0075 §10) — null while
+  // they have not. Cleared when the lot leaves the proposal and when an offer joins one.
+  proposalPickedAt DateTime?
   // ── The Allegro category this listing goes out in (#488, moved onto the offer by #494) ────────
   // A listing needs a category and that category's parameters, and unlike the profile above they are
   // a property of *these stamps* rather than of the account. They live here — on the offer, beside

@@ -11,6 +11,7 @@ import {
   proposalDocumentStanding,
   proposalLotPhotoFileName,
   proposalPhotoArchiveName,
+  proposalPickedTotal,
   proposalSharePath,
   proposalSharePhotoPath,
   hasProposalDocumentLabels,
@@ -84,8 +85,29 @@ describe("the document's words (#2288)", () => {
   it("are written out in every language", () => {
     for (const language of PROPOSAL_DOCUMENT_LABEL_LANGUAGES) {
       for (const [key, word] of Object.entries(proposalDocumentLabels(language))) {
-        assert.ok(word.trim().length > 0, `${language}.${key}`);
+        const text = typeof word === "function" ? word(3, "45.00 EUR") : word;
+        assert.ok(text.trim().length > 0, `${language}.${key}`);
       }
+    }
+  });
+});
+
+describe("the buyer's ticks (#2601)", () => {
+  it("count the lots ticked and sum their prices, a lot with no price adding nothing", () => {
+    assert.deepEqual(proposalPickedTotal([]), { count: 0, total: "0.00" });
+    assert.deepEqual(proposalPickedTotal([{ amount: "10.00" }, { amount: "15.10" }, { amount: null }, { amount: "19.90" }]), {
+      count: 4,
+      total: "45.00",
+    });
+  });
+
+  it("are summed under the lots in the proposal's language", () => {
+    assert.equal(proposalDocumentLabels("en").picked(3, "45.00 EUR"), "3 lots ticked · 45.00 EUR");
+    assert.equal(proposalDocumentLabels("en").picked(1, "5.00 EUR"), "1 lot ticked · 5.00 EUR");
+    assert.equal(proposalDocumentLabels("pl").picked(3, "45 zł"), "Wybrane: 3 · 45 zł");
+    for (const language of PROPOSAL_DOCUMENT_LABEL_LANGUAGES) {
+      const line = proposalDocumentLabels(language).picked(7, "99 X");
+      assert.ok(line.includes("7") && line.includes("99 X"), language);
     }
   });
 });

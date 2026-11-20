@@ -3616,6 +3616,26 @@ While the proposal is open, the card above its lots holds everything for the buy
 the document and making its link all leave it as it is, so you can check anything before it goes —
 press **Mark sent** once it has gone to the buyer.
 
+### The buyer's picks
+
+On the link, **the buyer ticks the lots they want**. Each lot still for sale has a tick box, and a
+tick is saved the moment it is made — there is no button to send. A line pinned under the lots sums
+what is ticked at the lots' current prices (*3 lots ticked · 45.00 EUR*). A sold or withdrawn lot has
+no tick box. The buyer can tick while the proposal is Preparing or Sent; once it is sold or declined
+the page says only that the offer is closed. Printed or saved as a PDF, the page has no tick boxes.
+The buyer only ticks — talking and haggling stay in your chat.
+
+You see the picks in the app, and nowhere else — nothing is sent to you:
+
+- On the proposal's screen, a line above the lots reads *Buyer picked 3 lots · 2 hours ago*, timed
+  from the buyer's last tick or untick, and each lot they ticked is marked **Picked by the buyer** in
+  its row. A lot they ticked that has since sold elsewhere or been withdrawn reads **Picked, no longer
+  available**.
+- The **Proposals** list shows *Buyer picked 3 lots* on each proposal that has picks.
+- **Convert to sale…** opens with the buyer's picks already ticked (below).
+
+The picks stay when you reopen the proposal. A lot taken out of the proposal loses its pick.
+
 ### Sent, reopened, declined
 
 A proposal starts **Preparing**: lots come and go and their titles and prices change. **Mark sent**
@@ -3647,8 +3667,9 @@ none of its own), its number, its offer (opens in a new tab), its title, its sta
 its sets and copies — and, beside the price, its **catalogue value** and **cost** per set, so the
 price agreed with the buyer can be read against them. Hover a marked cost for what it counts.
 
-1. **Tick the lots the buyer took.** The tick in the lots' heading ticks every lot, or clears them
-   all; with some ticked it shows partly ticked. Each comes at its proposal price; change it there
+1. **Tick the lots the buyer took.** The window opens with the lots the buyer ticked on the link
+   already ticked ([The buyer's picks](#the-buyers-picks)); change any of them before selling. The
+   tick in the lots' heading ticks every lot, or clears them all; with some ticked it shows partly ticked. Each comes at its proposal price; change it there
    for a buyer who haggled — the sale gets the new price, the lot keeps its own. A lot with several
    sets sells all of them, each at that price. A lot already sold, withdrawn, or whose copies have
    sold elsewhere meanwhile is greyed with the reason and can't be ticked.

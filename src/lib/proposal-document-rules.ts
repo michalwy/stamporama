@@ -62,6 +62,14 @@ export function proposalDocumentMark(state: string): ProposalDocumentMark {
   return null;
 }
 
+/** What the buyer's ticks come to on their page (#2601): how many lots, and their prices at the lots'
+ *  current prices, two decimals. A ticked lot with no price adds nothing to the sum. */
+export function proposalPickedTotal(lots: readonly { amount: string | null }[]): { count: number; total: string } {
+  let cents = 0;
+  for (const lot of lots) if (lot.amount !== null) cents += Math.round(Number(lot.amount) * 100);
+  return { count: lots.length, total: (cents / 100).toFixed(2) };
+}
+
 /** A lot's photo as the archive and its own download name it: `lot-02-<offer>-01.jpg`, so the photos
  *  sort in lot order and each says which lot it is — the numbers the document and the message use. */
 export function proposalLotPhotoFileName(lotNo: number, fileName: string): string {
@@ -91,6 +99,15 @@ export interface ProposalDocumentLabels {
   unavailable: string;
   /** Said in place of the proposal once it is sold, declined or gone. */
   closed: string;
+  /** Beside a lot's tick box on the buyer's page (#2601). */
+  pick: string;
+  /** Under the lots while nothing is ticked. */
+  pickHint: string;
+  /** Under the lots once something is: *3 lots ticked · 45.00 EUR*. Outside English it reads
+   *  *Wybrane: 3 · 45,00 zł* — a count after a colon needs no plural forms. */
+  picked: (count: number, total: string) => string;
+  /** A tick the server did not take; the box goes back to what it was. */
+  pickFailed: string;
 }
 
 const EN: ProposalDocumentLabels = {
@@ -101,6 +118,10 @@ const EN: ProposalDocumentLabels = {
   sold: "Sold",
   unavailable: "No longer available",
   closed: "This offer is closed.",
+  pick: "I want this lot",
+  pickHint: "Tick the lots you want.",
+  picked: (count, total) => `${count} ${count === 1 ? "lot" : "lots"} ticked · ${total}`,
+  pickFailed: "Not saved — please try again.",
 };
 
 const LABELS: Record<string, ProposalDocumentLabels> = {
@@ -113,6 +134,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Prodáno",
     unavailable: "Již není k dispozici",
     closed: "Tato nabídka je uzavřena.",
+    pick: "Chci tuto položku",
+    pickHint: "Zaškrtněte položky, které chcete.",
+    picked: (count, total) => `Vybráno: ${count} · ${total}`,
+    pickFailed: "Neuloženo — zkuste to prosím znovu.",
   },
   da: {
     offer: "Tilbud",
@@ -122,6 +147,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Solgt",
     unavailable: "Ikke længere tilgængelig",
     closed: "Dette tilbud er afsluttet.",
+    pick: "Jeg vil gerne have dette lot",
+    pickHint: "Sæt kryds ved de lots, du ønsker.",
+    picked: (count, total) => `Valgt: ${count} · ${total}`,
+    pickFailed: "Ikke gemt — prøv venligst igen.",
   },
   de: {
     offer: "Angebot",
@@ -131,6 +160,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Verkauft",
     unavailable: "Nicht mehr verfügbar",
     closed: "Dieses Angebot ist abgeschlossen.",
+    pick: "Dieses Los möchte ich",
+    pickHint: "Kreuzen Sie die Lose an, die Sie möchten.",
+    picked: (count, total) => `Ausgewählt: ${count} · ${total}`,
+    pickFailed: "Nicht gespeichert — bitte erneut versuchen.",
   },
   es: {
     offer: "Oferta",
@@ -140,6 +173,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Vendido",
     unavailable: "Ya no está disponible",
     closed: "Esta oferta está cerrada.",
+    pick: "Quiero este lote",
+    pickHint: "Marque los lotes que desea.",
+    picked: (count, total) => `Seleccionados: ${count} · ${total}`,
+    pickFailed: "No se ha guardado — inténtelo de nuevo.",
   },
   fi: {
     offer: "Tarjous",
@@ -149,6 +186,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Myyty",
     unavailable: "Ei enää saatavilla",
     closed: "Tämä tarjous on päättynyt.",
+    pick: "Haluan tämän kohteen",
+    pickHint: "Valitse haluamasi kohteet.",
+    picked: (count, total) => `Valittu: ${count} · ${total}`,
+    pickFailed: "Ei tallennettu — yritä uudelleen.",
   },
   fr: {
     offer: "Offre",
@@ -158,6 +199,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Vendu",
     unavailable: "Plus disponible",
     closed: "Cette offre est close.",
+    pick: "Je veux ce lot",
+    pickHint: "Cochez les lots que vous souhaitez.",
+    picked: (count, total) => `Sélectionnés: ${count} · ${total}`,
+    pickFailed: "Non enregistré — veuillez réessayer.",
   },
   hu: {
     offer: "Ajánlat",
@@ -167,6 +212,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Eladva",
     unavailable: "Már nem elérhető",
     closed: "Ez az ajánlat lezárult.",
+    pick: "Ezt a tételt kérem",
+    pickHint: "Jelölje be a kívánt tételeket.",
+    picked: (count, total) => `Kiválasztva: ${count} · ${total}`,
+    pickFailed: "Nem sikerült menteni — próbálja újra.",
   },
   it: {
     offer: "Offerta",
@@ -176,6 +225,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Venduto",
     unavailable: "Non più disponibile",
     closed: "Questa offerta è chiusa.",
+    pick: "Voglio questo lotto",
+    pickHint: "Seleziona i lotti che desideri.",
+    picked: (count, total) => `Selezionati: ${count} · ${total}`,
+    pickFailed: "Non salvato — riprova.",
   },
   nl: {
     offer: "Aanbod",
@@ -185,6 +238,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Verkocht",
     unavailable: "Niet meer beschikbaar",
     closed: "Dit aanbod is gesloten.",
+    pick: "Ik wil deze kavel",
+    pickHint: "Vink de kavels aan die u wilt.",
+    picked: (count, total) => `Geselecteerd: ${count} · ${total}`,
+    pickFailed: "Niet opgeslagen — probeer het opnieuw.",
   },
   no: {
     offer: "Tilbud",
@@ -194,6 +251,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Solgt",
     unavailable: "Ikke lenger tilgjengelig",
     closed: "Dette tilbudet er avsluttet.",
+    pick: "Jeg vil ha dette objektet",
+    pickHint: "Kryss av objektene du ønsker.",
+    picked: (count, total) => `Valgt: ${count} · ${total}`,
+    pickFailed: "Ikke lagret — prøv igjen.",
   },
   pl: {
     offer: "Oferta",
@@ -203,6 +264,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Sprzedane",
     unavailable: "Już niedostępne",
     closed: "Ta oferta jest zamknięta.",
+    pick: "Chcę tę pozycję",
+    pickHint: "Zaznacz pozycje, które chcesz.",
+    picked: (count, total) => `Wybrane: ${count} · ${total}`,
+    pickFailed: "Nie zapisano — spróbuj ponownie.",
   },
   pt: {
     offer: "Oferta",
@@ -212,6 +277,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Vendido",
     unavailable: "Já não está disponível",
     closed: "Esta oferta está encerrada.",
+    pick: "Quero este lote",
+    pickHint: "Assinale os lotes que deseja.",
+    picked: (count, total) => `Selecionados: ${count} · ${total}`,
+    pickFailed: "Não guardado — tente novamente.",
   },
   ro: {
     offer: "Ofertă",
@@ -221,6 +290,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Vândut",
     unavailable: "Nu mai este disponibil",
     closed: "Această ofertă este închisă.",
+    pick: "Vreau acest lot",
+    pickHint: "Bifați loturile dorite.",
+    picked: (count, total) => `Selectate: ${count} · ${total}`,
+    pickFailed: "Nu s-a salvat — încercați din nou.",
   },
   ru: {
     offer: "Предложение",
@@ -230,6 +303,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Продано",
     unavailable: "Больше не доступно",
     closed: "Это предложение закрыто.",
+    pick: "Хочу этот лот",
+    pickHint: "Отметьте лоты, которые хотите.",
+    picked: (count, total) => `Выбрано: ${count} · ${total}`,
+    pickFailed: "Не сохранено — попробуйте ещё раз.",
   },
   sk: {
     offer: "Ponuka",
@@ -239,6 +316,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Predané",
     unavailable: "Už nie je k dispozícii",
     closed: "Táto ponuka je uzavretá.",
+    pick: "Chcem túto položku",
+    pickHint: "Označte položky, ktoré chcete.",
+    picked: (count, total) => `Vybraté: ${count} · ${total}`,
+    pickFailed: "Neuložené — skúste to znova.",
   },
   sv: {
     offer: "Erbjudande",
@@ -248,6 +329,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Såld",
     unavailable: "Inte längre tillgänglig",
     closed: "Det här erbjudandet är avslutat.",
+    pick: "Jag vill ha det här objektet",
+    pickHint: "Kryssa i de objekt du vill ha.",
+    picked: (count, total) => `Valda: ${count} · ${total}`,
+    pickFailed: "Inte sparat — försök igen.",
   },
   uk: {
     offer: "Пропозиція",
@@ -257,6 +342,10 @@ const LABELS: Record<string, ProposalDocumentLabels> = {
     sold: "Продано",
     unavailable: "Більше не доступно",
     closed: "Ця пропозиція закрита.",
+    pick: "Хочу цей лот",
+    pickHint: "Позначте лоти, які бажаєте.",
+    picked: (count, total) => `Вибрано: ${count} · ${total}`,
+    pickFailed: "Не збережено — спробуйте ще раз.",
   },
 };
 
