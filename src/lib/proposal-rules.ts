@@ -342,6 +342,37 @@ export function proposalNewLotSets(itemIds: readonly string[], packing: Proposal
   return packing === "each" ? ids.map((id) => [[id]]) : [[ids]];
 }
 
+// ── The buyer's picks (#2601) ────────────────────────────────────────────────────────────────────
+//
+// On the proposal's live page the buyer ticks the lots they want, each tick saved at once. The
+// collector sees the picks on the proposal's screen and the list, and *Convert to sale…* starts from
+// them. The buyer only ticks: no note and no price — talking and haggling stay in the chat.
+
+/** Why the buyer may not tick or untick a lot in `lotState` on a proposal in `status`, or null when
+ *  they may. Ticking needs the proposal open and the lot still offered — neither sold nor withdrawn.
+ *  Unticking needs only the proposal open: a lot that stopped being offered loses its tick box, never
+ *  the buyer's right to change their mind. */
+export function proposalBuyerPickRefusal(status: ProposalStatus, lotState: OfferState, picked: boolean): string | null {
+  if (!isProposalOpen(status)) return "This offer is closed.";
+  if (picked && (CLOSED_OFFER_STATES as readonly string[]).includes(lotState)) return "This lot is no longer available.";
+  return null;
+}
+
+/** How a lot's pick reads to the collector: `picked` — ticked and still offered; `unavailable` —
+ *  ticked, then sold or withdrawn (*Picked, no longer available*); null — not ticked. */
+export type ProposalLotPick = "picked" | "unavailable" | null;
+
+export function proposalLotPick(pickedAt: Date | string | null, lotState: OfferState): ProposalLotPick {
+  if (pickedAt === null) return null;
+  return (CLOSED_OFFER_STATES as readonly string[]).includes(lotState) ? "unavailable" : "picked";
+}
+
+/** *Buyer picked 3 lots* — every lot ticked, the ones no longer available included: it is what the
+ *  buyer said. */
+export function buyerPickedText(count: number): string {
+  return `Buyer picked ${count} ${count === 1 ? "lot" : "lots"}`;
+}
+
 /** Read a proposal's number off its address (`/offers/proposals/4`), or undefined. */
 export function parseProposalNo(raw: string): number | undefined {
   if (!/^\d+$/.test(raw)) return undefined;

@@ -23,6 +23,7 @@ function lot(offerId: string, over: Partial<ProposalLot> = {}): ProposalLot {
     setCount: 1,
     catalogSortKey: null,
     copyPhotoId: null,
+    pick: null,
     ...over,
   };
 }
@@ -49,6 +50,7 @@ function screen(over: Partial<ProposalScreen> = {}): ProposalScreen {
     sales: {},
     lotTexts: { a: text(false), b: text(true) },
     lotTitles: { template: "{name}", handWritten: ["a"] },
+    buyerPicks: null,
     ...over,
   };
 }

@@ -179,6 +179,7 @@ export function GroupLotRow({
   photos,
   photoStyle,
   caption,
+  badge,
   facts,
   actions,
   select,
@@ -196,6 +197,8 @@ export function GroupLotRow({
   /** How the photos' cell sits in the row. */
   photoStyle: React.CSSProperties;
   caption?: React.ReactNode | null;
+  /** A mark beside *Lot N* — a proposal's *Picked by the buyer* (#2601). */
+  badge?: React.ReactNode;
   facts: LotFact[];
   actions: RowAction[];
   /** The lot's tick (#2050), or null for a lot that can no longer be ticked — its cell kept empty so the
@@ -244,6 +247,7 @@ export function GroupLotRow({
                 </span>
               )}
               <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
+              {badge && <span style={{ marginLeft: "0.5rem" }}>{badge}</span>}
               {!prepare && (
                 <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
                   <OfferLink href={offerHref} offerNo={lot.offerNo} />

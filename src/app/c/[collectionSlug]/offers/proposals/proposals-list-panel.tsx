@@ -14,7 +14,7 @@ import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
 import type { ProposalListItem } from "@/lib/proposals";
 import { PROPOSAL_STATUSES, PROPOSAL_STATUS_LABEL, isProposalStatus, type ProposalStatus } from "@/lib/proposal-rules";
 import { useProposalsInfinite } from "./use-proposals-query";
-import { NewProposalDialog, ProposalStatusChip, proposalTotalText } from "./proposal-parts";
+import { BuyerPickedChip, NewProposalDialog, ProposalStatusChip, proposalTotalText } from "./proposal-parts";
 
 const META: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -203,6 +203,7 @@ function ProposalRow({
             {proposal.lotCount} {proposal.lotCount === 1 ? "lot" : "lots"} · {proposal.openLotCount} open
           </span>
         </Tooltip>
+        {proposal.pickedLotCount > 0 && <BuyerPickedChip count={proposal.pickedLotCount} />}
         <span style={META}>made {proposal.createdOn}</span>
         {proposal.sentOn && <span style={META}>sent {proposal.sentOn}</span>}
       </div>

@@ -14,7 +14,7 @@ import {
 import type { OfferListingType, OfferState } from "./offer-rules";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { DEFAULT_CURRENCY_STYLE, writtenAmount } from "./template-amount";
-import { proposalLotPrice, proposalStatusOf, proposalTotal } from "./proposal-rules";
+import { proposalBuyerPickRefusal, proposalLotPrice, proposalStatusOf, proposalTotal } from "./proposal-rules";
 import { renderProposalMessage, unknownProposalMessagePlaceholders } from "./proposal-message-rules";
 import {
   isProposalShareTokenShape,
@@ -81,6 +81,7 @@ async function readProposalHead(proposalId: string) {
           price: true,
           startingPrice: true,
           currency: true,
+          proposalPickedAt: true,
         },
       },
     },
@@ -104,6 +105,7 @@ async function readProposalHead(proposalId: string) {
       currency: lot.currency,
       ...figures,
       offeredAt: proposalLotPrice(figures),
+      pickedAt: lot.proposalPickedAt,
     };
   });
   return {
@@ -258,6 +260,13 @@ export interface ProposalDocumentLot {
   mark: ProposalDocumentMark;
   /** Its upload set, in order. */
   photoIds: string[];
+  /** What it is offered at as a plain amount, null while it has no price — what the buyer's ticks are
+   *  summed from (#2601). */
+  amount: string | null;
+  /** Whether the buyer may tick it: still offered, neither sold nor withdrawn (#2601). */
+  pickable: boolean;
+  /** Whether the buyer has ticked it — only ever on a lot they may tick. */
+  picked: boolean;
 }
 
 /** What the document draws. `lots` only while it is `shown`. */
@@ -271,11 +280,13 @@ export interface ProposalDocument {
   total: string;
   /** How many of those have no price yet, which the total leaves out. */
   unpriced: number;
+  /** The currency the total is in — what the buyer's ticks are summed in too (#2601). */
+  currency: string;
 }
 
 async function buildDocument(ownerId: string, head: ProposalHead): Promise<ProposalDocument> {
   const standing = proposalDocumentStanding(head.status);
-  const base = { proposalNo: head.proposalNo, language: head.language, standing };
+  const base = { proposalNo: head.proposalNo, language: head.language, standing, currency: head.currency };
   const { total, unpriced } = proposalTotal(head.lots);
   const written = (amount: string) => writtenAmount(amount, head.currency, DEFAULT_CURRENCY_STYLE);
   if (standing !== "shown") return { ...base, lots: [], total: written(total), unpriced };
@@ -291,6 +302,7 @@ async function buildDocument(ownerId: string, head: ProposalHead): Promise<Propo
     lots: head.lots.map((lot): ProposalDocumentLot => {
       const plan = plans.get(lot.offerId)?.plan;
       const mark = proposalDocumentMark(lot.state);
+      const pickable = mark === null;
       return {
         key: `lot-${lot.lotNo}`,
         lotNo: lot.lotNo,
@@ -299,6 +311,10 @@ async function buildDocument(ownerId: string, head: ProposalHead): Promise<Propo
         mark,
         // A lot no longer offered shows no photos: there is nothing of it to look at.
         photoIds: mark === "unavailable" || !plan || "reason" in plan ? [] : plan.images.map((image) => image.photoId),
+        amount: lot.offeredAt,
+        pickable,
+        // A lot ticked and then sold elsewhere or withdrawn reads as no longer available, not ticked.
+        picked: pickable && lot.pickedAt !== null,
       };
     }),
   };
@@ -503,4 +519,52 @@ export async function canServeProposalSharePhoto(access: ProposalShareAccess, ph
     select: { id: true },
   });
   return photo !== null;
+}
+
+// ── The buyer's picks (#2601) ───────────────────────────────────────────────────────────────────
+
+const OFFER_CLOSED = "This offer is closed.";
+
+/**
+ * The buyer ticks or unticks lot `lotNo` on their page — saved at once, with no submit. The lot is
+ * named by its number, the only key the page has; the proposal is the token's. Refused once the
+ * proposal is closed, and a tick on a lot no longer offered (`proposalBuyerPickRefusal`). Every change
+ * stamps the proposal's `buyerPicksChangedAt`, which the collector's *Buyer picked 3 lots · 2 h ago* is
+ * timed from; ticking a lot already ticked keeps when it was first ticked.
+ *
+ * Returns the lot numbers ticked now, in lot order — what the page shows once the write is back.
+ */
+export async function saveProposalBuyerPick(
+  access: ProposalShareAccess,
+  lotNo: number,
+  picked: boolean,
+  now: Date = new Date()
+): Promise<{ picked: number[] }> {
+  if (!access.proposalId) throw new Error(OFFER_CLOSED);
+  const proposalId = access.proposalId;
+  return prisma.$transaction(async (tx) => {
+    const proposal = await tx.proposal.findFirst({
+      where: { id: proposalId, collectionId: access.collectionId },
+      select: { status: true },
+    });
+    if (!proposal) throw new Error(OFFER_CLOSED);
+    const lot = await tx.offer.findFirst({
+      where: { proposalId, proposalLotNo: lotNo },
+      select: { id: true, state: true, proposalPickedAt: true },
+    });
+    if (!lot) throw new Error("There is no such lot in this offer.");
+    const refusal = proposalBuyerPickRefusal(proposalStatusOf(proposal.status), lot.state as OfferState, picked);
+    if (refusal) throw new Error(refusal);
+    await tx.offer.update({
+      where: { id: lot.id },
+      data: { proposalPickedAt: picked ? (lot.proposalPickedAt ?? now) : null },
+    });
+    await tx.proposal.update({ where: { id: proposalId }, data: { buyerPicksChangedAt: now } });
+    const rows = await tx.offer.findMany({
+      where: { proposalId, proposalPickedAt: { not: null }, state: { notIn: ["sold", "withdrawn"] } },
+      orderBy: LOT_ORDER,
+      select: { proposalLotNo: true },
+    });
+    return { picked: rows.flatMap((row) => (row.proposalLotNo === null ? [] : [row.proposalLotNo])) };
+  });
 }

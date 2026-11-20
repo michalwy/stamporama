@@ -115,14 +115,20 @@ export function ConvertProposalDialog({
   onSubmit: (input: ProposalSaleInput) => void;
 }) {
   const { data: options, isLoading } = useProposalSaleOptions(collectionId, proposalId);
-  // The ticked lots, each with the price typed for it.
-  const [ticked, setTicked] = useState<Record<string, string>>({});
+  // The ticks the collector has made, each lot with the price typed for it — null until the first,
+  // while the window shows the buyer's picks (#2601).
+  const [changed, setChanged] = useState<Record<string, string> | null>(null);
   const [target, setTarget] = useState<string>(NEW_SALE);
   const [localError, setLocalError] = useState<string | undefined>();
 
   const lots = options?.lots ?? [];
   const sales = options?.sales ?? [];
   const sellable = lots.filter((lot) => lot.unsellable === null);
+  // The window opens with the lots the buyer ticked on the live page already ticked (#2601), each at
+  // its proposal price — a pick that can no longer be sold stays greyed as any such lot is.
+  const ticked = changed ?? buyerPicks(sellable);
+  const setTicked = (update: (prev: Record<string, string>) => Record<string, string>) =>
+    setChanged((prev) => update(prev ?? buyerPicks(sellable)));
   const tickedLots = sellable.filter((lot) => lot.offerId in ticked);
   const currency = proposalLotCurrency(tickedLots.map((lot) => lot.currency));
   const lotCurrency = currency.ok ? currency.currency : (sellable[0]?.currency ?? "");
@@ -388,6 +394,11 @@ export function ConvertProposalDialog({
       </form>
     </DialogShell>
   );
+}
+
+/** The buyer's picks as the window's ticks, each at its proposal price. */
+function buyerPicks(sellable: readonly ProposalSaleLot[]): Record<string, string> {
+  return Object.fromEntries(sellable.filter((lot) => lot.picked).map((lot) => [lot.offerId, lot.price ?? ""]));
 }
 
 /** One lot: its tick, its photo, its number, its offer — a link, opened beside the window so the ticks

@@ -44,8 +44,10 @@ import {
   proposalSaleLotNote,
   proposalStatusAfter,
   proposalStatusOf,
+  proposalLotPick,
   proposalTotal,
   type ProposalLotPacking,
+  type ProposalLotPick,
   type ProposalMove,
   type ProposalStatus,
 } from "./proposal-rules";
@@ -144,6 +146,8 @@ export interface ProposalListItem {
   lotCount: number;
   /** The lots still offered — neither sold nor withdrawn. */
   openLotCount: number;
+  /** The lots the buyer ticked on the live page (#2601), the ones since sold or withdrawn included. */
+  pickedLotCount: number;
   /** The lots not withdrawn, summed at their prices; see `proposalTotal`. */
   total: string;
   unpriced: number;
@@ -176,7 +180,7 @@ const LIST_SELECT = {
   createdAt: true,
   sentAt: true,
   contact: { select: { id: true, name: true } },
-  lots: { select: LOT_FIGURES_SELECT },
+  lots: { select: { ...LOT_FIGURES_SELECT, proposalPickedAt: true } },
 } as const;
 
 type LotFigures = {
@@ -208,6 +212,7 @@ function toListItem(
     status: proposalStatusOf(row.status),
     lotCount: row.lots.length,
     openLotCount: row.lots.filter((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state)).length,
+    pickedLotCount: row.lots.filter((lot) => lot.proposalPickedAt !== null).length,
     total,
     unpriced,
     currency: row.lots[0]?.currency ?? currency,
@@ -334,6 +339,8 @@ export interface ProposalLot {
   /** Its first copy's front photo (#2313), which its row shows while the lot has no photo of its own,
    *  so its stamps are always in view; null when no copy has one. */
   copyPhotoId: string | null;
+  /** Whether the buyer ticked it on the live page (#2601) — and whether it is still offered. */
+  pick: ProposalLotPick;
 }
 
 export interface ProposalScreen {
@@ -362,12 +369,16 @@ export interface ProposalScreen {
   lotTexts: Record<string, OfferTextStatus> | null;
   /** What *Title template for all lots…* works from (#2033), or null unless it is being prepared. */
   lotTitles: LotGroupTitles | null;
+  /** What the buyer ticked on the live page (#2601): how many lots, and when they last ticked or
+   *  unticked one (ISO) — null while no lot is ticked. */
+  buyerPicks: { count: number; changedAt: string | null } | null;
 }
 
 const SCREEN_LOT_SELECT = {
   id: true,
   offerNo: true,
   proposalLotNo: true,
+  proposalPickedAt: true,
   name: true,
   ...LOT_FIGURES_SELECT,
   _count: { select: { sets: true } },
@@ -405,6 +416,7 @@ async function readScreenLots(
       setCount: lot._count.sets,
       catalogSortKey: sortKeys.get(lot.id) ?? null,
       copyPhotoId: copyPhotos[lot.id] ?? null,
+      pick: proposalLotPick(lot.proposalPickedAt, f.state),
     };
   });
 }
@@ -420,6 +432,7 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
       createdAt: true,
       sentAt: true,
       closedAt: true,
+      buyerPicksChangedAt: true,
       contact: { select: { id: true, name: true } },
       sale: { select: { id: true, saleNo: true, platform: { select: { name: true } } } },
       lots: {
@@ -460,7 +473,17 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
     sales,
     lotTexts,
     lotTitles,
+    buyerPicks: buyerPicksOf(row.lots, row.buyerPicksChangedAt),
   };
+}
+
+/** The screen's *Buyer picked 3 lots · 2 h ago*: every lot ticked, null while none is (#2601). */
+function buyerPicksOf(
+  lots: readonly { proposalPickedAt: Date | null }[],
+  changedAt: Date | null
+): ProposalScreen["buyerPicks"] {
+  const count = lots.filter((lot) => lot.proposalPickedAt !== null).length;
+  return count === 0 ? null : { count, changedAt: changedAt?.toISOString() ?? null };
 }
 
 /** One lot of a proposal as its screen shows it (#2313): what changes when a price, a title or the
@@ -629,7 +652,11 @@ export async function writeProposalLots(
   const first = (last._max.proposalLotNo ?? 0) + 1;
   const joining = [...offers].sort((a, b) => a.offerNo - b.offerNo);
   for (const [index, offer] of joining.entries()) {
-    await tx.offer.update({ where: { id: offer.id }, data: { proposalId, proposalLotNo: first + index } });
+    // A pick is the buyer's of this proposal (#2601): none follows an offer in from anywhere.
+    await tx.offer.update({
+      where: { id: offer.id },
+      data: { proposalId, proposalLotNo: first + index, proposalPickedAt: null },
+    });
   }
 }
 
@@ -669,7 +696,8 @@ export async function removeProposalLot(ownerId: string, proposalId: string, off
   await prisma.$transaction(async (tx) => {
     const { count } = await tx.offer.updateMany({
       where: { id: offerId, collectionId, proposalId },
-      data: { proposalId: null, proposalLotNo: null },
+      // A lot taken out loses its pick (#2601).
+      data: { proposalId: null, proposalLotNo: null, proposalPickedAt: null },
     });
     if (count === 0) throw new OfferActionBlockedError("not-eligible", "That offer is not a lot of this proposal.");
     if (proposalRenumbersLots(status, everSent)) await renumberProposalLots(tx, proposalId);
@@ -833,6 +861,9 @@ export interface ProposalSaleLot {
   costMarks: string | null;
   /** Why some of its copies have no cost (#2333) — empty when every one has. */
   costGaps: string[];
+  /** Whether the buyer ticked it on the live page (#2601): the window opens with it ticked, where it
+   *  can be sold. */
+  picked: boolean;
 }
 
 /** One of the contact's sales still open, on any platform, as the dialog offers it. */
@@ -888,6 +919,7 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
           id: true,
           offerNo: true,
           proposalLotNo: true,
+          proposalPickedAt: true,
           name: true,
           ...LOT_FIGURES_SELECT,
           _count: { select: { sets: true } },
@@ -953,6 +985,7 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
           ? describeCostMarks({ estimated: row.setsTotals.costEstimated, opening: row.setsTotals.costOpening })
           : null,
         costGaps: row ? describeCostGaps(row.setsTotals.costGaps) : [],
+        picked: lot.proposalPickedAt !== null,
       };
     }),
     sales: sales.map((sale) => ({

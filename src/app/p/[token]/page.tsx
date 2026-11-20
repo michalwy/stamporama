@@ -10,7 +10,7 @@ import {
   proposalDocumentPhotoSrcs,
   proposalSharePhotoPath,
 } from "@/lib/proposal-document-rules";
-import { ProposalDocument } from "@/app/c/[collectionSlug]/offers/proposals/[proposalNo]/document/proposal-document";
+import { ProposalPicksDocument } from "./proposal-picks";
 
 // **A proposal's document, for its buyer with a link** (#2288): the collector's printable page's
 // contents, addressed by a secret link, for somebody with no account and no session.
@@ -22,6 +22,9 @@ import { ProposalDocument } from "@/app/c/[collectionSlug]/offers/proposals/[pro
 // same document. **It stays live** while the proposal is open — it follows the prices, and a lot
 // withdrawn is marked no longer available. Once the proposal is sold, declined or gone, the page says
 // only that the offer is closed, in the proposal's language.
+//
+// **The buyer ticks the lots they want on it** (#2601), each tick saved at once — the one thing the
+// page writes, through its own route (`/api/p/[token]/picks`).
 
 // A secret link is only secret while nothing publishes it.
 const ROBOTS: Metadata["robots"] = { index: false, follow: false, nocache: true };
@@ -77,7 +80,8 @@ export default async function ProposalSharePage({ params }: SharePageProps) {
   const { document } = shared;
   return (
     <main style={PAGE}>
-      <ProposalDocument
+      <ProposalPicksDocument
+        token={token}
         document={document}
         photoSrc={proposalDocumentPhotoSrcs(document, (photoId) => proposalSharePhotoPath(token, photoId, "full"))}
       />

@@ -4,7 +4,8 @@
 
 Accepted. Decided in #2287 on 2026-11-01, which built it; the design was settled with the collector
 in the issue, and its *to be confirmed* points were implemented as written. #2288 (what the buyer is
-sent) and #2289 (a proposal becomes a sale, §6 — built 2026-11-01) build on it.
+sent) and #2289 (a proposal becomes a sale, §6 — built 2026-11-01) build on it; #2601 lets the buyer
+tick the lots they want (§10).
 
 ## Context
 
@@ -133,6 +134,27 @@ Lots now also join through *New offer* (§2's list gains a fourth way): its **Pr
 form's offer on Direct and the chosen proposal's next lot in one transaction (`createProposalLot`,
 `writeProposalLots` as the `inTransaction` hook). It and the generator's *Into proposal* list the
 Preparing proposals only and share one remembered choice per collection in the browser.
+
+### 10. The buyer ticks the lots they want on the live page (#2601)
+
+Added by #2601, which built it on 2026-11-21, settled with the collector that day; its *to be
+confirmed* points were implemented as written. The buyer used to answer in the chat — *I'll take 2,
+5 and 7* — and the collector copied that into *Convert to sale…*. Now **each lot still offered has a
+tick box on §8's live link**, saved the moment it is ticked, with no submit, while the proposal is
+open (Preparing or Sent). A sold or withdrawn lot has none, and a closed proposal's page still says
+only that it is closed. The buyer only ticks: no note and no price.
+
+A pick is **the lot's own** (`Offer.proposalPickedAt`), named on the page by its lot number — no id
+of the collection's reaches the buyer — through a route of the token's own (`/api/p/[token]/picks`).
+It is cleared when the lot is taken out of the proposal and when an offer joins one, so it never
+follows an offer elsewhere; it stays when the proposal is reopened. The proposal keeps when the buyer
+last ticked or unticked (`Proposal.buyerPicksChangedAt`).
+
+The collector sees the picks **in the app only**: *Buyer picked 3 lots · 2 hours ago* above the
+proposal's lots, each picked lot marked *Picked by the buyer* (*Picked, no longer available* once it
+is sold elsewhere or withdrawn), the same count on the Proposals list — and *Convert to sale…* opens
+with the picks still sellable ticked, every tick still the collector's to change. The agent API
+reads no picks.
 
 ## Consequences
 
