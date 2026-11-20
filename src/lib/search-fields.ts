@@ -55,6 +55,12 @@ export function toggleSearchField<K extends string>(
   return keys.filter((k) => set.has(k));
 }
 
+/** **Only** this field (#2597): it alone ticked, every other one unticked — the one-click way to
+ * search a single field. Asked of the field already alone it changes nothing. */
+export function onlySearchField<K extends string>(key: K, keys: readonly K[]): K[] {
+  return keys.filter((k) => k === key);
+}
+
 /** What the control reads: `All fields`, the one field ticked, or how many are (`2 fields`), so a
  * search that finds nothing because of it can be read at a glance. */
 export function searchFieldsLabel<K extends string>(
