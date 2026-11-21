@@ -9,8 +9,10 @@ import {
   groupingOnlyHoldsMaterial,
   issueCatalogues,
   noValuingBook,
+  nothingToJoin,
   ownCatalogues,
   parseCatalogueEntries,
+  parseJoinedPrefixes,
   resolvedCatalogues,
   sameResolvedCatalogues,
   type AreaNames,
@@ -116,20 +118,71 @@ describe("an area's catalogues (#1539)", () => {
   });
 
   it("lets an issue's own prefix replace the area's for that issue alone", () => {
-    const own = new Map([["mi", "GG"]]);
+    const own = new Map([["mi", { prefix: "GG", joined: false }]]);
     assert.deepEqual(resolvedCatalogues(AREAS, "poland", NAMES, own).catalogues, ["Fi·PL", "Mi·GG"]);
   });
 
   it("states an issue's own prefixes beside what they resolve to (#1606)", () => {
-    assert.deepEqual(issueCatalogues(AREAS, "poland", NAMES, new Map([["mi", "GG"]])), {
+    assert.deepEqual(issueCatalogues(AREAS, "poland", NAMES, new Map([["mi", { prefix: "GG", joined: false }]])), {
       own: ["Fi", "Mi: GG"],
       resolved: ["Fi·PL", "Mi·GG"],
     });
     // A stored prefix for a catalogue the area does not keep resolves nowhere and is not stated.
-    assert.deepEqual(issueCatalogues(AREAS, "austria", NAMES, new Map([["fi", "X"]])), {
+    assert.deepEqual(issueCatalogues(AREAS, "austria", NAMES, new Map([["fi", { prefix: "X", joined: true }]])), {
       own: ["Mi"],
       resolved: ["Mi·A"],
     });
+  });
+
+  it("states a prefix that joins its number beside the spelling (#2658)", () => {
+    const reich = area("reich", "europe", 2, {
+      catalogPrefix: "DR D",
+      catalogPrefixJoined: true,
+      vendorEntries: [
+        { catalogVendorId: "fi", vendorName: "Fischer", vendorAbbreviation: "Fi", areaPrefix: "PL TP W", prefixJoined: true },
+      ],
+    });
+    const below = area("below", "reich", 0);
+    const areas = [...AREAS, reich, below];
+    assert.deepEqual(ownCatalogues(reich, NAMES), {
+      prefix: "DR D",
+      prefixJoined: true,
+      catalogues: ["Fi: PL TP W"],
+      joinedPrefixes: ["Fi"],
+      priceBooks: [],
+    });
+    // A spaced prefix says so; an area without one says nothing of joining.
+    assert.equal(ownCatalogues(POLAND, NAMES).prefixJoined, false);
+    assert.equal("prefixJoined" in ownCatalogues(GG, NAMES), false);
+    assert.equal("joinedPrefixes" in ownCatalogues(POLAND, NAMES), false);
+    // A child that sets nothing inherits the prefix and its joining together.
+    assert.deepEqual(resolvedCatalogues(areas, "below", NAMES), {
+      leadingCatalogue: "Mi",
+      catalogues: ["Fi·PL TP W", "Mi·DR D"],
+      joinedPrefixes: ["Fi", "Mi"],
+      valuingBook: "Michel Europa",
+    });
+    assert.equal("joinedPrefixes" in resolvedCatalogues(AREAS, "poland", NAMES), false);
+    // An issue's own spaced prefix replaces a joined one for that issue, and a joined one is stated.
+    assert.deepEqual(
+      issueCatalogues(areas, "below", NAMES, new Map([["mi", { prefix: "DR", joined: false }], ["fi", { prefix: "W", joined: true }]])),
+      { own: ["Fi: W", "Mi: DR"], ownJoinedPrefixes: ["Fi"], resolved: ["Fi·W", "Mi·DR"], resolvedJoinedPrefixes: ["Fi"] }
+    );
+    // A joining alone is a change.
+    const spaced = resolvedCatalogues(areas, "below", NAMES, new Map([["mi", { prefix: "DR D", joined: false }]]));
+    assert.equal(sameResolvedCatalogues(resolvedCatalogues(areas, "below", NAMES), spaced), false);
+  });
+
+  it("reads joined_prefixes as a catalogue and true or false (#2658)", () => {
+    assert.deepEqual(parseJoinedPrefixes(["Mi: true", "Fi : FALSE"], "joined_prefixes"), [
+      { key: "Mi", joined: true },
+      { key: "Fi", joined: false },
+    ]);
+    for (const bad of [["Mi"], ["Mi: yes"], [": true"], ["Mi: true", "mi: false"]]) {
+      assert.throws(() => parseJoinedPrefixes(bad, "joined_prefixes"), (error) => isApiError(error));
+    }
+    const refusal = nothingToJoin('"Mi" on this issue', "joined_prefixes", "Give it a prefix.");
+    assert.match(refusal.message, /has no prefix to join\. Nothing was written\. Give it a prefix\./);
   });
 
   it("tells a change in prefix from none", () => {

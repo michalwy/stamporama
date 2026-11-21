@@ -584,8 +584,14 @@ export interface AgentIssueCatalogues {
   /** Every catalogue the issue's area keeps: `"Mi: GG"` where the issue sets its own prefix, `"Mi"`
    *  where it follows the area's — the spelling `create_issue` and `update_issue` take in `prefixes`. */
   readonly own: readonly string[];
+  /** The catalogues whose own prefix on the issue joins the number with no space (#2658) — what
+   *  `joined_prefixes` sets; absent when none. */
+  readonly ownJoinedPrefixes?: readonly string[];
   /** The same catalogues with the prefix each resolves to, `Mi·GG` — what its stamps' numbers carry. */
   readonly resolved: readonly string[];
+  /** The catalogues whose resolved prefix joins the number with no space (#2658), whether the issue
+   *  or its area set it — `Mi` where `Mi·DR D` numbers read `Mi·DR D12`; absent when none. */
+  readonly resolvedJoinedPrefixes?: readonly string[];
 }
 
 export interface AgentIssueDetail {

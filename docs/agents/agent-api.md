@@ -728,7 +728,10 @@ Each is a guard rather than a nicety, and each is measured by the unit suite:
   prefix this collection actually configures. The prefix set is the area tree's *and* the issues'
   overrides, both levels, because both are catalog identity.
 - **A prefix is never read as a catalogue's name.** `PL 200` names no vendor, so the same set is
-  consulted a second time before a leading word is called an unknown catalogue.
+  consulted a second time before a leading word is called an unknown catalogue — and that includes
+  the **first word of a prefix of several** the string goes on to spell (#2658): `DR D12` and
+  `DR D 12` under a `DR D` prefix used to answer `unknown_vendor` for `DR`, because only whole
+  prefixes were in the set. `DR 12` still reads `DR` as a catalogue's name.
 - **A leading word is read conservatively.** `leadingCatalogueWord` refuses a word with nothing after
   it (`VIII` is a whole catalog number, #383), a word carrying anything but letters (`BL30`,
   `Ark. 103`), a word longer than twelve letters, and a word the collection uses as a prefix. It is
@@ -2634,6 +2637,23 @@ The collector chose refusing it over adding a third state on 2026-10-04. `get_is
 `resolved`, the prefix its stamps' numbers carry — so an override can be told from an inherited
 prefix; a stored prefix for a catalogue the area no longer keeps resolves nowhere and is not stated.
 
+**Whether a prefix joins its number (#2657) is stated beside the spelling, never in it** (#2658,
+decided with the collector on 2026-11-21 over a marker inside the string): `joined_prefixes` takes
+`"Mi: true"` / `"Mi: false"` on `create_issue`, `update_issue` and each `create_issues` entry, and
+`get_issue` answers `catalogues.ownJoinedPrefixes` (the overrides that join) beside
+`catalogues.resolvedJoinedPrefixes` (every catalogue whose resolved prefix joins, the area's
+included); `list_issues` rows carry `joinedPrefixes` beside `prefixes`. **Only the catalogues named
+change, and a prefix sent in `prefixes` without a word on its joining keeps it** — the issue's own
+*Decisions*; a new override starts with the space. That is why it is a separate field: a marker in
+`"Mi: DR D"` would make the plain spelling *untick*, so an agent restating a prefix from memory would
+drop the box. The collector picked a map, `{"Mi": true}`; it is a `"key: value"` list because the
+parameter types are deliberately four (`params.ts`), the spelling `title_names` already uses. A
+catalogue named must have an override on the issue after the write — one following its area follows
+the area's joining too, so it is refused toward `update_area`. A joining-only change is a change:
+`prefixChange` gains `joinedBefore` / `joinedAfter` and `changed` compares them. The joining never
+enters a catalogue identity, so the duplicate checks compare prefix text alone and use the joining
+only to label the numbers they name.
+
 **A prefix that would make a duplicate is refused before anything is written**, whatever the
 duplicate setting, for the reason below. On a create the prefixes sent are the generated stamps'
 prefix context, as the create form's typed fields are. On an edit every catalogue whose *resolved*
@@ -3184,7 +3204,7 @@ decision, since a list of every issue of a collection is not a question anybody 
 
 **A row is what the Issues list shows and nothing it prices**: `catalogRanges` is `get_issue`'s
 spelling (`loadIssueLabelling`, which the two now share), `prefixes` the issue's own overrides in the
-spelling `update_issue` takes, `memberCount` and `requiredCount` the row's two counts, and
+spelling `update_issue` takes with `joinedPrefixes` naming those that join their numbers (#2658), `memberCount` and `requiredCount` the row's two counts, and
 `heldCopies` with `heldByCondition` the copies held of any of its stamps —
 `countCopiesByStampAndCondition`, so *held* means what it means on every badge, folded per issue in the
 pure `heldByCondition`. A copy is linked to one stamp, so summing over an issue's members counts each
@@ -3371,7 +3391,15 @@ anchoring markets, an `update_area` that leaves it out leaves it as it is, so `m
 
 **A catalogue's three states are one string each**: `"Mi"` declares the catalogue with its prefix
 inherited, `"Mi: GG"` gives it one here, and `"Mi: -"` states *no prefix here* — the column's null,
-text and `''` (#675). The read writes them the same way.
+text and `''` (#675). The read writes them the same way. **The joining (#2657, #2658) sits beside
+them**: `prefix_joined` (boolean) beside the area's `prefix`, `joined_prefixes` (`"Mi: true"`) for a
+catalogue's own prefix here; `own.prefixJoined` is stated whenever `own.prefix` is, and
+`own.joinedPrefixes` / `resolved.joinedPrefixes` name the catalogues whose own or resolved prefix
+joins, absent when none. Left out, both keep what the area has (`updateCollectionArea` and
+`syncAreaVendors` read the stored flag for a write that omits it), so a prefix changed alone keeps
+its box; a joining asked for where the area, or that catalogue's row, states no prefix is refused —
+the dialogs grey the box out there. `sameResolvedCatalogues` compares the joined lists too, so a move
+that only changes a joining is reported.
 
 **Every write is the screen's own.** `createCollectionArea` / `updateCollectionArea`, then
 `syncAreaCatalogBooks` and `syncAreaVendors`, are the two form actions' calls in their order;

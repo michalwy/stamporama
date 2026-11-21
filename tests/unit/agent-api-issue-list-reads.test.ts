@@ -87,8 +87,8 @@ describe("issueListRow", () => {
         ...base,
         nameByLanguage: { pl: "Zamki" },
         catalogPrefixes: [
-          { catalogVendorId: "v-mi", areaPrefix: "GG" },
-          { catalogVendorId: "v-fi", areaPrefix: "GG" },
+          { catalogVendorId: "v-mi", areaPrefix: "GG", prefixJoined: false },
+          { catalogVendorId: "v-fi", areaPrefix: "GG", prefixJoined: false },
         ],
       },
       { ...extras, held: { heldCopies: 2, heldByCondition: [{ condition: "Used", copies: 2 }] } }
@@ -98,11 +98,27 @@ describe("issueListRow", () => {
     assert.equal(row.area, "Generalgouvernement");
     assert.deepEqual(row.translatedNames, { pl: "Zamki" });
     assert.deepEqual(row.prefixes, ["Fi: GG", "Mi: GG"]);
+    assert.equal(row.joinedPrefixes, undefined);
     assert.equal(row.heldCopies, 2);
   });
 
   it("spells an own prefix as update_issue takes it", () => {
-    assert.deepEqual(ownPrefixes([{ catalogVendorId: "v-mi", areaPrefix: "PL" }], abbrOf), ["Mi: PL"]);
+    assert.deepEqual(ownPrefixes([{ catalogVendorId: "v-mi", areaPrefix: "PL", prefixJoined: false }], abbrOf), ["Mi: PL"]);
+  });
+
+  it("names the own prefixes that join their numbers (#2658)", () => {
+    const row = issueListRow(
+      {
+        ...base,
+        catalogPrefixes: [
+          { catalogVendorId: "v-mi", areaPrefix: "DR D", prefixJoined: true },
+          { catalogVendorId: "v-fi", areaPrefix: "GG", prefixJoined: false },
+        ],
+      },
+      extras
+    );
+    assert.deepEqual(row.prefixes, ["Fi: GG", "Mi: DR D"]);
+    assert.deepEqual(row.joinedPrefixes, ["Mi"]);
   });
 });
 

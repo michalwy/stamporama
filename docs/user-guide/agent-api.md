@@ -107,7 +107,9 @@ your catalogues to read it as*, the second means *you have not got it* — and i
 is a number in two of your catalogues, it comes back with both and says so. Nor does it guess across
 catalogues: a number written as Fischer's is never quietly answered with the Michel stamp of the same
 number. And your area prefixes count — `Mi·SP 1` and `Mi·PL 1` stay two different stamps, as they do
-everywhere else in the app. A **read only** token can do all of this.
+everywhere else in the app. A prefix [joined to its number](collections.md#prefixes-joined-to-the-number)
+is found either way it is written: `DR D12`, `DR D 12` and `Mi DR D12` all reach the stamp. A **read
+only** token can do all of this.
 
 **It knows your stamps' own numbers.** Every stamp it tells you about comes with the number the
 app shows on the stamp's row (`#901`), and wherever it has to name a stamp you can give it that
@@ -444,8 +446,9 @@ page, a dealer's list or Colnect, so that you do not type in what it could have.
   not asked — the prices stay, its answer says so, and it can clear them if you tell it to;
 - **correct an issue**: its name, its year, its name in your other languages, the range it
   declares in a catalogue, and its own prefix in a catalogue — set, changed, or taken off so the issue
-  follows its area's prefix again. It cannot make an issue show *no* prefix where its area has one,
-  because the issue form cannot either; that is said on the area;
+  follows its area's prefix again — and the **no space** box beside that prefix. It cannot make an
+  issue show *no* prefix where its area has one, because the issue form cannot either; that is said
+  on the area;
 - **correct a stamp or a variant**: its name and translated names, its date of issue, its number in
   any catalogue its area keeps, and its attributes — denomination and perforation as printed, and the
   colour, watermark, paper and printing from your own lists in Settings;
@@ -639,11 +642,13 @@ new collecting field from a catalogue's table of contents, and reorganise the tr
 - **create an area** under another, or at the top level, with everything the *Add area* form has:
   its name, the title name listings use (the name itself, unless it is told otherwise) and that name
   in your other languages, its [symbol](collections.md#area-symbol), a description, whether it is grouping-only, and its catalogues — the
-  catalogues its stamps are numbered in, the prefix for each, which one leads, the catalogue volumes
+  catalogues its stamps are numbered in, the prefix for each and whether it
+  [joins the number with no space](collections.md#prefixes-joined-to-the-number), which one leads, the catalogue volumes
   that price it and which of them gives a copy its catalogue value. Whatever it leaves out is
   inherited from the areas above;
 - **correct an area** the same way — only what it is told to change changes, and renaming keeps the
-  title name in step while the two are the same, as the form does;
+  title name in step while the two are the same, as the form does. A prefix it changes keeps its
+  **no space** box as it was, unless it is told to tick or untick it;
 - **move an area** under another parent, or to the top level, with its sub-areas and their issues,
   as the *Parent area* field on the form does. It goes to the end of its new siblings;
 - **put areas in order** among their siblings, as dragging them on the *Areas* screen does;

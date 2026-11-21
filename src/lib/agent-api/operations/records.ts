@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "../../db";
 import { readCollectionAreas } from "../../areas";
+import type { ResolvedCatalogPrefix } from "../../catalog-number";
 import { getIssueListItem } from "../../issues";
 import { listItemsPaginated } from "../../items";
 import { getStampListItem } from "../../stamps";
@@ -116,10 +117,8 @@ export async function readIssue(
       areaTree,
       issue.collectionAreaId,
       { catalogues: labelling.abbrOf, books: new Map() },
-      // The prefix text only: how a prefix meets its number (#2657) is not part of this read yet (#2658).
-      new Map<string, string>(
-        [...(labelling.issuePrefixes.get(issue.id) ?? [])].map(([vendorId, own]) => [vendorId, own.prefix])
-      )
+      // Each override with its joining (#2657, #2658). Typed, because `?? new Map()` widened to `any`.
+      labelling.issuePrefixes.get(issue.id) ?? new Map<string, ResolvedCatalogPrefix>()
     ),
     area: labelling.areaName(issue.collectionAreaId),
     path: collectionPath(header, `/issues/${issue.id}`),

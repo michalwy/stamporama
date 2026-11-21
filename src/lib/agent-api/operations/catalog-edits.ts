@@ -26,7 +26,7 @@ import { getStampAttributeLists } from "../../stamp-attributes";
 import { getStampSizePresets } from "../../stamp-size-presets";
 import { getStampCatalogNumber, updateStampWithCatalog } from "../../stamps";
 import type { TranslationValueMap } from "../../translations";
-import { resolvedCatalogues } from "../area-reads";
+import { nothingToJoin, parseJoinedPrefixes, resolvedCatalogues, sameResolvedCatalogues } from "../area-reads";
 import { checkBatchSize, countStatuses, parseLineFields, parsePairFields, refusalOf, refused, type BatchRefusal } from "../batch";
 import {
   ISSUE_ENTRY_EXAMPLE,
@@ -56,7 +56,7 @@ import { loadIssueFormatEntries } from "./issue-formats";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import { readIssue, readStamp } from "./records";
 import { loadStampLabels, resolveStampRefsEach, stampNoOf, stampIdFromRef } from "./stamp-refs";
-import type { AgentIssueDetail, AgentStampDetail } from "../collection-reads";
+import { compact, type AgentIssueDetail, type AgentStampDetail } from "../collection-reads";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
 
 // Building the catalogue (#1438): create an issue with the stamps its catalogue numbers generate,
@@ -86,7 +86,9 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // change, and `updateIssue` is handed the whole set back, since it replaces it. A prefix that would
 // give one of the issue's stamps a number the collection already has is refused before anything is
 // written — the issue form checks only the stamps it is about to generate, and an agent that
-// re-prefixes a whole series has no warning to read.
+// re-prefixes a whole series has no warning to read. Whether an own prefix joins its numbers with no
+// space (#2657, #2658) is `joined_prefixes` beside it — `"Mi: true"` — and a prefix sent without it
+// keeps its joining, a new one starting with the space.
 
 // ── The collection's side ──────────────────────────────────────────────────
 
@@ -252,12 +254,46 @@ function prefixWrites(
   return out;
 }
 
+/** One of the issue's own prefixes as it will be written: the text, and its joining — undefined where
+ * nothing said, so `updateIssue` keeps the stored one (a new prefix starts with the space). */
+interface OwnPrefix {
+  prefix: string;
+  joined?: boolean;
+}
+
+/**
+ * Apply `joined_prefixes` (#2658) to the issue's own prefixes as they will be written. A catalogue
+ * named must have a prefix of its own on the issue after the write: the joining belongs to the
+ * prefix, and an issue that follows its area's follows its joining too.
+ */
+function applyJoinedPrefixes(
+  world: CatalogueWorld,
+  areaId: string,
+  params: ParsedParams,
+  own: Map<string, OwnPrefix>
+): boolean {
+  const entries = parseJoinedPrefixes(stringList(params, "joined_prefixes"), "joined_prefixes");
+  for (const { key, joined } of entries) {
+    const vendorId = resolveAreaCatalogue(world, areaId, key, "joined_prefixes");
+    const current = own.get(vendorId);
+    if (!current) {
+      throw nothingToJoin(
+        `"${key}" on this issue`,
+        "joined_prefixes",
+        `Give the issue a prefix of its own there in "prefixes" — "${key}: DR D" — or set the joining on its area with \`update_area\`, whose prefix it follows.`
+      );
+    }
+    own.set(vendorId, { ...current, joined });
+  }
+  return entries.length > 0;
+}
+
 /** The catalogue prefix one of the area's catalogues resolves to under an issue's own set. */
 function resolvedPrefix(
   entry: { catalogVendorId: string; prefix: string | null },
-  own: ReadonlyMap<string, string>
+  own: ReadonlyMap<string, OwnPrefix>
 ): string | null {
-  return own.get(entry.catalogVendorId) || entry.prefix || null;
+  return own.get(entry.catalogVendorId)?.prefix || entry.prefix || null;
 }
 
 /**
@@ -271,8 +307,8 @@ async function refusePrefixCollisions(
   context: OperationContext,
   world: CatalogueWorld,
   issue: { id: string; collectionAreaId: string },
-  current: ReadonlyMap<string, string>,
-  next: ReadonlyMap<string, string>
+  current: ReadonlyMap<string, OwnPrefix>,
+  next: ReadonlyMap<string, OwnPrefix>
 ): Promise<void> {
   const changed = effectiveVendorsForArea(world.areas, issue.collectionAreaId)
     .filter((entry) => resolvedPrefix(entry, current) !== resolvedPrefix(entry, next))
@@ -294,9 +330,9 @@ async function refusePrefixCollisions(
     const areaId = (stamp.stampAreaLinks.find((link) => link.isPrimary) ?? stamp.stampAreaLinks[0])?.collectionAreaId ?? null;
     byArea.set(areaId, [...(byArea.get(areaId) ?? []), stamp]);
   }
-  // The joining (#2657) does not enter a catalog identity, so the check needs only the text.
+  // The joining (#2657) does not enter a catalog identity; it only labels the refusal's numbers.
   const prefixes = Object.fromEntries(
-    [...next].map(([vendorId, prefix]) => [vendorId, { prefix, joined: false }])
+    [...next].map(([vendorId, own]) => [vendorId, { prefix: own.prefix, joined: own.joined ?? false }])
   );
   const collisions: PrefixCollision[] = [];
   for (const [areaId, stamps] of byArea) {
@@ -407,6 +443,10 @@ function prefixesParameter(description: string): ParameterSpec {
   return { name: "prefixes", in: "body", type: "string[]", required: false, description };
 }
 
+function joinedPrefixesParameter(description: string): ParameterSpec {
+  return { name: "joined_prefixes", in: "body", type: "string[]", required: false, description };
+}
+
 function catalogNumbersParameter(description: string, required = false): ParameterSpec {
   return { name: "catalog_numbers", in: "body", type: "string[]", required, description };
 }
@@ -475,9 +515,17 @@ export async function createIssueFromParams(
   }
   const autoCreateStamps = generating.length > 0 ? generatedStamps(generating, "catalog_numbers") : undefined;
   // On a new issue a bare catalogue in `prefixes` is what it would do anyway: follow the area.
-  const ownPrefixes = [...(prefixWrites(world, areaId, params) ?? [])].flatMap(([catalogVendorId, areaPrefix]) =>
-    areaPrefix === null ? [] : [{ catalogVendorId, areaPrefix }]
+  const own = new Map<string, OwnPrefix>(
+    [...(prefixWrites(world, areaId, params) ?? [])].flatMap(([catalogVendorId, prefix]) =>
+      prefix === null ? [] : [[catalogVendorId, { prefix }] as const]
+    )
   );
+  applyJoinedPrefixes(world, areaId, params, own);
+  const ownPrefixes = [...own].map(([catalogVendorId, { prefix, joined }]) => ({
+    catalogVendorId,
+    areaPrefix: prefix,
+    prefixJoined: joined ?? false,
+  }));
 
   const presetRef = optionalString(params, "size_preset");
   if (presetRef !== null && !autoCreateStamps) {
@@ -492,7 +540,7 @@ export async function createIssueFromParams(
       {
         areaId,
         prefixes: Object.fromEntries(
-          ownPrefixes.map((row) => [row.catalogVendorId, { prefix: row.areaPrefix, joined: false }])
+          ownPrefixes.map((row) => [row.catalogVendorId, { prefix: row.areaPrefix, joined: row.prefixJoined }])
         ),
       },
       candidatesOf(autoCreateStamps)
@@ -555,6 +603,9 @@ export const createIssueOperation: Operation = {
     prefixesParameter(
       `The issue's own prefix in a catalogue its area keeps, one entry per catalogue: ${PREFIXES_SYNTAX} A catalogue not named follows the area. The prefix applies to the stamps generated here.`
     ),
+    joinedPrefixesParameter(
+      "Whether an own prefix sent in `prefixes` joins its numbers with no space, one entry per catalogue: `\"Mi: true\"` reads `Mi·DR D12`. A prefix not named here keeps the space, `Mi·DR D 12`."
+    ),
   ],
   result: {
     kind: "object",
@@ -575,7 +626,7 @@ async function loadIssue(context: OperationContext, issueId: string) {
       year: true,
       collectionAreaId: true,
       catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
-      catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true } },
+      catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
     },
   });
   if (!issue) {
@@ -835,6 +886,10 @@ export interface AgentPrefixChange {
   readonly changed: boolean;
   readonly before: readonly string[];
   readonly after: readonly string[];
+  /** The catalogues whose resolved prefix joins its numbers with no space (#2658), before and after;
+   * each absent when none. */
+  readonly joinedBefore?: readonly string[];
+  readonly joinedAfter?: readonly string[];
 }
 
 export async function updateIssueFromParams(
@@ -851,32 +906,55 @@ export async function updateIssueFromParams(
   const translations = await translationWrites(context, params);
   const entries = stringList(params, "catalog_numbers");
   const prefixEntries = stringList(params, "prefixes");
-  if (name === null && yearValue === null && cleared.size === 0 && !translations && entries.length === 0 && prefixEntries.length === 0) {
-    throw invalidRequest('Nothing to change: send "name", "year", "names", "clear_names", "catalog_numbers", "prefixes" or "clear".');
+  const joinedEntries = stringList(params, "joined_prefixes");
+  if (
+    name === null &&
+    yearValue === null &&
+    cleared.size === 0 &&
+    !translations &&
+    entries.length === 0 &&
+    prefixEntries.length === 0 &&
+    joinedEntries.length === 0
+  ) {
+    throw invalidRequest(
+      'Nothing to change: send "name", "year", "names", "clear_names", "catalog_numbers", "prefixes", "joined_prefixes" or "clear".'
+    );
   }
-  const world = entries.length > 0 || prefixEntries.length > 0 ? await loadCatalogueWorld(context) : null;
+  const prefixesSent = prefixEntries.length > 0 || joinedEntries.length > 0;
+  const world = entries.length > 0 || prefixesSent ? await loadCatalogueWorld(context) : null;
 
-  let catalogPrefixes: { catalogVendorId: string; areaPrefix: string }[] | undefined;
+  let catalogPrefixes: { catalogVendorId: string; areaPrefix: string; prefixJoined: boolean }[] | undefined;
   let prefixChange: AgentPrefixChange | undefined;
-  const sentPrefixes = world ? prefixWrites(world, issue.collectionAreaId, params) : null;
-  if (world && sentPrefixes) {
-    const current = new Map(issue.catalogPrefixes.map((row) => [row.catalogVendorId, row.areaPrefix]));
+  if (world && prefixesSent) {
+    const current = new Map<string, OwnPrefix>(
+      issue.catalogPrefixes.map((row) => [row.catalogVendorId, { prefix: row.areaPrefix, joined: row.prefixJoined }])
+    );
     const next = new Map(current);
-    for (const [vendorId, prefix] of sentPrefixes) {
+    for (const [vendorId, prefix] of prefixWrites(world, issue.collectionAreaId, params) ?? []) {
+      // A prefix changed without a word on its joining keeps it; a new one starts with the space.
       if (prefix === null) next.delete(vendorId);
-      else next.set(vendorId, prefix);
+      else next.set(vendorId, { prefix, joined: current.get(vendorId)?.joined ?? false });
     }
+    applyJoinedPrefixes(world, issue.collectionAreaId, params, next);
     await refusePrefixCollisions(context, world, issue, current, next);
     // `updateIssue` replaces the whole set, so the catalogues not sent are handed back as they are.
-    catalogPrefixes = [...next].map(([catalogVendorId, areaPrefix]) => ({ catalogVendorId, areaPrefix }));
+    catalogPrefixes = [...next].map(([catalogVendorId, own]) => ({
+      catalogVendorId,
+      areaPrefix: own.prefix,
+      prefixJoined: own.joined ?? false,
+    }));
     const names = catalogueNames(world);
-    const before = resolvedCatalogues(world.areas, issue.collectionAreaId, names, current).catalogues;
-    const after = resolvedCatalogues(world.areas, issue.collectionAreaId, names, next).catalogues;
-    prefixChange = {
-      changed: before.length !== after.length || before.some((label, i) => label !== after[i]),
-      before,
-      after,
-    };
+    const asResolved = (own: ReadonlyMap<string, OwnPrefix>) =>
+      new Map([...own].map(([vendorId, { prefix, joined }]) => [vendorId, { prefix, joined: joined ?? false }]));
+    const before = resolvedCatalogues(world.areas, issue.collectionAreaId, names, asResolved(current));
+    const after = resolvedCatalogues(world.areas, issue.collectionAreaId, names, asResolved(next));
+    prefixChange = compact({
+      changed: !sameResolvedCatalogues(before, after),
+      before: before.catalogues,
+      after: after.catalogues,
+      joinedBefore: before.joinedPrefixes,
+      joinedAfter: after.joinedPrefixes,
+    });
   }
 
   let catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[] | undefined;
@@ -921,7 +999,10 @@ export const updateIssueOperation: Operation = {
       "The declared range in each catalogue named, `\"catalogue: numbers\"`, among the catalogues the issue's area keeps. A catalogue not named keeps its range."
     ),
     prefixesParameter(
-      `The issue's own prefix in each catalogue named, among those its area keeps: ${PREFIXES_SYNTAX} A catalogue not named keeps what it has. \`get_issue\` states the current ones in \`catalogues.own\`.`
+      `The issue's own prefix in each catalogue named, among those its area keeps: ${PREFIXES_SYNTAX} A catalogue not named keeps what it has, and a prefix changed here keeps its joining. \`get_issue\` states the current ones in \`catalogues.own\`.`
+    ),
+    joinedPrefixesParameter(
+      "Whether the issue's own prefix in a catalogue joins its numbers with no space, one entry per catalogue: `\"Mi: true\"` reads `Mi·DR D12`, `\"Mi: false\"` puts the space back, `Mi·DR D 12`. Only the catalogues named change. The catalogue needs a prefix of its own on the issue, already or in `prefixes`; one that follows its area's prefix follows its joining too, set with `update_area`. `get_issue` states the current ones in `catalogues.ownJoinedPrefixes`."
     ),
     {
       name: "clear",
@@ -935,7 +1016,7 @@ export const updateIssueOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "The issue as `get_issue` now reads it. When `prefixes` was sent, `prefixChange` states the issue's resolved catalogues with their prefixes `before` and `after`, and whether they `changed`.",
+      "The issue as `get_issue` now reads it. When `prefixes` or `joined_prefixes` was sent, `prefixChange` states the issue's resolved catalogues with their prefixes `before` and `after`, the catalogues whose prefix joins its numbers `joinedBefore` and `joinedAfter`, and whether any of it `changed`.",
   },
   handler: async (context, params) => updateIssueFromParams(context, params),
 };
@@ -1367,7 +1448,7 @@ export const createIssuesOperation: Operation = {
       in: "body",
       type: "string[]",
       required: true,
-      description: `One issue per entry, at most ${MAX_ISSUES_PER_CALL}, a field per line as \`name=value\`: ${ISSUE_ENTRY_EXAMPLE}. The fields are \`create_issue\`'s parameters, meaning what they mean there — \`area\`, \`year\`, \`name\`, \`names\`, \`catalog_numbers\`, \`stamps_from\`, \`generate_stamps\`, \`size_preset\`, \`prefixes\` —, a list (\`names\`, \`catalog_numbers\`, \`stamps_from\`, \`prefixes\`) taking one value a line, its line repeated.`,
+      description: `One issue per entry, at most ${MAX_ISSUES_PER_CALL}, a field per line as \`name=value\`: ${ISSUE_ENTRY_EXAMPLE}. The fields are \`create_issue\`'s parameters, meaning what they mean there — \`area\`, \`year\`, \`name\`, \`names\`, \`catalog_numbers\`, \`stamps_from\`, \`generate_stamps\`, \`size_preset\`, \`prefixes\`, \`joined_prefixes\` —, a list (\`names\`, \`catalog_numbers\`, \`stamps_from\`, \`prefixes\`, \`joined_prefixes\`) taking one value a line, its line repeated.`,
     },
   ],
   result: {

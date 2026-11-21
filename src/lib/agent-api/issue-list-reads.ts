@@ -40,6 +40,9 @@ export interface AgentIssueListRow {
   /** The prefixes the issue sets itself, `"Mi: GG"` — what `update_issue` takes in `prefixes`.
    *  Absent where it follows its area. */
   readonly prefixes?: readonly string[];
+  /** The catalogues among `prefixes` whose prefix joins the number with no space (#2658) — what
+   *  `update_issue` takes in `joined_prefixes`. Absent when none. */
+  readonly joinedPrefixes?: readonly string[];
   /** Stamps filed under the issue, its variants included. */
   readonly memberCount: number;
   /** Distinct stamps on any of its checklists. */
@@ -61,7 +64,11 @@ export interface IssueListRowSource {
   readonly name: string | null;
   readonly nameByLanguage: Readonly<Record<string, string>>;
   readonly year: number | null;
-  readonly catalogPrefixes: readonly { readonly catalogVendorId: string; readonly areaPrefix: string }[];
+  readonly catalogPrefixes: readonly {
+    readonly catalogVendorId: string;
+    readonly areaPrefix: string;
+    readonly prefixJoined: boolean;
+  }[];
   readonly memberCount: number;
   readonly requiredCount: number;
 }
@@ -88,8 +95,20 @@ export function ownPrefixes(
     .sort((a, b) => a.localeCompare(b));
 }
 
+/** The catalogues among the issue's own prefixes whose prefix joins the number (#2658), sorted. */
+export function ownJoinedPrefixes(
+  rows: IssueListRowSource["catalogPrefixes"],
+  abbrOf: ReadonlyMap<string, string>
+): string[] {
+  return rows
+    .filter((row) => row.prefixJoined)
+    .map((row) => abbrOf.get(row.catalogVendorId) ?? row.catalogVendorId)
+    .sort((a, b) => a.localeCompare(b));
+}
+
 export function issueListRow(row: IssueListRowSource, extras: IssueListRowExtras): AgentIssueListRow {
   const prefixes = ownPrefixes(row.catalogPrefixes, extras.abbrOf);
+  const joined = ownJoinedPrefixes(row.catalogPrefixes, extras.abbrOf);
   return compact({
     issueId: row.id,
     issueNo: row.issueNo,
@@ -99,6 +118,7 @@ export function issueListRow(row: IssueListRowSource, extras: IssueListRowExtras
     area: extras.area ?? undefined,
     catalogRanges: [...extras.catalogRanges],
     prefixes: prefixes.length > 0 ? prefixes : undefined,
+    joinedPrefixes: joined.length > 0 ? joined : undefined,
     memberCount: row.memberCount,
     requiredCount: row.requiredCount,
     heldCopies: extras.held.heldCopies,
