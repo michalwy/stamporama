@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma, type FacebookGroup } from "@/generated/prisma/client";
 import { prisma, type DbTransaction } from "./db";
 import { FACEBOOK_PLATFORM_MODULE } from "./platform-modules";
+import { syncPostProposalLots } from "./post-proposal-lots";
 import {
   effectiveFacebookGroupSettings,
   toFacebookMultiLotLayout,
@@ -342,6 +343,8 @@ export async function detachFacebookLot(tx: DbTransaction, offerId: string): Pro
     select: { id: true },
   });
   if (rest.length === 0) {
+    // The lot leaves the proposal made from the post with it (#2602), before the post goes.
+    await syncPostProposalLots(tx, postId);
     await tx.facebookPost.delete({ where: { id: postId } });
     return;
   }
@@ -353,6 +356,8 @@ export async function detachFacebookLot(tx: DbTransaction, offerId: string): Pro
   for (const [index, lot] of rest.entries()) {
     await tx.offer.update({ where: { id: lot.id }, data: { facebookLotNo: index + 1 } });
   }
+  // A proposal made from the post loses the lot and renumbers with the post (#2602).
+  await syncPostProposalLots(tx, postId);
 }
 
 // ── The kit ─────────────────────────────────────────────────────────────────────────────────────

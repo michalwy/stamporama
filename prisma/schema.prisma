@@ -3144,6 +3144,8 @@ model FacebookPost {
   /** The buyer's link to this post's preview (#2212), or none. At most one — see
    * {@link FacebookPostPreviewToken}. */
   previewToken FacebookPostPreviewToken?
+  /** The proposals made from this post (#2602) — at most one of them open at a time. */
+  proposals    Proposal[]
 
   @@unique([collectionId, postNo])
   @@index([collectionId])
@@ -3183,10 +3185,16 @@ model Proposal {
   // When the buyer last ticked or unticked a lot on the live page (#2601) — what *Buyer picked 3 lots
   // · 2 h ago* is timed from. Null while they never have.
   buyerPicksChangedAt DateTime?
+  // The Facebook post it was made from (#2602), or null for a proposal of its own Direct lots. Its lots
+  // are then the post's own offers, on Facebook in the post's group and numbered as the post numbers
+  // them, joining and leaving as the post's lots do while it is being prepared. Null again if the post
+  // is deleted (`SetNull`).
+  facebookPostId String?
 
-  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  contact    Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  sale       Sale?      @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  collection   Collection    @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  contact      Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sale         Sale?         @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  facebookPost FacebookPost? @relation(fields: [facebookPostId], references: [id], onDelete: SetNull)
   lots       Offer[]    @relation("OfferProposal")
   // The buyer's link to the proposal's document (#2288), when one has been made.
   shareToken ProposalShareToken?
@@ -3195,6 +3203,7 @@ model Proposal {
   @@index([collectionId])
   @@index([contactId])
   @@index([saleId])
+  @@index([facebookPostId])
   @@map("proposal")
 }
 

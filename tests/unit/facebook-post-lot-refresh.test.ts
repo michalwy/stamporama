@@ -62,6 +62,7 @@ function screen(): FacebookPostScreen {
     lotTexts: { a: status(false), b: status(false) },
     lotTitles: { template: "{title}", handWritten: ["b"] },
     hasPreviewLink: false,
+    proposal: null,
     photos: { layout: "text", lots: [textPhotos("a", "none"), textPhotos("b", "ready")] },
   };
 }

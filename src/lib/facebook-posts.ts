@@ -47,6 +47,8 @@ import {
 } from "./facebook-post-list-figures";
 import { POST_LIST_LOT_FIGURES_SELECT, readPostListLotFigures } from "./facebook-post-list-reads";
 import { allocateEntityNumber } from "./items";
+import { readOpenPostProposal, syncPostProposalLots } from "./post-proposal-lots";
+import { isProposalOpen, proposalStatusOf, type ProposalStatus } from "./proposal-rules";
 import {
   changeLotGroupTitleWords,
   readLotGroupTitles,
@@ -314,6 +316,8 @@ export async function addFacebookLots(
     if (retimed.length > 0) {
       await tx.offer.updateMany({ where: { id: { in: retimed.map((l) => l.id) } }, data: { endsAt } });
     }
+    // The new lots join a proposal made from the post, with the same numbers (#2602).
+    await syncPostProposalLots(tx, postId);
     return numbered;
   });
   // A captioned post's new lots have their photos queued now, as a new post's are (#1861).
@@ -439,6 +443,8 @@ async function joinPostAsNextLot(tx: DbTransaction, postId: string, offerId: str
   if (retimed.length > 0) {
     await tx.offer.updateMany({ where: { id: { in: retimed.map((l) => l.id) } }, data: { endsAt } });
   }
+  // The new lot joins a proposal made from the post, with the same number (#2602).
+  await syncPostProposalLots(tx, postId);
   return lotNo;
 }
 
@@ -560,6 +566,16 @@ export interface FacebookPostScreen {
   hasPreviewLink: boolean;
   /** Every lot's photos (#2222) — read with the post, not asked after lot by lot. */
   photos: FacebookPostPhotos;
+  /** The proposal made from the post (#2602) — the open one, else the latest — or null while none was. */
+  proposal: FacebookPostProposal | null;
+}
+
+/** A proposal made from a post (#2602), as the post's screen links to it. */
+export interface FacebookPostProposal {
+  proposalId: string;
+  proposalNo: number;
+  contactName: string;
+  status: ProposalStatus;
 }
 
 /** The lots' titles as *Title template for all lots…* sees them (#2033). */
@@ -616,6 +632,7 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
   const sales = await readLotSales(kit.lots.map((l) => l.offerId));
   const posted = hasFacebookPostGoneUp(kit.lots);
   const previewLinks = await prisma.facebookPostPreviewToken.count({ where: { postId: post.id } });
+  const proposal = await readPostProposal(post.id);
   return {
     postId: post.id,
     postNo: post.postNo,
@@ -644,7 +661,21 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
         ),
     hasPreviewLink: previewLinks > 0,
     photos,
+    proposal,
   };
+}
+
+/** The proposal made from the post the screen links to (#2602): the open one, else the latest. */
+async function readPostProposal(postId: string): Promise<FacebookPostProposal | null> {
+  const rows = await prisma.proposal.findMany({
+    where: { facebookPostId: postId },
+    orderBy: { proposalNo: "desc" },
+    select: { id: true, proposalNo: true, status: true, contact: { select: { name: true } } },
+  });
+  const row = rows.find((r) => isProposalOpen(proposalStatusOf(r.status))) ?? rows[0];
+  return row
+    ? { proposalId: row.id, proposalNo: row.proposalNo, contactName: row.contact.name, status: proposalStatusOf(row.status) }
+    : null;
 }
 
 /** One lot of a post as its screen shows it (#2221): what changes when a price, a title or the lot's
@@ -1119,6 +1150,14 @@ export async function deleteFacebookPost(ownerId: string, postId: string): Promi
     const { lots, soldLots } = await readDeletionLots(tx, postId);
     const refusal = facebookPostDeleteRefusal(soldLots);
     if (refusal) throw new OfferActionBlockedError("sold-set", refusal);
+    // Its lots are an open proposal's too (#2602): the proposal is declined or sold first.
+    const proposal = await readOpenPostProposal(tx, postId);
+    if (proposal) {
+      throw new OfferActionBlockedError(
+        "facebook-group",
+        `Proposal #${proposal.proposalNo} for ${proposal.contactName} was made from this post and is still open — decline it before deleting the post.`
+      );
+    }
     const ids = lots.map((l) => l.id);
     // Every image the offers own — generated listing images, uploaded attachments, captioned lot photos
     // — goes with their rows by cascade, but never their files: those are read now and deleted below.

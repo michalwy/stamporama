@@ -8,6 +8,7 @@ import {
   addProposalLots,
   convertProposalToSale,
   createProposal,
+  createProposalFromPost,
   makeProposalLots,
   moveProposal,
   removeProposalLot,
@@ -41,6 +42,19 @@ export async function createProposalAction(
   const session = await getSession();
   try {
     return { status: "success", ...(await createProposal(session.user.id, collectionId, contactId)) };
+  } catch (err) {
+    return failure(err, "Failed to make the proposal.");
+  }
+}
+
+/** *Make a proposal…* on a post not yet up (#2602): a proposal for one buyer sharing the post's lots. */
+export async function createProposalFromPostAction(
+  postId: string,
+  contactId: string
+): Promise<{ status: "success"; proposalId: string; proposalNo: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await createProposalFromPost(session.user.id, postId, contactId)) };
   } catch (err) {
     return failure(err, "Failed to make the proposal.");
   }

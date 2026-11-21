@@ -5,7 +5,7 @@
 Accepted. Decided in #2287 on 2026-11-01, which built it; the design was settled with the collector
 in the issue, and its *to be confirmed* points were implemented as written. #2288 (what the buyer is
 sent) and #2289 (a proposal becomes a sale, §6 — built 2026-11-01) build on it; #2601 lets the buyer
-tick the lots they want (§10).
+tick the lots they want (§10); #2602 makes a Facebook post into a proposal sharing its lots (§11).
 
 ## Context
 
@@ -160,6 +160,35 @@ reads no picks.
 picked and when the buyer last changed them, `list_proposals` narrows to proposals with picks, and
 `convert_proposal_to_sale` takes `picked` for the picks still sellable, as *Convert to sale…* opens
 with them — with a read only token included. It still never ticks or unticks: picks are the buyer's.
+
+### 11. A proposal made from a Facebook post shares the post's lots (#2602)
+
+Added by #2602, which built it on 2026-11-21, settled with the collector that day; its *to be
+confirmed* points were implemented as written. A regular buyer got first refusal on a post by being
+sent its preview (#2212), and what they took was recorded by hand. Now **a post not yet up can be made
+into a proposal** for one contact (`Proposal.facebookPostId`, `SetNull`), and **its lots are the
+post's own offers** — the one kind of proposal whose lots are not on Direct (§3): they stay on Facebook
+in the post's group, numbered as the post numbers them (`proposalLotNo = facebookLotNo`). So a lot the
+buyer takes is sold in the post, and does not go up with it (#2560).
+
+- **One open proposal per post**, made only before the post is up. A lot is in one proposal at a time;
+  once a proposal made from the post closes, the next one takes the lots still for sale, while the lots
+  sold or withdrawn through the earlier one stay its record.
+- **The proposal follows the post while it is Preparing**: a lot added to the post joins it under the
+  same number, a lot taken out leaves it (losing its pick, §10), and the post's order is its order,
+  set on either screen. Lots join no other way — §2's four ways refuse such a proposal, and *New offer*
+  and the generator do not offer it.
+- **Sent, the post's lots are fixed with it** (§9): no lot added, taken out or reordered on the post,
+  no title or price changed, until the proposal is reopened or closed.
+- *Convert to sale…* (§6) defaults to a new sale on **Facebook** for the contact (the contact's open
+  sales on any platform can still be picked) and **withdraws nothing**: the lots not taken stay in the
+  post as they were. *Decline* withdraws nothing either.
+- Publishing the post while the proposal is open only **warns**; the proposal stays open, and a lot
+  sold on Facebook reads *No longer available* on the buyer's page (§10). A post with an open proposal
+  cannot be deleted.
+
+The message the buyer is sent is still Direct's template (§8); the post's own preview link is
+unchanged.
 
 ## Consequences
 

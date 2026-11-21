@@ -3702,6 +3702,37 @@ Your assistant can put a proposal together, price it and convert it for you thro
 [Assistant API](agent-api.md#what-it-can-do-and-what-it-will-not); a sale it records waits for your
 review. Sending and declining stay here.
 
+### A proposal made from a Facebook post
+
+A regular buyer may get first refusal on a post before it goes up. Rather than sending them the post's
+preview, make the post into a proposal for them: **Make a proposal…**, in the **⋮** beside the title on
+the post's screen, asks who it is for and opens a new **Preparing** proposal. It is offered while the
+post is not yet up and no proposal made from it is still open.
+
+**The proposal's lots are the post's own offers**, not copies of them. They stay on Facebook in the
+post's group, carry the post's lot numbers, and the two screens link to each other — *made from post
+#12* on the proposal, *Proposal #4 for Jan Kowalski* on the post. Lots are added, taken out and put in
+order on the post, and the proposal follows while it is **Preparing**; its own *Add offers…*, *New
+lots…* and *Take this lot out* are not offered. Everything else works as on any proposal: the message,
+photos, document and link, **Mark sent**, **Reopen**, and the buyer's picks.
+
+While the proposal is **Sent**, the post's lots are fixed with it: no lot is added, taken out or put in
+another order on the post, and no lot's title or price changes, until the proposal is reopened, sold or
+declined.
+
+- **Convert to sale…** sells the lots the buyer took, by default into a new sale on Facebook to the
+  buyer (or one of their sales still open, as on any proposal). A sold lot stays in the post as sold
+  and does not go up with it. **The lots not taken stay in the post as they were.**
+- **Decline…** closes the proposal and **withdraws nothing**: every lot stays in the post.
+- **Publish…** on the post while the proposal is open asks first — *Proposal #4 for Jan Kowalski is
+  still open — publish anyway?* Going on publishes the post and leaves the proposal open: the buyer can
+  still be sold whatever is unsold, and a lot sold on Facebook shows as no longer available on their
+  page.
+- A post with an open proposal can't be deleted; decline the proposal first.
+
+Once a proposal made from a post is closed, the post can be made into a new one; the lots still for
+sale move to it.
+
 ## Related
 
 - [Inventory](inventory.md) — the copies you compose offers from.

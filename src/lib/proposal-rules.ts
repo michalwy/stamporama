@@ -373,6 +373,89 @@ export function buyerPickedText(count: number): string {
   return `Buyer picked ${count} ${count === 1 ? "lot" : "lots"}`;
 }
 
+// ── Made from a Facebook post (#2602) ────────────────────────────────────────────────────────────
+
+/** A lot of a post as the proposal made from it weighs it. */
+export interface PostProposalLotFacts {
+  offerId: string;
+  /** Its number in the post — the proposal numbers it the same. */
+  facebookLotNo: number | null;
+  /** The proposal it is a lot of, if any, and whether that proposal is still open. */
+  proposalId: string | null;
+  proposalOpen: boolean;
+  proposalLotNo: number | null;
+  state: OfferState;
+}
+
+/** What keeps a proposal made from a post holding the post's lots: the lots joining it, the lots
+ *  leaving it, and the number each lot of it is to carry. Every list empty when nothing changes. */
+export interface PostProposalLotPlan {
+  join: string[];
+  leave: string[];
+  /** Each lot of it, joining or staying, whose number is not yet its post's. */
+  renumber: { offerId: string; lotNo: number }[];
+}
+
+/**
+ * The proposal made from a post holds the post's own lots under the post's numbers (#2602). A lot of
+ * the post in no proposal joins it; so does one still offered whose earlier proposal has closed — a
+ * declined proposal's lots go to the next one made from the post. A lot sold or withdrawn through an
+ * earlier proposal stays that proposal's record. A lot of the proposal that is no longer in the post
+ * (`proposalLots`, by offer id) leaves it.
+ */
+export function postProposalLotPlan(
+  proposalId: string,
+  postLots: readonly PostProposalLotFacts[],
+  proposalLots: readonly string[]
+): PostProposalLotPlan {
+  const inPost = new Set(postLots.map((lot) => lot.offerId));
+  const closed = (state: OfferState) => (CLOSED_OFFER_STATES as readonly OfferState[]).includes(state);
+  const join: string[] = [];
+  const renumber: PostProposalLotPlan["renumber"] = [];
+  for (const lot of postLots) {
+    const member = lot.proposalId === proposalId;
+    const joins =
+      !member && (lot.proposalId === null || (!lot.proposalOpen && !closed(lot.state)));
+    if (joins) join.push(lot.offerId);
+    if ((member || joins) && lot.facebookLotNo !== null && (joins || lot.proposalLotNo !== lot.facebookLotNo)) {
+      renumber.push({ offerId: lot.offerId, lotNo: lot.facebookLotNo });
+    }
+  }
+  return { join, leave: proposalLots.filter((id) => !inPost.has(id)), renumber };
+}
+
+/** Whether a {@link PostProposalLotPlan} changes nothing. */
+export function isPostProposalLotPlanEmpty(plan: PostProposalLotPlan): boolean {
+  return plan.join.length === 0 && plan.leave.length === 0 && plan.renumber.length === 0;
+}
+
+/** The sentence a post answers a change to its lots with while the proposal made from it has been
+ *  sent (#2602): the lots are the proposal's too, and fixed as the buyer saw them. */
+export function postProposalSentRefusal(facts: { proposalNo: number; contactName: string }): string {
+  return `Proposal #${facts.proposalNo} for ${facts.contactName} was made from this post and has been sent — its lots stay as the buyer saw them. Reopen the proposal to change them.`;
+}
+
+/** Why a post cannot be made into a proposal (#2602), or null when it can: only before it is up, and
+ *  only while no proposal made from it is still open — a lot is in one proposal at a time. */
+export function postProposalRefusal(facts: {
+  postNo: number;
+  up: boolean;
+  lotCount: number;
+  openProposal: { proposalNo: number; contactName: string } | null;
+}): string | null {
+  if (facts.up) return `Post #${facts.postNo} is up — a proposal is made from a post before it goes up.`;
+  if (facts.openProposal) {
+    return `Proposal #${facts.openProposal.proposalNo} for ${facts.openProposal.contactName} is still open on this post — a post has one open proposal at a time.`;
+  }
+  if (facts.lotCount === 0) return `Post #${facts.postNo} has no lots to propose.`;
+  return null;
+}
+
+/** What publishing a post asks first while a proposal made from it is still open (#2602). */
+export function postProposalPublishWarning(facts: { proposalNo: number; contactName: string }): string {
+  return `Proposal #${facts.proposalNo} for ${facts.contactName} is still open — publish anyway?`;
+}
+
 /** Read a proposal's number off its address (`/offers/proposals/4`), or undefined. */
 export function parseProposalNo(raw: string): number | undefined {
   if (!/^\d+$/.test(raw)) return undefined;
