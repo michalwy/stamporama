@@ -162,6 +162,19 @@ async function refusingDomainGuards<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * **Every entry the agent writes goes through here**, marked as the Assistant's: a conversation read at
+ * once (`add_conversation_entries`), and the note a contact write leaves on the contact (#2611,
+ * `operations/contacts.ts`), so the log's writes stay in this module.
+ */
+export async function writeAssistantEntries(
+  context: OperationContext,
+  contactId: string,
+  inputs: readonly ConversationEntryInput[]
+): Promise<string[]> {
+  return refusingDomainGuards(() => createConversationEntries(context.ownerId, contactId, inputs, "assistant"));
+}
+
 async function loadEntry(context: OperationContext, entryId: string): Promise<AgentConversationEntry> {
   const entry = await getConversationEntry(context.ownerId, entryId, context.collectionId);
   if (!entry) {
@@ -410,9 +423,7 @@ export async function addConversationEntries(
     });
   }
 
-  const ids = await refusingDomainGuards(() =>
-    createConversationEntries(context.ownerId, buyerId!, toWrite.map((row) => row.input), "assistant")
-  );
+  const ids = await writeAssistantEntries(context, buyerId!, toWrite.map((row) => row.input));
   const idOf = new Map(toWrite.map((row, i) => [row.index, ids[i]]));
 
   // The files, each to the entry it names — one for an entry that was refused is refused with it.

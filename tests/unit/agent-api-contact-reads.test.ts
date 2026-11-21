@@ -2,10 +2,15 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   AGENT_CONTACT_ROLES,
+  contactChangeNote,
+  contactChanges,
+  contactFieldChanges,
   contactRecord,
   contactRoles,
   contactRow,
   parseContactRole,
+  refuseSellerOnlyFields,
+  roleFlags,
 } from "../../src/lib/agent-api/contact-reads";
 import { ApiError } from "../../src/lib/agent-api/errors";
 import { resolveSeller } from "../../src/lib/agent-api/purchase-reads";
@@ -25,6 +30,7 @@ const CONTACT = {
   email: "anna@example.com",
   phone: "+49 30 1",
   notes: "Prefers registered post.",
+  language: "de",
   facebookProfileUrls: ["https://www.facebook.com/anna"],
   defaultCurrency: "EUR",
   defaultShippingCost: "4.50",
@@ -87,6 +93,7 @@ describe("the contact projections (#2610)", () => {
     assert.equal(record.email, "anna@example.com");
     assert.equal(record.phone, "+49 30 1");
     assert.equal(record.notes, "Prefers registered post.");
+    assert.equal(record.language, "de");
     assert.deepEqual(record.facebookProfiles, ["https://www.facebook.com/anna"]);
     assert.equal(record.auctionPlatform, "Philasearch");
     assert.equal(record.buyerPremiumFixed, null);
@@ -118,5 +125,99 @@ describe("naming a contact to read (#2610)", () => {
         /find_contacts/.test(error.message) &&
         !/create_seller/.test(error.message)
     );
+  });
+});
+
+// ── The writes (#2611) ──────────────────────────────────────────────────────
+
+const LOG_CONTACT = {
+  name: "jan",
+  fullName: null,
+  market: null,
+  ...FLAGS,
+  seller: true,
+  email: null,
+  phone: "+48 1",
+  notes: null,
+  language: null,
+  facebookProfileUrls: ["https://www.facebook.com/jan"],
+  defaultCurrency: null,
+  defaultShippingCost: null,
+  buyerPremiumPercent: null,
+  buyerPremiumFixed: null,
+  freeExtrasMinimumOrder: null,
+  freeExtrasBudgetPercent: null,
+  freeExtrasMaximumBudget: null,
+};
+
+const asSent = (sent: Record<string, string>) => (param: string) => sent[param] ?? null;
+const refused = (pattern: RegExp) => (error: unknown) => error instanceof ApiError && pattern.test(error.message);
+
+describe("the fields a contact write sends (#2611)", () => {
+  it("are only the ones named, with clear as null", () => {
+    const changes = contactFieldChanges(asSent({ email: "jan@example.de", language: "de" }), new Set(["notes"]), (raw) => raw);
+    assert.deepEqual(changes, { email: "jan@example.de", notes: null, language: "de" });
+  });
+
+  it("read an amount as the dialog does, and refuse one it would drop", () => {
+    const normalise = (raw: string) => raw.replace(",", ".");
+    assert.deepEqual(contactFieldChanges(asSent({ default_shipping_cost: "5,50" }), new Set(), normalise), {
+      defaultShippingCost: "5.50",
+    });
+    assert.throws(() => contactFieldChanges(asSent({ default_shipping_cost: "five" }), new Set(), normalise), refused(/"default_shipping_cost" is an amount/));
+    assert.throws(() => contactFieldChanges(asSent({ buyer_premium_fixed: "-1" }), new Set(), normalise), refused(/buyer_premium_fixed/));
+  });
+
+  it("refuse a field both sent and cleared", () => {
+    assert.throws(() => contactFieldChanges(asSent({ email: "a@b.c" }), new Set(["email"]), (raw) => raw), refused(/both sent and named in "clear"/));
+  });
+
+  it("refuse a seller's default on a contact that sells nothing to the collector", () => {
+    assert.throws(
+      () => refuseSellerOnlyFields({ defaultShippingCost: "5.00", email: "x" }, roleFlags(["buyer"]), '"jan"'),
+      refused(/"default_shipping_cost" belongs to a seller or an auction house/)
+    );
+    refuseSellerOnlyFields({ defaultShippingCost: "5.00" }, roleFlags(["auction_house"]), '"jan"');
+    // Clearing one is always allowed.
+    refuseSellerOnlyFields({ market: null }, roleFlags([]), '"jan"');
+  });
+});
+
+describe("the note a contact write leaves (#2611)", () => {
+  it("names what changed, with the old and new values", () => {
+    const after = {
+      ...LOG_CONTACT,
+      email: "jan@example.de",
+      language: "de",
+      defaultShippingCost: "5.00",
+      facebookProfileUrls: ["https://www.facebook.com/jan", "https://www.facebook.com/jan.k"],
+    };
+    const note = contactChangeNote(contactChanges(LOG_CONTACT, after), false);
+    assert.equal(note?.summary, "Contact changed by the Assistant: email, language, default shipping cost, Facebook profiles.");
+    assert.equal(
+      note?.quote,
+      [
+        "email: (none) → jan@example.de",
+        "language: (none) → de",
+        "default shipping cost: (none) → 5.00",
+        "Facebook profiles: added https://www.facebook.com/jan.k",
+      ].join("\n")
+    );
+  });
+
+  it("states roles and a removed profile", () => {
+    const after = { ...LOG_CONTACT, buyer: true, facebookProfileUrls: [] };
+    const note = contactChangeNote(contactChanges(LOG_CONTACT, after), false);
+    assert.equal(note?.quote, "roles: seller → seller, buyer\nFacebook profiles: removed https://www.facebook.com/jan");
+  });
+
+  it("lists what a new contact was created with", () => {
+    const note = contactChangeNote(contactChanges(null, LOG_CONTACT), true);
+    assert.equal(note?.summary, "Contact created by the Assistant with name, phone, roles, Facebook profiles.");
+    assert.match(note?.quote ?? "", /^name: jan\nphone: \+48 1\nroles: seller\n/);
+  });
+
+  it("is nothing when nothing changed", () => {
+    assert.equal(contactChangeNote(contactChanges(LOG_CONTACT, { ...LOG_CONTACT }), false), null);
   });
 });

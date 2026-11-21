@@ -593,6 +593,7 @@ describe("the purchase operations (#1390)", () => {
     it("publishes exactly these purchase operations, and nothing that closes, arrives or deletes", () => {
       // #2551 opened a lot's copies: three operations named for them, and those three only.
       const LOT_COPY_OPS = new Set(["add_purchase_lot_copies", "update_purchase_lot_copy", "remove_purchase_lot_copy"]);
+      const CONTACT_WRITES = new Set(["create_contact", "update_contact"]);
       const purchaseOps = OPERATIONS.filter((op) => /^\/(purchases|purchase-|sellers)/.test(op.path))
         .map((op) => `${op.method} ${op.path} ${op.name}`)
         .sort();
@@ -616,11 +617,12 @@ describe("the purchase operations (#1390)", () => {
       const forbidden = new Set(["close", "reopen", "arrive", "arrived", "delete", "copy", "copies", "contact", "status"]);
       for (const op of OPERATIONS) {
         // #2610 opened reading a contact (`get_contact`): a read names one and changes nothing, so the
-        // word is forbidden only to an operation that writes.
+        // word is forbidden only to an operation that writes — and #2611 opened making and editing one,
+        // through `create_contact` and `update_contact` alone. Deleting a contact stays closed.
         const words = op.name
           .split("_")
           .filter((word) => !LOT_COPY_OPS.has(op.name) || (word !== "copy" && word !== "copies"))
-          .filter((word) => op.writes || word !== "contact");
+          .filter((word) => (op.writes && !CONTACT_WRITES.has(op.name)) || word !== "contact");
         assert.ok(
           !words.some((word) => forbidden.has(word) && /purchase|lot|seller|contact/.test(op.name)),
           `${op.name} reads as a purchase act this surface does not take`

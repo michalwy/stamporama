@@ -9,7 +9,7 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras, #2551 a purchase lot's copies, #2610 a contact read in full and #2607 a proposal's buyer picks (no operation of its own); both wrappers exist and the registry carries **one hundred and fifty-five operations** (measured off `OPERATIONS` when #2610 landed and added `find_contacts` and `get_contact`; one hundred and fifty-three when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras, #2551 a purchase lot's copies, #2610 a contact read in full, #2607 a proposal's buyer picks (no operation of its own) and #2611 a contact made and edited in full; both wrappers exist and the registry carries **one hundred and fifty-seven operations** (measured off `OPERATIONS` when #2611 landed and added `create_contact` and `update_contact`; one hundred and fifty-five when #2610 landed and added `find_contacts` and `get_contact`; one hundred and fifty-three when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
 operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #2511's `withdraw_offer`, #2531's `sell_copies`, #2532's `find_free_extras` and `add_free_extras`, #2551's three lot-copy writes, #1168's bid recommendation, and #1037's catalog-number
@@ -23,7 +23,7 @@ carries thirty operations* (from #1036 until #1390), *the registry carries forty
 fifty-four operations* (from #1445 until #1452), *the registry carries fifty-six operations* (from
 #1452 until #1512), *the registry carries sixty-four operations* (from #1512 until #1540), *the registry carries sixty-eight operations* (from #1540 until #1539), *the registry carries seventy-four operations* (from #1539 until #1627), *the registry carries seventy-nine operations* (from #1627 until #1628), *the registry carries eighty operations* (from #1628 until #1635) *the registry carries eighty-four operations* (from #1635 until #1910 — #1651's `set_copy_stamp` made it eighty-five without the count here following), *the registry carries one hundred operations* (from #1910 until #1949), *the registry carries one hundred and five operations* (from #1949 until #2110) *the registry carries one hundred and six operations* (from #2110 until #2139) *the registry carries one hundred and eight operations* (from #2139 until #2140) and *the registry carries one hundred and ten operations* (from #2140 until #2149) and *the registry carries one hundred and fifteen operations* (from #2149 until #2150) and *the registry carries one hundred and seventeen operations* (from #2150 until #2167) and *the registry carries one hundred and eighteen operations* (from #2167 until #2173) and *the registry carries one hundred and twenty-one operations* (from #2173 until #2169, #2171 and #2172) and *the registry carries one hundred and twenty-four operations* (from #2169, #2171 and #2172 until #2198) and *the registry carries one hundred and twenty-six operations* (from #2198 until #2204) and *the registry carries one hundred and twenty-seven operations* (from #2204 until #2303 — #2208's `follow_issue_order` made it one hundred and twenty-eight without the count here following) and *the registry carries one hundred and thirty-seven operations* (from #2303 until #2445, four behind the registry by then).
 
-**One hundred and three of them write** since #2551 added its three lot-copy writes (measured off the operation modules' `writes: true`); *one hundred of them write* was the count from #2532, which added `add_free_extras` — its `find_free_extras` reads —, until then; *ninety-nine of them write* was the count from #2531, which added `sell_copies`, until then; *ninety-eight of them write* was the count from #2511, which added `withdraw_offer`, until then; *ninety-seven of them write* was the count from #2500, which added `cancel_sale`, until then; *ninety-six of them write* was the count from #2445, which added three issue-format writes — its `list_stamps` reads — to the ninety-three the registry held by then; *ninety of them write* was the count from #2303, which added six proposal writes — its three reads leave the rest, and #2379's `set_sale_note` made it one more without the count following —, until then; *eighty-three of them write* was the count from #2204, which added `move_sale_sets`, until then — #2208's `follow_issue_order` made it eighty-four without the count following —; *eighty-two of them write* was the count from #2198, which added `add_sale_attachments` — its `list_sale_attachments` reads —, until then; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
+**One hundred and five of them write** since #2611 added `create_contact` and `update_contact` (measured off the operation modules' `writes: true`); *one hundred and three of them write* was the count from #2551, which added its three lot-copy writes, until then; *one hundred of them write* was the count from #2532, which added `add_free_extras` — its `find_free_extras` reads —, until then; *ninety-nine of them write* was the count from #2531, which added `sell_copies`, until then; *ninety-eight of them write* was the count from #2511, which added `withdraw_offer`, until then; *ninety-seven of them write* was the count from #2500, which added `cancel_sale`, until then; *ninety-six of them write* was the count from #2445, which added three issue-format writes — its `list_stamps` reads — to the ninety-three the registry held by then; *ninety of them write* was the count from #2303, which added six proposal writes — its three reads leave the rest, and #2379's `set_sale_note` made it one more without the count following —, until then; *eighty-three of them write* was the count from #2204, which added `move_sale_sets`, until then — #2208's `follow_issue_order` made it eighty-four without the count following —; *eighty-two of them write* was the count from #2198, which added `add_sale_attachments` — its `list_sale_attachments` reads —, until then; *eighty-one of them write* was the count from #2169, #2171 and #2172, which added three, until then; *seventy-eight of them write* was the count from #2173, #2174 and #2175, which added one each, until then; *seventy-five of them write* was the count from #2150 until #2173 — #2167's read left it there —, *seventy-three of them write* was the count from #2149 until #2150, *sixty-nine of them write* from #2140 until #2149, *sixty-seven of them write* was the count from #2139 until #2140, *sixty-five of them write* from #1949 until #2139 — #2110's read left it there —, *sixty-two of them write* was the count from #1910 until #1949, *fifty of them write* from #1635 until
 then — #1651 made it fifty-one without the count following —, *forty-seven of them write* from #1628 until #1635, *forty-six of them write* from #1627 until #1628, *forty-one of them write* from #1539 until #1627, *thirty-six of them write* from #1540 until #1539, *thirty-four of them write* from
 #1512 until #1540, *twenty-eight of them write* from #1452 until #1512, *twenty-seven of them write* from #1445 until #1452, *twenty-six of them write* from #1438 until #1445, *twenty-one of them write* from
 #1415 until #1438, *seventeen of them write* from #1390 until #1415, and *eight of them write* from #712 until #1390, and neither #1168, #1037 nor #1036 moved it: `recommend_bid` and `resolve_catalog_numbers` both read and compute and store
@@ -148,7 +148,7 @@ src/lib/agent-api/
   conversation-log-reads.ts  an entry a field per line, naming a sale, an entry read back (#2149); a file the same way, base64 (#2150)
   sale-attachment-reads.ts  a sale's file read back, a batch of files answered (#2198)
   proposal-reads.ts a proposal row and record, naming a proposal, an offer and a lot, the lots a buyer took (#2303)
-  contact-reads.ts  a contact row and record, the role words (#2610)
+  contact-reads.ts  a contact row and record, the role words (#2610); the fields a write sends, the change note (#2611)
   variant-tree.ts   what keeps a variant or a base stamp from being deleted, and the refusals (#2140, #2171)
   issue-tree.ts     an issue named in a sentence; the refusals for a move's prefix clash and an issue not empty (#2169, #2172)
   issue-formats.ts  `none`, an issue format named to write or to filter by, the filter parameter, the refusal for a word already answered to (#2445)
@@ -187,7 +187,7 @@ src/lib/agent-api/
     conversation-log.ts  the five conversation-log operations (#2149) and the two for files (#2150)  ← server-side
     sale-attachments.ts  a sale's files: list and add (#2198)  ← server-side
     proposals.ts    the three proposal reads and six writes (#2303)    ← server-side
-    contacts.ts     find_contacts / get_contact (#2610)                ← server-side
+    contacts.ts     find_contacts / get_contact (#2610), create_contact / update_contact (#2611)  ← server-side
     issue-formats.ts  the issue-format dictionary: create, update, order (#2445)  ← server-side
     stamp-list.ts   list_stamps, the Stamps list read (#2445)           ← server-side
 ```
@@ -1346,6 +1346,56 @@ rather than in the path, where a link does not sit well.
 token: *buyers in market DE*, a contact read in full, a trade's incoming half left out of the
 purchases, and a contact of another collection unseen.
 
+**The language (#2603) joined `get_contact` with #2611**: #2610 landed before the column existed.
+
+### Making and editing a contact (#2611)
+
+| operation | writes | what it is for |
+| --- | --- | --- |
+| `create_contact` | yes | a contact with any detail the dialog takes — the language, the defaults and Facebook profiles included |
+| `update_contact` | yes | the fields named, roles, Facebook profiles added or removed; `clear` empties a field |
+
+The scenario is *Jan's email is …, he reads German, ship him at 5 EUR*. The collector opened every
+detail to the Assistant on 2026-11-21, the language included — replacing #2609's *the API does not
+set a contact's language*.
+
+**The writes are the dialog's own**, `createContact` and `updateContact`, so a change is refused
+where the dialog would be, with its sentence: a name already taken, a Facebook profile on another
+contact (named), a market or a language that is not a code, a free-extras figure out of range. Two
+refusals are the API's, because the dialog has no way to say them: **an amount the dialog's field
+would drop silently** (`amount()` in `contacts.ts` turns `five` into *not recorded*) is refused with
+its parameter named, and **a seller's field on a contact that sells nothing** — the market and the
+four auction defaults, which the dialog offers a seller or an auction house alone — is refused rather
+than stored where no screen shows it. When `roles` leaves a contact neither, those five are cleared,
+as the dialog clears them on save.
+
+**An edit changes only the fields named**, unlike the dialog, which saves every field it shows: the
+handler reads the contact, lays the named fields over it and hands the whole to `updateContact`, so
+an agent cannot wipe a field it was not told about. A body's `null` reads as *not sent* (#706's
+parser), so emptying a field is `clear`, as on `update_conversation_entry`. `roles` replaces the set;
+Facebook profiles are `add_facebook_profiles` and `remove_facebook_profiles`, and removing one the
+contact does not hold is refused with the ones it does.
+
+**Creating keeps today's guard** (#1390's): the same name, ignoring case, is refused with that
+contact's id and pointed at `update_contact`; a name — or the full name — close to somebody known is
+refused with the candidates until `different_person` says otherwise. `create_seller` and
+`find_or_create_buyer` stay: they are the narrow creates a purchase and a sale reach for, and
+`/api/v1` only grows.
+
+**Every write leaves a note in the contact's conversation log** — `direction` *note*, `channel`
+*other*, marked *Assistant* — naming what changed in the summary and stating each field from its old
+value to its new one in the quote, so the contact's page shows it and a wrong one can be put back.
+The collector chose the log over a change history of its own (2026-11-21). The note is computed from
+the contact as `contacts.ts` reads it before and after, so it states what was stored, normalised, and
+a write that changed nothing leaves none. It goes through `writeAssistantEntries` in
+`operations/conversation-log.ts`, which keeps the log's writes in that module (#2149's boundary test);
+the contact write and its note are two transactions, the note second.
+
+`tests/integration/agent-api-contact-writes.test.ts` drives both through the real route: the
+issue's three *Done when* — Jan's email, language and shipping with the note naming them, a phone
+edit leaving every other field as it was, a profile on another contact refused with its name — and
+the guards beside them.
+
 ## The conversation log (#2149)
 
 **What was said with a buyer, read and written in full** (ADR-0073). The log is mostly the
@@ -2282,9 +2332,11 @@ scaled to the length — loose on purpose, because it only ever suggests and nev
 **A contact is two fields.** A marketplace seller is filed under their login (#463), so
 `create_seller` writes the login as `name` and the name it was given as `fullName`; without a login,
 the name is the name. Nothing here reads or writes `email`, `phone` or `notes` (a contact has no
-address field) — `get_contact` is the one read that carries them (#2610, *Reading a contact*) — and
-`updateContact` and `deleteContact` are on the forbidden map. The integration suite gives
-a seller all three private fields and searches every answer it received for them.
+address field) — `get_contact` is the one read that carries them (#2610, *Reading a contact*), and
+`update_contact` the one write (#2611, *Making and editing a contact*) — and `deleteContact` is on the
+forbidden map. `updateContact` stood there too until #2611; it is now held to `operations/contacts.ts`
+by a test of its own. The integration suite gives a seller all three private fields and searches
+every answer it received for them.
 
 **Money is the purchase screen's.** `get_purchase` states `PurchaseDetail.spend` and each
 `LotSummary.spend` (#852) as `paid` and `base`; an order in a foreign currency with no frozen rate
@@ -3400,10 +3452,11 @@ exist cannot be.
   a lot* until #1628, which opened closing and cancelling. Bidding, reopening, settling and deleting
   stay closed — see *Keeping the auction register* above.
 - **The agent never touches a copy through a purchase but an open lot's copies still ordered, never
-  does anything to one that cannot be undone, and never edits a contact it did not just create**
-  (#1390, narrowed by #2551). *Never touches a copy through a purchase* stood here until #2551, which
-  let it add copies to an open lot and correct or remove ones still ordered. See *Entering purchases*
-  and *Filling a lot* above.
+  does anything to one that cannot be undone, and never deletes a contact** (#1390, narrowed by #2551
+  and #2611). *Never touches a copy through a purchase* stood here until #2551, which let it add
+  copies to an open lot and correct or remove ones still ordered; *never edits a contact it did not
+  just create* until #2611, which opened every detail of a contact through `update_contact`. See
+  *Entering purchases*, *Filling a lot* and *Making and editing a contact* above.
 - **The agent never deletes or reorders a size preset** (#1415). See *Stamp sizes and presets* above.
 - **The agent never deletes, moves or reorders an issue, a stamp or a variant** (#1438). See
   *Building the catalogue* above. **Checklists, catalogue prices, areas, the variant tree and moves

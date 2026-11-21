@@ -183,7 +183,7 @@ arrives. It does not close or reopen a lot,
 mark an order in transit or arrived, or delete a purchase, and it will not remove a lot that already
 holds copies or has closed. It does not touch the order a closed trade created beyond its note, nor an
 opening balance at all, and it never
-changes a contact's email, phone or notes, nor edits or deletes a contact you already have.
+changes a contact from here — that is done on *your contacts*, below — and never deletes one.
 Everything it writes is on the purchase's own screen, where you can change it back.
 
 On **sales**, it can record what sold — say, after going through your offers on Facebook and
@@ -283,14 +283,33 @@ only** token is enough. It can:
 - **find contacts** by part of the name or the full name, by role (seller, buyer, exchange partner,
   auction house, other), by market — *buyers in Germany* — or by a Facebook profile link;
 - **read a contact in full**, as the contact's **Edit** dialog shows it: name, full name, email,
-  phone, notes, roles and market, the auction defaults (currency, shipping, buyer's premium) and the
+  phone, notes, roles, market and language, the auction defaults (currency, shipping, buyer's premium) and the
   platform they were last tracked on, their own free-extras terms, and their Facebook profiles;
 - **see what you have done with them**: the numbers of their purchases, sales, trades and proposals,
   the auction sales tracked with them, and how many conversation entries are logged — each of which it
   can then open with the tools above.
 
-It does not show the figures for a period that the contact's page shows (spent, earned), and it does
-not change a contact.
+It does not show the figures for a period that the contact's page shows (spent, earned).
+
+With a **read and write** token it can also keep your contacts up to date — *Jan's email is …, he
+reads German, ship him at 5 EUR*:
+
+- **add a contact** with any detail the **Edit** dialog takes: name, full name, email, phone, notes,
+  roles, market, language, the auction defaults, their own free-extras terms and Facebook profiles.
+  As everywhere else, it looks for them first and never makes a second contact for somebody you
+  have; a name close to somebody you know must be confirmed as a different person;
+- **change a contact**: only the details it names change, so it cannot wipe one it was not told
+  about. It can empty a detail, change the roles, and add or remove a Facebook profile;
+- it is refused wherever the dialog would refuse, with the same reason — a name another contact is
+  filed under, a Facebook profile already on another contact (named), a language that is not a
+  language code. The market and the auction defaults are a seller's or an auction house's, as in the
+  dialog: it cannot set them on anybody else, and a contact it makes neither loses them, as the
+  dialog's save does.
+
+**Every change it makes is noted in the contact's
+[conversation log](contacts.md#the-conversation-log)**, marked *Assistant*: which details changed, and
+each one's old and new value, so you can see what it did and put a wrong one back. It never deletes
+or merges a contact.
 
 On **shipping and packing**, it can set up the data you would otherwise type in yourself under
 [Settings → Carriers](collections.md#carriers), on a platform's shipping options and under

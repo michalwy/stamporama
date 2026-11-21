@@ -467,7 +467,8 @@ describe("the agent API's operation modules (#1036)", () => {
  * line at three things: **copies** (they enter the collection's counts, wants and values), **anything
  * irreversible** (closing a lot freezes its cost basis, arriving moves copies, deleting a purchase
  * is gone), and **existing contacts** (their details are the collector's). Each row below is one of
- * those, and says which.
+ * those, and says which. #2611 opened editing a contact to the agent, through `update_contact` alone —
+ * the test after this one holds `updateContact` to `operations/contacts.ts`.
  *
  * `deleteLot` is here although removing an empty lot is allowed: it deletes the lot's copies with
  * it. The operation goes through `deleteEmptyLot`, whose emptiness is part of the delete itself.
@@ -491,8 +492,7 @@ const PURCHASE_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["markPurchaseArrived", { module: "lots", why: "marks an order arrived, moving its copies to sort" }],
   ["setPurchaseStatus", { module: "purchases", why: "moves an order's delivery status" }],
   ["deletePurchase", { module: "purchases", why: "deletes a purchase" }],
-  // Existing contacts.
-  ["updateContact", { module: "contacts", why: "edits a contact, its private details included" }],
+  // Existing contacts. Editing one is `update_contact`'s since #2611, and held to its module below.
   ["deleteContact", { module: "contacts", why: "deletes a contact" }],
   ["resolvePurchaseContact", { module: "contacts", why: "creates a contact from any unknown name, silently" }],
 ]);
@@ -533,6 +533,32 @@ describe("the agent API's operation modules (#1390)", () => {
         `\`${name}\` is not an export of src/lib/${module}.ts any more`
       );
     }
+  });
+});
+
+/**
+ * **A contact is edited from one module** (#2611): the collector opened every detail of a contact to the
+ * agent, and `update_contact` is how — each edit noted in the contact's conversation log. No other
+ * operation module may reach `updateContact`, so no other write can change a contact without that note.
+ */
+describe("the agent API's operation modules (#2611)", () => {
+  const contactsModule = path.join(AGENT_API, "operations/contacts.ts");
+
+  it("reach updateContact from the contact operations and nowhere else", () => {
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      if (file === contactsModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (name === "updateContact") misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(misplaced, [], `A contact is edited by update_contact alone.\n  ${misplaced.join("\n  ")}`);
+    const names = importedBindings(contactsModule).map((binding) => binding.name);
+    for (const name of ["createContact", "updateContact", "writeAssistantEntries"]) {
+      assert.ok(names.includes(name), `the walk did not see \`${name}\` in operations/contacts.ts`);
+    }
+    const domain = readFileSync(path.join(ROOT, "src/lib/contacts.ts"), "utf8");
+    assert.match(domain, /export async function updateContact\(/, "`updateContact` is not an export of contacts.ts any more");
   });
 });
 
