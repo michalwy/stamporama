@@ -1038,7 +1038,10 @@ Answer it as on any platform:
 In a post with several lots, each lot has its own result, recorded on its own offer.
 
 Both can be done from the phone too, on the auction's offer screen: **Sell…** to the winner, at the
-winning bid, or **Withdraw…**.
+winning bid, or **Withdraw…**. A post of several lots is closed from its phone screen at once: tick one
+winner's lots, **Sell…** them into a new sale or that buyer's open sale, each at its recorded bid, and
+repeat for the next winner; then tick the lots left and **Withdraw…** them — see
+[Stamporama on a phone](phone.md#closing-a-post).
 
 ## Selling a Facebook offer
 

@@ -40,6 +40,7 @@ import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 import { lookupFacebookBuyer, type FacebookBuyerLookup } from "@/lib/facebook-sales";
 import { createFacebookPostPreviewToken, revokeFacebookPostPreviewToken } from "@/lib/facebook-post-preview";
 import { patchOffer } from "@/lib/offers";
+import { withdrawPhonePostLots } from "@/lib/phone-post-close";
 import { assertCollectionOwner } from "@/lib/platform-category";
 
 // Settings → Facebook (#1543; ADR-0061): the groups under the Facebook platform. The platform's own
@@ -252,6 +253,23 @@ export async function withdrawFacebookPostAction(
     return { status: "success", ...(await withdrawFacebookPost(session.user.id, postId)) };
   } catch (err) {
     return failure(err, "Failed to withdraw the post.");
+  }
+}
+
+/** Withdraw the ticked lots of a post that is up, from the phone (#2631), each as its own *Withdraw*. */
+export async function withdrawPhonePostLotsAction(
+  collectionId: string,
+  postId: string,
+  offerIds: string[]
+): Promise<{ status: "success"; withdrawnLotNos: number[] } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    const result = await withdrawPhonePostLots(session.user.id, collectionId, postId, offerIds);
+    return result.ok
+      ? { status: "success", withdrawnLotNos: result.withdrawnLotNos }
+      : { status: "error", message: result.message };
+  } catch (err) {
+    return failure(err, "Failed to withdraw the lots.");
   }
 }
 

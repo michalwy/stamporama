@@ -1,12 +1,13 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { facebookPostMoves, isFacebookLotLeftOut } from "@/lib/facebook-post-rules";
 import { phoneOfferPath, phoneProposalPath } from "@/lib/phone";
 import type { PhonePost } from "@/lib/phone-posts";
 import type { PhonePostLot } from "@/lib/phone-post-view";
 import { PROPOSAL_STATUS_LABEL } from "@/lib/proposal-rules";
+import { isPhoneClosingLot, phoneClosingTicks, type PhoneClosingLot } from "@/lib/phone-post-close-rules";
 import { phoneRow } from "@/app/phone-screen";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { auctionsEndWhen } from "@/app/c/[collectionSlug]/offers/posts/post-list-dates";
@@ -16,6 +17,7 @@ import { PhonePostStageChip } from "../phone-post-stage-chip";
 import { PhonePostPublishing } from "./phone-post-publishing";
 import { CopyCaption } from "./phone-post-caption";
 import { PhonePostLotBid } from "./phone-post-lot-bid";
+import { PhonePostClosing } from "./phone-post-closing";
 
 /**
  * The post's phone screen's body (#2626): what the post is — its title, group, stage and, while it is
@@ -23,7 +25,9 @@ import { PhonePostLotBid } from "./phone-post-lot-bid";
  * opens its phone offer screen, where the lot is sold (#2009) or withdrawn (#2008); a lot still bidding
  * has *Record bid* under its row (#2630, `PhonePostLotBid`), the bid its own screen records (#2010). A
  * post ready to go up is published from here, and one waiting for the group's approval is approved or
- * rejected (#2629, `PhonePostPublishing`); a captioned post's lots then carry *Copy caption*.
+ * rejected (#2629, `PhonePostPublishing`); a captioned post's lots then carry *Copy caption*. A lot still
+ * up has a tick: one winner's ticked lots are sold into one sale, and the lots left withdrawn, from the
+ * bar the ticks bring up (#2631, `PhonePostClosing`).
  *
  * A client module for the closing time, which is the collector's own zone and drawn once mounted (#490),
  * and for the photo address the lot's thumbnail is drawn from.
@@ -41,6 +45,16 @@ export function PhonePostPanel({
   const title = post.title?.trim();
   // A captioned post's lots each carry their caption to paste under their photo, while it can go up.
   const captioned = post.photos.layout === "captions" && facebookPostMoves(post.kit.lots).activate;
+  // The lots ticked to close the post (#2631), by offer id. A lot sold or withdrawn since drops out.
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(() => new Set());
+  const standing = new Set(phoneClosingTicks(ticked, post.lots));
+  const closingLots: PhoneClosingLot[] = post.lots.flatMap((lot) => {
+    const kitLot = post.kit.lots.find((l) => l.offerId === lot.offerId);
+    return kitLot && standing.has(lot.offerId)
+      ? [{ offerId: lot.offerId, lotNo: lot.lotNo, state: lot.state, price: kitLot.price, currency: kitLot.currency }]
+      : [];
+  });
+  const closable = post.lots.some(isPhoneClosingLot);
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
@@ -78,8 +92,30 @@ export function PhonePostPanel({
         <nav aria-label="Lots" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           {post.lots.map((lot) => {
             const kitLot = post.kit.lots.find((l) => l.offerId === lot.offerId);
-            const row = (
+            const link = (
               <PhonePostLotRow collectionId={collectionId} href={phoneOfferPath(collectionSlug, lot.offerId)} lot={lot} />
+            );
+            const row = isPhoneClosingLot(lot) ? (
+              <div style={{ display: "flex", alignItems: "stretch", gap: "0.5rem" }}>
+                <label style={TICK} aria-label={`Tick lot ${lot.lotNo}`}>
+                  <input
+                    type="checkbox"
+                    checked={standing.has(lot.offerId)}
+                    onChange={() =>
+                      setTicked((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(lot.offerId)) next.delete(lot.offerId);
+                        else next.add(lot.offerId);
+                        return next;
+                      })
+                    }
+                    style={{ width: "1.5rem", height: "1.5rem", margin: 0 }}
+                  />
+                </label>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>{link}</div>
+              </div>
+            ) : (
+              link
             );
             const caption = captioned && kitLot && !isFacebookLotLeftOut(kitLot);
             return (
@@ -92,6 +128,22 @@ export function PhonePostPanel({
           })}
         </nav>
       )}
+
+      {closable && closingLots.length === 0 && (
+        <p style={{ ...LINE, fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
+          Closing the post: tick one winner&apos;s lots to sell them to that buyer, or the lots left to withdraw them.
+        </p>
+      )}
+      <PhonePostClosing
+        collectionId={collectionId}
+        collectionSlug={collectionSlug}
+        postId={post.postId}
+        platformId={post.platformId}
+        postLotCount={post.lots.length}
+        ticked={closingLots}
+        onDone={(ids) => setTicked((prev) => new Set([...prev].filter((id) => !ids.includes(id))))}
+        onClear={() => setTicked(new Set())}
+      />
     </>
   );
 }
@@ -139,6 +191,20 @@ const META: CSSProperties = {
   fontSize: "0.875rem",
   fontWeight: 400,
   color: "var(--color-text-secondary)",
+};
+
+/** A lot's tick, beside its row: as tall as the row, a thumb's width. */
+const TICK: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+  width: "3rem",
+  minHeight: "3rem",
+  borderRadius: "0.5rem",
+  border: "1px solid var(--color-border)",
+  background: "var(--color-bg-elevated)",
+  cursor: "pointer",
 };
 
 const LINK: CSSProperties = { color: "var(--color-accent)", textDecoration: "none" };

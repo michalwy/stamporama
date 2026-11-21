@@ -1298,6 +1298,19 @@ function nameLots(lots: readonly FacebookSoldLot[]): string {
   return named.length === 1 ? named[0] : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
 }
 
+/**
+ * The confirmation before withdrawing lots of a post one by one — the desk's lot `⋮` *Withdraw*, and the
+ * phone's ticked lots (#2631), so the two say the same. `withdrawing` is how many lots go, `postLots`
+ * how many the post has; a post of one is its listing.
+ */
+export function facebookLotWithdrawMessage(withdrawing: number, postLots: number): string {
+  const final = "Withdrawn is final — to sell here again, create a new offer. The copies are untouched.";
+  if (postLots <= 1) return `This takes the listing down. ${final}`;
+  return withdrawing === 1
+    ? `This lot is no longer for sale; the post and its other lots stay up. ${final}`
+    : `These ${withdrawing} lots are no longer for sale; the post and its other lots stay up. ${final}`;
+}
+
 /** The confirmation's sentences (#2590): what is withdrawn, what stays, and — for a post submitted to
  *  the group — that the post there is not touched. `nothing` when no lot would be withdrawn (every lot
  *  still for sale carries a bid), and the dialog then only closes. */

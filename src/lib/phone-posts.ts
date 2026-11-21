@@ -1,4 +1,5 @@
 import "server-only";
+import { prisma } from "./db";
 import { getFacebookPostKit, type FacebookOfferKit } from "./facebook-auctions";
 import { readFacebookPostPhotos, type FacebookPostPhotos } from "./facebook-lot-photos";
 import { facebookPostAuctionsEnd } from "./facebook-post-list-figures";
@@ -20,6 +21,9 @@ export interface PhonePost {
   /** The post's title (#1862); null on a post made before titles until it is given one. */
   title: string | null;
   group: { name: string; archived: boolean };
+  /** The platform the post's sales go on — its group's (#2631): where the buyer's open sales are looked
+   *  for when the post is closed from the phone. */
+  platformId: string;
   stage: FacebookPostStage;
   /** When a post that is up closes — its running auctions' end, ISO-8601, `from === to` where they share
    *  one (`facebookPostAuctionsEnd`). Null before the post is up, once it is over, and on a post of
@@ -46,12 +50,17 @@ export async function getPhonePost(ownerId: string, collectionId: string, postNo
     readPostProposal(postId),
   ]);
   if (!kit || !kit.post) return null;
+  const { platformId } = await prisma.facebookGroup.findUniqueOrThrow({
+    where: { id: kit.group.id },
+    select: { platformId: true },
+  });
   const stage = facebookPostStage(kit.lots);
   return {
     postId,
     postNo: kit.post.postNo,
     title: kit.post.title,
     group: { name: kit.group.name, archived: kit.group.archived },
+    platformId,
     stage,
     closes:
       stage === "up"
