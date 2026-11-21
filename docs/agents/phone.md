@@ -232,6 +232,16 @@ desktop-only.
   confirmation now uses too), inline. **Reopen** asks nothing, as the desk's button does. Each is
   `moveProposalAction`; afterwards `router.refresh()` and `invalidateAll`, as the handover's writes.
 
+## The buyer's picks (#2628)
+
+- **Shown, never pushed** (decided in writing the issue): the phone list's row and the proposal's
+  screen carry the desk's `BuyerPickedChip` — *Buyer picked N lots · 3 minutes ago*, timed from the
+  proposal's `buyerPicksChangedAt` — and no notification is sent when the buyer picks. The list's
+  time is `ProposalListItem.picksChangedAt` (the desk's list item, read from the same row), the
+  screen's the desk's `ProposalScreen.buyerPicks`, passed through `getPhoneProposal`. Each lot's
+  *Picked by the buyer* was #2625's, and *Convert to sale* starting from the picks #2627's
+  (`proposalBuyerPickTicks`).
+
 ## A Facebook group auction (#2010)
 
 - **The desk card's *Bidding*, on the offer screen above *Sell***: `PhoneOfferBidding`

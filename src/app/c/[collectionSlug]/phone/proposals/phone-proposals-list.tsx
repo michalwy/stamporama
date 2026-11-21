@@ -13,7 +13,12 @@ import {
 import { phoneProposalPath, phoneProposalsPath } from "@/lib/phone";
 import { PHONE_TAP_TARGET, phoneRow } from "@/app/phone-screen";
 import { useProposalsInfinite } from "@/app/c/[collectionSlug]/offers/proposals/use-proposals-query";
-import { ProposalStatusChip, proposalTotalText } from "@/app/c/[collectionSlug]/offers/proposals/proposal-parts";
+import {
+  BuyerPickedChip,
+  ProposalStatusChip,
+  proposalTotalText,
+} from "@/app/c/[collectionSlug]/offers/proposals/proposal-parts";
+import { formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite-scroll-sentinel";
 
 /**
@@ -21,6 +26,9 @@ import { InfiniteScrollSentinel } from "@/app/c/[collectionSlug]/shared/infinite
  * narrowing kept in the URL — `show=all` for every proposal, else the open ones (Preparing and Sent),
  * the ones there is still something to hand over or answer. A select rather than chips, as the phone's
  * offers list chose (#2008): a chip is under a thumb's target.
+ *
+ * A proposal the buyer has ticked lots of on its live page says so as the desk's row does, with the
+ * time of their last change (#2628) — the list is where the collector sees the answer come in.
  */
 export function PhoneProposalsList({ collectionId, collectionSlug }: { collectionId: string; collectionSlug: string }) {
   const router = useRouter();
@@ -80,6 +88,14 @@ export function PhoneProposalsList({ collectionId, collectionSlug }: { collectio
                   {proposalTotalText(proposal.total, proposal.currency, proposal.unpriced)}
                 </span>
               </span>
+              {proposal.pickedLotCount > 0 && (
+                <span>
+                  <BuyerPickedChip
+                    count={proposal.pickedLotCount}
+                    suffix={proposal.picksChangedAt ? formatRelative(proposal.picksChangedAt, new Date()) : undefined}
+                  />
+                </span>
+              )}
             </Link>
           ))}
           <InfiniteScrollSentinel onLoadMore={loadMore} hasMore={!!hasNextPage} isLoading={isFetchingNextPage} />
