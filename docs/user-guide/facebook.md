@@ -630,7 +630,7 @@ show, and from the
   a quick buy's price — its state, its listing link, and its sale once sold. A lot that can still be
   sold has a tick box at the very start of its row, before the photo — click anywhere in that strip,
   top to bottom — to sell several lots to one buyer together
-  ([Selling a Facebook offer](#selling-a-facebook-offer)). Each row's **⋮** opens the
+  ([Selling a Facebook offer](#selling-a-facebook-offer)). Each row's **⋮**, in its top-right corner, opens the
   offer, **Sell**s that lot, withdraws that one lot once the post is up, and — until the post is up —
   takes the lot out of the post. Until the post is up, a row's **⠿** grip drags the lot to another place
   ([Changing the order of the lots](#changing-the-order-of-the-lots)). A row wraps onto the next line on a narrow window rather than shrinking

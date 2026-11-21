@@ -14,11 +14,11 @@ import { OfferStateChip } from "../offer-badges";
 import { PreparePriceField, PrepareReadiness, PrepareTitleField } from "../prepare/prepare-offer-parts";
 
 // One lot of a group worked on from its screen (#1863, #2313) — a Facebook post's lot, or a proposal's:
-// its photos, its number, its offer (its number and title, both links to it), where it stands, and its `⋮`. While the
-// group may still change, its title is edited in place and its price typed into the compact price table,
-// with what still stops it from being marked ready (#2031). What only one of the screens has — a post's
-// caption, its listing link, its untranslated names — comes in as facts and slots, so the row itself is
-// one implementation for both.
+// its photos, its number, its offer (its number and title, both links to it), where it stands, and its `⋮` in
+// the row's top-right corner (#2636). While the group may still change, its title is edited in place and its
+// price typed into the compact price table, with what still stops it from being marked ready (#2031). What
+// only one of the screens has — a post's caption, its listing link, its untranslated names — comes in as
+// facts and slots, so the row itself is one implementation for both.
 
 const MUTED: React.CSSProperties = {
   color: "var(--color-text-muted)",
@@ -60,6 +60,8 @@ const LOT_BODY: React.CSSProperties = {
   alignItems: "flex-start",
   gap: "0.75rem 1.25rem",
 };
+
+const LOT_MENU_CELL: React.CSSProperties = { flexShrink: 0, paddingLeft: "0.75rem" };
 
 const LOT_FACTS: React.CSSProperties = {
   display: "grid",
@@ -236,29 +238,26 @@ export function GroupLotRow({
       <div style={{ ...LOT_BODY, ...(select ? {} : { paddingLeft: "0.25rem" }) }}>
         <div style={photoStyle}>{photos}</div>
         <div style={{ flex: "1 1 16rem", minWidth: "16rem" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-            <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
-              {drag && (
-                <span
-                  {...drag.handleProps(index)}
-                  style={{ cursor: "grab", display: "inline-flex", verticalAlign: "middle", marginRight: "0.25rem" }}
-                >
-                  <DragGrip label="Drag to move this lot" />
-                </span>
-              )}
-              <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
-              {badge && <span style={{ marginLeft: "0.5rem" }}>{badge}</span>}
-              {!prepare && (
-                <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
-                  <OfferLink href={offerHref} offerNo={lot.offerNo} />
-                  <Link href={offerHref} style={LINK}>
-                    {lot.title}
-                  </Link>
-                </span>
-              )}
-            </p>
-            <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
-          </div>
+          <p style={{ margin: 0, fontSize: "0.875rem", color: "var(--color-text-primary)" }}>
+            {drag && (
+              <span
+                {...drag.handleProps(index)}
+                style={{ cursor: "grab", display: "inline-flex", verticalAlign: "middle", marginRight: "0.25rem" }}
+              >
+                <DragGrip label="Drag to move this lot" />
+              </span>
+            )}
+            <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>Lot {lotNo}</span>
+            {badge && <span style={{ marginLeft: "0.5rem" }}>{badge}</span>}
+            {!prepare && (
+              <span style={{ display: "inline-flex", alignItems: "baseline", gap: "0.375rem", marginLeft: "0.5rem" }}>
+                <OfferLink href={offerHref} offerNo={lot.offerNo} />
+                <Link href={offerHref} style={LINK}>
+                  {lot.title}
+                </Link>
+              </span>
+            )}
+          </p>
           {/* While the group may still change (#2031): the title, still the link to the offer, edited in
               place from the pencil beside it (#2324) — the price table with the lot's own figure, and,
               while it is being prepared, what still stops it from being marked ready. */}
@@ -293,6 +292,11 @@ export function GroupLotRow({
           </dl>
         </div>
         {caption && <div style={{ flex: "2 1 22rem", minWidth: "22rem" }}>{caption}</div>}
+      </div>
+      {/* The row's `⋮` sits in its top-right corner, after the caption where there is one (#2636), as on
+          every other list — outside the body, so a body that wraps never carries it to the middle. */}
+      <div style={LOT_MENU_CELL}>
+        <RowActionsMenu actions={actions} ariaLabel={`Lot ${lotNo} actions`} />
       </div>
     </li>
   );
