@@ -1,6 +1,7 @@
 import type { CollectionAreaData, AreaCatalogEntry } from "./areas";
 import type { ItemListItem } from "./items";
 import { primaryCatalogNumber } from "./copy-sort";
+import { formatCatalogNumber, type ResolvedCatalogPrefix } from "./catalog-number";
 
 // Pure per-area catalog-vendor resolution, shared by the UI (stamp/issue/copy rows) and the
 // server-side lot-intake reads (#172). An area inherits its ancestors' catalog vendors and
@@ -25,7 +26,8 @@ function areaChain(areas: CollectionAreaData[], areaId: string): CollectionAreaD
  * The prefix one (area, vendor) pair carries (#675): walk toward the root and stop at the **first
  * area that states one** — a `CollectionAreaVendor` row with a non-null `areaPrefix`, or the area's
  * own `catalogPrefix` — with the vendor row winning inside that one area. An empty string at either
- * level is a stated *no prefix*; nothing up the chain → no prefix either.
+ * level is a stated *no prefix*; nothing up the chain → no prefix either. The prefix's joining
+ * (#2657) is read from the same level the prefix was, so it is inherited with it.
  *
  * A vendor row whose `areaPrefix` is null declares the vendor without saying anything about its
  * prefix, so the walk carries on — the area's own `catalogPrefix` next. That is what makes ticking
@@ -44,11 +46,15 @@ export function resolveAreaVendorPrefix(
   areas: CollectionAreaData[],
   areaId: string,
   vendorId: string
-): string | null {
+): ResolvedCatalogPrefix | null {
   for (const area of areaChain(areas, areaId)) {
     const own = area.vendorEntries.find((v) => v.catalogVendorId === vendorId);
-    if (own?.areaPrefix != null) return own.areaPrefix || null;
-    if (area.catalogPrefix !== null) return area.catalogPrefix || null;
+    if (own?.areaPrefix != null) {
+      return own.areaPrefix ? { prefix: own.areaPrefix, joined: own.prefixJoined } : null;
+    }
+    if (area.catalogPrefix !== null) {
+      return area.catalogPrefix ? { prefix: area.catalogPrefix, joined: area.catalogPrefixJoined } : null;
+    }
   }
   return null;
 }
@@ -85,16 +91,17 @@ export function effectiveVendorsForArea(
           vendorName: v.vendorName,
           vendorAbbreviation: v.vendorAbbreviation,
           prefix: null,
+          prefixJoined: false,
           catalogNameId: null,
           catalogName: null,
         });
       }
     }
   }
-  return Array.from(result.values(), (e) => ({
-    ...e,
-    prefix: resolveAreaVendorPrefix(areas, areaId, e.catalogVendorId),
-  }));
+  return Array.from(result.values(), (e) => {
+    const resolved = resolveAreaVendorPrefix(areas, areaId, e.catalogVendorId);
+    return { ...e, prefix: resolved?.prefix ?? null, prefixJoined: resolved?.joined ?? false };
+  });
 }
 
 /** The catalog vendor that **leads numbering** for an area — the leading label and the primary chip
@@ -114,27 +121,28 @@ export function effectivePrimaryVendorId(
   return null;
 }
 
-/** Format a catalog number with its vendor abbreviation / prefix (e.g. `Mi·PL 200`), or the
- * bare number when no vendor entry is known. */
+/** Format a catalog number with its vendor abbreviation / prefix (e.g. `Mi·PL 200`, or `Mi·DR D12`
+ * where the prefix is joined, #2657), or the bare number when no vendor entry is known. */
 export function formatStampCN(number: string, v?: AreaCatalogEntry): string {
   if (!v) return number;
-  return v.prefix
-    ? `${v.vendorAbbreviation}·${v.prefix} ${number}`
-    : `${v.vendorAbbreviation} ${number}`;
+  return formatCatalogNumber(v.vendorAbbreviation, v.prefix, number, v.prefixJoined);
 }
 
 /**
  * Per-issue overrides of the area-resolved catalog prefix (#377): issue id → (catalog vendor id →
- * the prefix that issue's stamps carry for that vendor). Sparse — only issues that set one appear,
- * and a missing entry means "inherit the area's prefix", which is the ordinary case.
+ * the prefix that issue's stamps carry for that vendor, with its joining, #2657). Sparse — only
+ * issues that set one appear, and a missing entry means "inherit the area's prefix", which is the
+ * ordinary case.
  */
-export type IssuePrefixMap = Map<string, Map<string, string>>;
+export type IssuePrefixMap = Map<string, Map<string, ResolvedCatalogPrefix>>;
 
 /** One stored override row, as it crosses the wire to the client. */
 export interface IssuePrefixRow {
   issueId: string;
   catalogVendorId: string;
   areaPrefix: string;
+  /** Whether the prefix joins the number with no space (#2657). */
+  prefixJoined: boolean;
 }
 
 /** Shape override rows into the nested {@link IssuePrefixMap}. Pure, so the server reads and the
@@ -147,7 +155,7 @@ export function groupIssuePrefixRows(rows: readonly IssuePrefixRow[]): IssuePref
       byVendor = new Map();
       out.set(r.issueId, byVendor);
     }
-    byVendor.set(r.catalogVendorId, r.areaPrefix);
+    byVendor.set(r.catalogVendorId, { prefix: r.areaPrefix, joined: r.prefixJoined });
   }
   return out;
 }
@@ -309,12 +317,14 @@ export function buildAreaVendorMaps(
     const cached = overridden.get(cacheKey);
     if (cached) return cached;
     const next = new Map(base);
-    for (const [catalogVendorId, prefix] of overrides) {
+    for (const [catalogVendorId, override] of overrides) {
       const entry = base.get(catalogVendorId);
       // Only vendors the area actually carries are overridable: the prefix decorates an existing
       // catalog entry (its abbreviation and name), and an issue cannot introduce a catalog its
       // area does not use.
-      if (entry) next.set(catalogVendorId, { ...entry, prefix });
+      if (entry) {
+        next.set(catalogVendorId, { ...entry, prefix: override.prefix, prefixJoined: override.joined });
+      }
     }
     overridden.set(cacheKey, next);
     return next;

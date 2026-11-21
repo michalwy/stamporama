@@ -567,7 +567,7 @@ describe("the default box label", () => {
     const copy: TitleTemplateCopy = {
       ...baseCopy,
       catalogNumbers: [
-        { vendorId: "v1", vendorAbbr: "Mi", areaPrefix: "PL", number: "303", isPrimary: true },
+        { vendorId: "v1", vendorAbbr: "Mi", areaPrefix: "PL", areaPrefixJoined: false, number: "303", isPrimary: true },
       ],
     };
     assert.equal(renderTitleTemplate(DEFAULT_ALBUM_PRESET.boxLabelTemplate, [copy]), "303");

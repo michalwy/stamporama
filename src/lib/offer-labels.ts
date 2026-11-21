@@ -133,6 +133,7 @@ export async function makeOfferLabeller(collectionId: string): Promise<OfferLabe
       // the same fallback `formatStampCN` makes.
       vendorAbbr: vendor?.vendorAbbreviation ?? "",
       areaPrefix: vendor?.prefix ?? null,
+      areaPrefixJoined: vendor?.prefixJoined ?? false,
       number: leading.number,
     };
   }

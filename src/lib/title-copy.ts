@@ -345,6 +345,7 @@ function titleCatalogNumbers(stamp: CatalogIdentityRow, maps: AreaVendorMaps): T
       // Prefer the area-vendor entry's abbreviation; fall back to the vendor relation.
       vendorAbbr: entry?.vendorAbbreviation ?? cn.catalogVendor.abbreviation,
       areaPrefix: entry?.prefix ?? null,
+      areaPrefixJoined: entry?.prefixJoined ?? false,
       number: cn.number,
       isPrimary: cn.catalogVendorId === primaryVendorId,
     };

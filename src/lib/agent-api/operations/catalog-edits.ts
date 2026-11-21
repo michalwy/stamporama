@@ -294,7 +294,10 @@ async function refusePrefixCollisions(
     const areaId = (stamp.stampAreaLinks.find((link) => link.isPrimary) ?? stamp.stampAreaLinks[0])?.collectionAreaId ?? null;
     byArea.set(areaId, [...(byArea.get(areaId) ?? []), stamp]);
   }
-  const prefixes = Object.fromEntries(next);
+  // The joining (#2657) does not enter a catalog identity, so the check needs only the text.
+  const prefixes = Object.fromEntries(
+    [...next].map(([vendorId, prefix]) => [vendorId, { prefix, joined: false }])
+  );
   const collisions: PrefixCollision[] = [];
   for (const [areaId, stamps] of byArea) {
     const candidates = stamps.flatMap((stamp) => stamp.catalogNumbers);
@@ -486,7 +489,12 @@ export async function createIssueFromParams(
   if (autoCreateStamps) {
     await refuseDuplicates(
       context,
-      { areaId, prefixes: Object.fromEntries(ownPrefixes.map((row) => [row.catalogVendorId, row.areaPrefix])) },
+      {
+        areaId,
+        prefixes: Object.fromEntries(
+          ownPrefixes.map((row) => [row.catalogVendorId, { prefix: row.areaPrefix, joined: false }])
+        ),
+      },
       candidatesOf(autoCreateStamps)
     );
   }

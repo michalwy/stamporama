@@ -18,9 +18,11 @@ import {
 const AREAS = prefixAreasAsClientData();
 
 describe("resolveAreaVendorPrefix (#675)", () => {
-  for (const { areaId, vendorId, expected } of PREFIX_CASES) {
-    it(`resolves (${areaId}, ${vendorId}) to ${expected === null ? "no prefix" : expected}`, () => {
-      assert.equal(resolveAreaVendorPrefix(AREAS, areaId, vendorId), expected);
+  for (const { areaId, vendorId, expected, joined = false } of PREFIX_CASES) {
+    it(`resolves (${areaId}, ${vendorId}) to ${expected === null ? "no prefix" : expected}${joined ? ", joined" : ""}`, () => {
+      const resolved = resolveAreaVendorPrefix(AREAS, areaId, vendorId);
+      assert.equal(resolved?.prefix ?? null, expected);
+      assert.equal(resolved?.joined ?? false, joined);
     });
   }
 });
@@ -32,6 +34,17 @@ describe("effectiveVendorsForArea (#675)", () => {
     );
     assert.equal(byVendor.get(MICHEL)?.prefix, "GG");
     assert.equal(byVendor.get(FISCHER)?.prefix, "GG");
+  });
+
+  it("carries the resolved prefix's joining with it (#2657)", () => {
+    const byVendor = new Map(
+      effectiveVendorsForArea(AREAS, "drc").map((e) => [e.catalogVendorId, e])
+    );
+    assert.equal(byVendor.get(SCOTT)?.prefix, "GER O");
+    assert.equal(byVendor.get(SCOTT)?.prefixJoined, false);
+    const own = effectiveVendorsForArea(AREAS, "tp").find((e) => e.catalogVendorId === MICHEL);
+    assert.equal(own?.prefix, "PL TP W");
+    assert.equal(own?.prefixJoined, true);
   });
 
   it("includes a vendor declared with no book of its own", () => {
@@ -47,6 +60,7 @@ describe("effectiveVendorsForArea (#675)", () => {
       vendorName: "Michel",
       vendorAbbreviation: "Mi",
       prefix: null,
+      prefixJoined: false,
       catalogNameId: "mi-book",
       catalogName: "Michel Deutschland",
     };
@@ -55,6 +69,7 @@ describe("effectiveVendorsForArea (#675)", () => {
       vendorName: "Michel",
       vendorAbbreviation: "Mi",
       areaPrefix: "X",
+      prefixJoined: false,
     };
     const base: Omit<CollectionAreaData, "id" | "parentId" | "catalogEntries" | "vendorEntries"> = {
       name: "Area",
@@ -62,6 +77,7 @@ describe("effectiveVendorsForArea (#675)", () => {
       primaryCatalogNameId: null,
       primaryCatalogVendorId: null,
       catalogPrefix: null,
+      catalogPrefixJoined: false,
       anchorMarkets: [],
       titleName: null,
       titleNameByLanguage: {},

@@ -9,7 +9,7 @@
 // Michel prefix is `PL`, and anything we cannot split with confidence is skipped and reported
 // rather than written with a country code baked into the number.
 
-import { normalizeCatalogKey } from "./catalog-number";
+import { formatCatalogNumber, normalizeCatalogKey, type ResolvedCatalogPrefix } from "./catalog-number";
 
 /**
  * What we decided about one catalog reference printed on the Colnect page, for the stamp it was
@@ -51,10 +51,20 @@ export interface SplitColnectNumber {
  * `"3706-3711"`, `"ATM2.2x"` and `"3706 - 3711"` keep their value whole. Requiring the token to be
  * digit-free keeps ranges and spaced numbers from losing their first component; a leading word that
  * is *not* an area code (`"Ark. 103"`) reads as a prefix and then fails the area comparison, which
- * skips-and-reports rather than writing something wrong.
+ * skips-and-reports rather than writing something wrong. With the stamp's own prefix given and
+ * joined (#2657), a value that starts with it is split there: `"DR D12"` → `{ "DR D", "12" }`.
  */
-export function splitColnectNumber(printed: string): SplitColnectNumber {
+export function splitColnectNumber(
+  printed: string,
+  prefix?: ResolvedCatalogPrefix | null
+): SplitColnectNumber {
   const value = printed.trim();
+  // A joined prefix (#2657) meets its number with no space — `DR D12` under `DR D` — so it is not a
+  // leading token and has to be recognised as itself. Colnect printing it spaced reads the same.
+  if (prefix?.joined && value.toLowerCase().startsWith(prefix.prefix.toLowerCase())) {
+    const rest = value.slice(prefix.prefix.length).trim();
+    if (rest) return { areaPrefix: value.slice(0, prefix.prefix.length), number: rest };
+  }
   const match = value.match(/^(\S+)\s+(\S.*)$/);
   if (!match) return { areaPrefix: null, number: value };
   const [, head, rest] = match;
@@ -77,8 +87,9 @@ export interface BackfillRefInput {
 export interface BackfillTarget {
   /** The stamp's existing numbers, one per vendor (the table is keyed that way). */
   numbersByVendor: ReadonlyMap<string, string>;
-  /** Effective area prefix per vendor for the stamp's primary area — null when the area sets none. */
-  prefixByVendor: ReadonlyMap<string, string | null>;
+  /** Effective area prefix per vendor for the stamp's primary area, with its joining (#2657) — null
+   * when the area sets none. */
+  prefixByVendor: ReadonlyMap<string, ResolvedCatalogPrefix | null>;
 }
 
 /** One decided reference. `number` is what would be (or was) stored — null unless it is a fill. */
@@ -110,9 +121,12 @@ export interface ColnectBackfillProposal {
 }
 
 /** Prefix-aware label mirroring `formatCatalogNumber`, kept local so this module stays pure. */
-function label(vendorAbbreviation: string, areaPrefix: string | null, number: string): string {
-  const head = areaPrefix ? `${vendorAbbreviation}·${areaPrefix}` : vendorAbbreviation;
-  return `${head} ${number}`;
+function label(
+  vendorAbbreviation: string,
+  prefix: ResolvedCatalogPrefix | null,
+  number: string
+): string {
+  return formatCatalogNumber(vendorAbbreviation, prefix?.prefix, number, prefix?.joined ?? false);
 }
 
 /**
@@ -149,8 +163,9 @@ export function proposeBackfill(
   const claimed = new Map(target.numbersByVendor);
 
   for (const ref of refs) {
-    const areaPrefix = target.prefixByVendor.get(ref.catalogVendorId) ?? null;
-    const split = splitColnectNumber(ref.printedNumber);
+    const resolved = target.prefixByVendor.get(ref.catalogVendorId) ?? null;
+    const areaPrefix = resolved?.prefix ?? null;
+    const split = splitColnectNumber(ref.printedNumber, resolved);
     const existing = claimed.get(ref.catalogVendorId);
 
     if (existing !== undefined) {
@@ -170,11 +185,11 @@ export function proposeBackfill(
         vendorAbbreviation: ref.vendorAbbreviation,
         status: "conflict",
         number: null,
-        label: label(ref.vendorAbbreviation, areaPrefix, existing),
+        label: label(ref.vendorAbbreviation, resolved, existing),
         existingNumber: existing,
         overwriteNumber,
         ...(overwriteNumber !== null
-          ? { overwriteLabel: label(ref.vendorAbbreviation, areaPrefix, overwriteNumber) }
+          ? { overwriteLabel: label(ref.vendorAbbreviation, resolved, overwriteNumber) }
           : {}),
       });
       continue;
@@ -196,7 +211,7 @@ export function proposeBackfill(
         ...base,
         status: "would-fill",
         number: split.number,
-        label: label(ref.vendorAbbreviation, areaPrefix, split.number),
+        label: label(ref.vendorAbbreviation, resolved, split.number),
       });
       continue;
     }
@@ -216,7 +231,7 @@ export function proposeBackfill(
       ...base,
       status: "would-fill",
       number: split.number,
-      label: label(ref.vendorAbbreviation, areaPrefix, split.number),
+      label: label(ref.vendorAbbreviation, resolved, split.number),
     });
   }
 

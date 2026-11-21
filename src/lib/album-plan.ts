@@ -27,6 +27,7 @@ import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { buildAreaVendorMaps, type AreaVendorMaps } from "./area-vendor";
 import { getCollectionAreas } from "./areas";
 import { loadIssuePrefixMap } from "./issue-prefix";
+import { joinCatalogPrefix, type ResolvedCatalogPrefix } from "./catalog-number";
 import {
   makeTitleCopyMapper,
   TITLE_COPY_STAMP_SELECT,
@@ -183,7 +184,7 @@ type PlanStampRow = TitleCopyStampRow & {
 function primaryNumber(
   stamp: PlanStampRow,
   maps: AreaVendorMaps
-): { number: string | null; prefix: string | null } {
+): { number: string | null; prefix: ResolvedCatalogPrefix | null } {
   const link = stamp.stampAreaLinks.find((a) => a.isPrimary) ?? stamp.stampAreaLinks[0];
   const areaId = link?.collectionAreaId ?? null;
   const issueId = stamp.issueMemberships[0]?.issue.id ?? null;
@@ -194,7 +195,11 @@ function primaryNumber(
     stamp.catalogNumbers[0] ??
     null;
   if (!cn) return { number: null, prefix: null };
-  return { number: cn.number, prefix: vendorMap.get(cn.catalogVendorId)?.prefix ?? null };
+  const entry = vendorMap.get(cn.catalogVendorId);
+  return {
+    number: cn.number,
+    prefix: entry?.prefix ? { prefix: entry.prefix, joined: entry.prefixJoined } : null,
+  };
 }
 
 /**
@@ -925,7 +930,10 @@ export const PAGE_RANGE_SEPARATOR = "-";
  * Blank for a page whose stamps carry no numbers at all — a page nothing can name, which the screen
  * says rather than inventing a label for.
  */
-export function pageRange(boxes: readonly AlbumBoxData[], areaPrefix: string | null): string {
+export function pageRange(
+  boxes: readonly AlbumBoxData[],
+  areaPrefix: ResolvedCatalogPrefix | null
+): string {
   const numbered = boxes
     .filter((b) => b.catalogNumber)
     .sort(
@@ -937,7 +945,8 @@ export function pageRange(boxes: readonly AlbumBoxData[], areaPrefix: string | n
   const from = numbered[0].catalogNumber!;
   const to = numbered[numbered.length - 1].catalogNumber!;
   const span = from === to ? from : `${from}${PAGE_RANGE_SEPARATOR}${to}`;
-  return areaPrefix ? `${areaPrefix} ${span}` : span;
+  // A joined prefix (#2657) meets the span with no space — `DR D12–19`.
+  return joinCatalogPrefix(areaPrefix?.prefix, span, areaPrefix?.joined ?? false);
 }
 
 /** The catalog prefix a whole album's pages are written under: the album's own area, resolved for
@@ -947,12 +956,10 @@ function albumAreaPrefix(
   album: AlbumData,
   maps: AreaVendorMaps,
   byId: ReadonlyMap<string, PlanStampRow>
-): string | null {
+): ResolvedCatalogPrefix | null {
   const vendorId = maps.primaryVendorByArea.get(album.collectionAreaId) ?? null;
-  const own = vendorId
-    ? (maps.vendorMapFor(album.collectionAreaId, null).get(vendorId)?.prefix ?? null)
-    : null;
-  if (own) return own;
+  const own = vendorId ? maps.vendorMapFor(album.collectionAreaId, null).get(vendorId) : undefined;
+  if (own?.prefix) return { prefix: own.prefix, joined: own.prefixJoined };
   for (const stamp of byId.values()) {
     const { prefix } = primaryNumber(stamp, maps);
     if (prefix) return prefix;

@@ -52,13 +52,14 @@ function fb(field: string, over: Partial<TitleFallback> = {}): TitleFallback {
 function cn(
   vendorAbbr: string,
   number: string,
-  opts: { areaPrefix?: string | null; isPrimary?: boolean } = {}
+  opts: { areaPrefix?: string | null; areaPrefixJoined?: boolean; isPrimary?: boolean } = {}
 ): TitleCatalogNumber {
   return {
     vendorId: vendorAbbr.toLowerCase(),
     vendorAbbr,
     number,
     areaPrefix: opts.areaPrefix ?? null,
+    areaPrefixJoined: opts.areaPrefixJoined ?? false,
     isPrimary: opts.isPrimary ?? false,
   };
 }
@@ -184,6 +185,18 @@ describe("renderTitleTemplate — {catalog} options", () => {
     const a = copy({ catalogNumbers: [cn("Mi", "1", { areaPrefix: "DR", isPrimary: true })] });
     const b = copy({ catalogNumbers: [cn("Mi", "2", { areaPrefix: "DR", isPrimary: true })] });
     assert.equal(renderTitleTemplate("{catalog:Mi:vendor,area}", [a, b]), "Mi·DR 1-2");
+  });
+
+  it("joins a joined area prefix to the compacted numbers with no space (#2657)", () => {
+    const dienst = [12, 13, 14, 16].map((n) =>
+      copy({
+        catalogNumbers: [cn("Mi", String(n), { areaPrefix: "DR D", areaPrefixJoined: true, isPrimary: true })],
+      })
+    );
+    assert.equal(renderTitleTemplate("{catalog}", dienst), "Mi·DR D12-14,16");
+    assert.equal(renderTitleTemplate("{catalog:Mi:area}", dienst), "DR D12-14,16");
+    // Without the area prefix in the head there is nothing to join: the vendor keeps its space.
+    assert.equal(renderTitleTemplate("{catalog:Mi:vendor}", dienst), "Mi 12-14,16");
   });
 
   it("compacts non-consecutive numbers into ranges + singles", () => {

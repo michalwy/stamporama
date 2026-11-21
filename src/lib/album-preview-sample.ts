@@ -359,6 +359,7 @@ function sampleCopy(checklist: SampleChecklist, stamp: SampleStamp): TitleTempla
         vendorId: SAMPLE_VENDOR_ID,
         vendorAbbr: SAMPLE_VENDOR_ABBR,
         areaPrefix: ALBUM_PREVIEW_AREA_PREFIX,
+        areaPrefixJoined: false,
         number: stamp.number,
         isPrimary: true,
       },

@@ -15,6 +15,7 @@ import {
   type DuplicateCatalogMode,
 } from "@/lib/duplicate-catalog";
 import { prisma } from "@/lib/db";
+import type { ResolvedCatalogPrefix } from "@/lib/catalog-number";
 
 async function getSession() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -42,7 +43,7 @@ export async function checkCatalogDuplicatesAction(
   opts: {
     contextAreaId?: string | null;
     contextIssueId?: string | null;
-    contextPrefixes?: Record<string, string>;
+    contextPrefixes?: Record<string, ResolvedCatalogPrefix>;
     stampId?: string | null;
   } = {}
 ): Promise<CatalogDuplicateCheck> {

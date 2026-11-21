@@ -178,7 +178,7 @@ export function AddVariantTreeDialog({
     !dupBlocking;
 
   const label = (number: string | null) =>
-    vendor ? formatCatalogNumber(vendor.vendorAbbreviation, vendor.prefix, number ?? "—") : number;
+    vendor ? formatCatalogNumber(vendor.vendorAbbreviation, vendor.prefix, number ?? "—", vendor.prefixJoined) : number;
   const baseLabel = label(baseNumber || null);
 
   function submit() {

@@ -62,7 +62,7 @@ export async function findPricedStampsBecomingUmbrellas(
     // umbrella at once): every number it has, alphabetically by catalogue, needs no area context.
     const label =
       row.catalogNumbers
-        .map((cn) => formatCatalogNumber(cn.catalogVendor.abbreviation, null, cn.number))
+        .map((cn) => formatCatalogNumber(cn.catalogVendor.abbreviation, null, cn.number, false))
         .sort((a, b) => a.localeCompare(b))
         .join(" / ") || null;
     found.push({

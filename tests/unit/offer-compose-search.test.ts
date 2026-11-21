@@ -27,6 +27,7 @@ function vendor(vendorAbbreviation: string, prefix: string | null): AreaCatalogE
     vendorName: vendorAbbreviation,
     vendorAbbreviation,
     prefix,
+    prefixJoined: false,
     catalogNameId: null,
     catalogName: null,
   };

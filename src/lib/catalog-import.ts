@@ -117,7 +117,8 @@ async function resolveImportTarget(
         name: true,
         parentId: true,
         catalogPrefix: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+        catalogPrefixJoined: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
       },
     })
   );
@@ -129,7 +130,7 @@ async function resolveImportTarget(
       areaName: area.name,
       catalogVendorId,
       vendorAbbreviation: vendor?.abbreviation ?? "",
-      areaPrefix: resolveEffectivePrefix(areaId, catalogVendorId, nodes),
+      areaPrefix: resolveEffectivePrefix(areaId, catalogVendorId, nodes)?.prefix ?? null,
     },
   };
 }
@@ -159,7 +160,8 @@ async function loadExistingNumbers(
           name: true,
           parentId: true,
           catalogPrefix: true,
-          collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+          catalogPrefixJoined: true,
+          collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
         },
       })
       .then(buildAreaPrefixNodes),
@@ -187,7 +189,9 @@ async function loadExistingNumbers(
     const issue: ExistingIssueRef | null = row.stamp.issueMemberships[0]?.issue ?? null;
     return {
       number: row.number,
-      areaPrefix: effectivePrefixFor(areaId, catalogVendorId, nodes, issue?.id ?? null, issuePrefixes),
+      areaPrefix:
+        effectivePrefixFor(areaId, catalogVendorId, nodes, issue?.id ?? null, issuePrefixes)?.prefix ??
+        null,
       issue,
     };
   });

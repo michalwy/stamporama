@@ -37,6 +37,7 @@ import type {
   ChecklistPriceDetails,
   IssueReferencedVendor,
   IssueRangeSuggestion,
+  IssueCatalogPrefixInput,
 } from "@/lib/issues";
 import { getChecklistMarketValue } from "@/lib/market-values";
 import type { ChecklistMarketValue } from "@/lib/market-values";
@@ -51,6 +52,7 @@ import {
   parseVariantNumberSpec,
   AUTO_CREATE_MAX_STAMPS,
   type CatalogNumberSpec,
+  type ResolvedCatalogPrefix,
 } from "@/lib/catalog-number";
 import { enforceCandidateCatalogDuplicates } from "@/lib/duplicate-catalog";
 import { resolveVariantTree, type ExistingVariant } from "@/lib/variant-tree";
@@ -167,23 +169,26 @@ function parseCatalogNumbers(formData: FormData): { catalogVendorId: string; fir
  * A blank field means "inherit the area's prefix" and is simply left out, so the returned array
  * *is* the issue's whole override set — {@link updateIssue} replaces on it.
  */
-function parseCatalogPrefixes(formData: FormData): { catalogVendorId: string; areaPrefix: string }[] {
-  const result: { catalogVendorId: string; areaPrefix: string }[] = [];
+function parseCatalogPrefixes(formData: FormData): IssueCatalogPrefixInput[] {
+  const result: IssueCatalogPrefixInput[] = [];
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("issueCatalogPrefix_")) continue;
     const catalogVendorId = key.slice("issueCatalogPrefix_".length);
     const areaPrefix = ((value as string) ?? "").trim();
-    if (catalogVendorId && areaPrefix) result.push({ catalogVendorId, areaPrefix });
+    // The "No space before the number" box beside the prefix (#2657); a checkbox posts only when
+    // ticked, and the dialog always renders it, so its absence is a stated "keep the space".
+    const prefixJoined = formData.get(`issueCatalogPrefixJoined_${catalogVendorId}`) === "on";
+    if (catalogVendorId && areaPrefix) result.push({ catalogVendorId, areaPrefix, prefixJoined });
   }
   return result;
 }
 
 /** The same overrides as a plain record, for the duplicate check's prefix context (#85/#377): on
  * create the issue does not exist yet, so its prefixes can only come from the form. */
-function prefixContext(
-  prefixes: { catalogVendorId: string; areaPrefix: string }[]
-): Record<string, string> {
-  return Object.fromEntries(prefixes.map((p) => [p.catalogVendorId, p.areaPrefix]));
+function prefixContext(prefixes: IssueCatalogPrefixInput[]): Record<string, ResolvedCatalogPrefix> {
+  return Object.fromEntries(
+    prefixes.map((p) => [p.catalogVendorId, { prefix: p.areaPrefix, joined: p.prefixJoined ?? false }])
+  );
 }
 
 /**

@@ -51,16 +51,45 @@ export function catalogNumberRuns(input: string): string[] {
 }
 
 /**
+ * A catalog prefix as resolved for one stamp's number (#2657): the prefix text and whether it joins
+ * the number with nothing between them. The joining belongs to the prefix — it is stated beside it
+ * and inherited with it — so wherever a prefix is resolved, its joining comes along from the same
+ * level.
+ */
+export interface ResolvedCatalogPrefix {
+  prefix: string;
+  /** True when the prefix joins the number with no space: `DR D` + `12` → `DR D12`. */
+  joined: boolean;
+}
+
+/**
+ * A number behind its catalog prefix (#2657): `PL 123`, or `DR D12` when the prefix is joined. With
+ * no prefix, the number alone. The **one** place the space between a prefix and its number is
+ * decided — every label, chip, search value and range label goes through it.
+ */
+export function joinCatalogPrefix(
+  prefix: string | null | undefined,
+  number: string,
+  joined: boolean
+): string {
+  if (!prefix) return number;
+  return joined ? `${prefix}${number}` : `${prefix} ${number}`;
+}
+
+/**
  * Human-facing catalog label: `"Mi·PL 200"` when the area sets a per-vendor
- * prefix, or `"Mi 200"` when it doesn't. Mirrors `formatIssueCatalogNumber`.
+ * prefix, `"Mi·DR D12"` when that prefix is joined (#2657), or `"Mi 200"` when
+ * there is none. Mirrors `formatIssueCatalogNumber`.
  */
 export function formatCatalogNumber(
   vendorAbbreviation: string,
   areaPrefix: string | null | undefined,
-  number: string
+  number: string,
+  joined: boolean
 ): string {
-  const head = areaPrefix ? `${vendorAbbreviation}·${areaPrefix}` : vendorAbbreviation;
-  return `${head} ${number}`;
+  return areaPrefix
+    ? `${vendorAbbreviation}·${joinCatalogPrefix(areaPrefix, number, joined)}`
+    : `${vendorAbbreviation} ${number}`;
 }
 
 /**
@@ -102,13 +131,13 @@ export function catalogIdentityKey(
 // the catalogue the number was read out of, which another site knows nothing of.
 
 /** {@link catalogSearchValue} for a chip built from its parts — the area's effective prefix
- * (#377) and the stored number. */
+ * (#377) and the stored number, joined as the prefix says (#2657): `DR D12`, never `DR D 12`. */
 export function catalogSearchValue(
   areaPrefix: string | null | undefined,
-  number: string
+  number: string,
+  joined: boolean
 ): string {
-  const prefix = areaPrefix?.trim();
-  return prefix ? `${prefix} ${number.trim()}` : number.trim();
+  return joinCatalogPrefix(areaPrefix?.trim(), number.trim(), joined);
 }
 
 /**

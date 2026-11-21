@@ -30,7 +30,7 @@ const conditionFallback: TitleFallback = {
 // `{#set}` / `{#copy}` blocks.
 
 function cn(vendorAbbr: string, number: string, isPrimary = true): TitleCatalogNumber {
-  return { vendorId: vendorAbbr.toLowerCase(), vendorAbbr, number, areaPrefix: null, isPrimary };
+  return { vendorId: vendorAbbr.toLowerCase(), vendorAbbr, number, areaPrefix: null, areaPrefixJoined: false, isPrimary };
 }
 
 function copy(over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy {

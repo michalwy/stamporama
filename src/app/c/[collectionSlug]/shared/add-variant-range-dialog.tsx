@@ -94,7 +94,7 @@ export function AddVariantRangeDialog({
   const baseNumber =
     parent.catalogNumbers.find((cn) => cn.catalogVendorId === vendor?.catalogVendorId)?.number ?? "";
   const baseLabel = vendor
-    ? formatCatalogNumber(vendor.vendorAbbreviation, vendor.prefix, baseNumber || "—")
+    ? formatCatalogNumber(vendor.vendorAbbreviation, vendor.prefix, baseNumber || "—", vendor.prefixJoined)
     : null;
 
   const [spec, setSpec] = useState("");

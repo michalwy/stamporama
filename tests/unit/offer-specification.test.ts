@@ -85,7 +85,7 @@ describe("the copies an offer's specification lists (#1758)", () => {
 const titleCopy = (over: Partial<TitleTemplateCopy> = {}): TitleTemplateCopy => ({
   name: "Kopernik",
   catalogNumbers: [
-    { vendorId: "mi", vendorAbbr: "Mi", areaPrefix: "PL", number: "1234", isPrimary: true },
+    { vendorId: "mi", vendorAbbr: "Mi", areaPrefix: "PL", areaPrefixJoined: false, number: "1234", isPrimary: true },
   ],
   year: 1973,
   condition: "Czysty",
@@ -152,8 +152,8 @@ describe("a row of an offer's specification (#1758)", () => {
       "item-1",
       titleCopy({
         carriedCatalogNumbers: [
-          [{ vendorId: "mi", vendorAbbr: "Mi", areaPrefix: "PL", number: "200", isPrimary: true }],
-          [{ vendorId: "mi", vendorAbbr: "Mi", areaPrefix: "PL", number: "205", isPrimary: true }],
+          [{ vendorId: "mi", vendorAbbr: "Mi", areaPrefix: "PL", areaPrefixJoined: false, number: "200", isPrimary: true }],
+          [{ vendorId: "mi", vendorAbbr: "Mi", areaPrefix: "PL", areaPrefixJoined: false, number: "205", isPrimary: true }],
         ],
       }),
       null

@@ -498,7 +498,8 @@ export async function makeCatalogLabeller(
         name: true,
         parentId: true,
         catalogPrefix: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+        catalogPrefixJoined: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
       },
     }),
     loadIssuePrefixMap(collectionId),
@@ -517,16 +518,20 @@ export async function makeCatalogLabeller(
             ...numbers.filter((cn) => cn.catalogVendorId !== primaryVendorId),
           ]
         : [...numbers];
-      return ordered.map((cn) => ({
+      return ordered.map((cn) => {
+        const prefix = effectivePrefixFor(areaId, cn.catalogVendorId, nodes, issueId, issuePrefixes);
+        return {
         label: formatCatalogNumber(
           abbrOf.get(cn.catalogVendorId) ?? "",
-          effectivePrefixFor(areaId, cn.catalogVendorId, nodes, issueId, issuePrefixes),
-          cn.number
+          prefix?.prefix,
+          cn.number,
+          prefix?.joined ?? false
         ),
         // An area with no primary catalog marks none of them: pretending the first stored number is
         // the leading one would put a stamp's identity in the order rows happen to come back in.
         isPrimary: primaryVendorId !== null && cn.catalogVendorId === primaryVendorId,
-      }));
+        };
+      });
     },
   };
 }

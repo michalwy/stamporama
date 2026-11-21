@@ -202,7 +202,12 @@ function useCopyRowActions(item: ItemListItem, ctx: CopyCtx): RowAction[] {
           : undefined;
         const name = number
           ? vendor
-            ? formatCatalogNumber(vendor.vendorAbbreviation, vendor.prefix, number.number)
+            ? formatCatalogNumber(
+                vendor.vendorAbbreviation,
+                vendor.prefix,
+                number.number,
+                vendor.prefixJoined
+              )
             : number.number
           : (entry.stampName ?? "Unnamed stamp");
         return {

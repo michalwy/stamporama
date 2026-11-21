@@ -17,17 +17,28 @@ import "server-only";
 // and NULL is the ordinary tick, which declares the vendor and lets the prefix inherit — the area's
 // own `catalogPrefix` first, then on up. Merging those two into one state is what would make ticking
 // four vendors on a `PL` area silently kill `PL` four times.
+//
+// Each stated prefix carries its **joining** (#2657) — whether it meets the number with no space,
+// `DR D12` rather than `PL 123` — and the walk returns it from the same level the prefix came from,
+// so a child area that says nothing inherits the prefix and its joining together.
+
+import type { ResolvedCatalogPrefix } from "./catalog-number";
+import type { IssuePrefixMap } from "./area-vendor";
 
 export interface AreaPrefixNode {
   parentId: string | null;
   name: string;
   /** The area's own prefix for every vendor (#675); null when the area says nothing at this level. */
   catalogPrefix: string | null;
+  /** Whether {@link AreaPrefixNode.catalogPrefix} joins the number with no space (#2657). */
+  catalogPrefixJoined: boolean;
   /** Per-vendor prefix rows set directly on this area. `''` is the stated *no prefix for this
    * vendor here*, which stops both inheritance and the area's own {@link
    * AreaPrefixNode.catalogPrefix}; a null value declares the vendor without saying anything about
    * its prefix, so the question passes on. */
   vendorPrefix: Map<string, string | null>;
+  /** The vendors whose row's prefix joins the number with no space (#2657). */
+  vendorPrefixJoined: Set<string>;
 }
 
 /** One area row as loaded from Prisma, carrying both prefix levels it declares. */
@@ -36,7 +47,8 @@ export interface AreaPrefixRow {
   name: string;
   parentId: string | null;
   catalogPrefix: string | null;
-  collectionAreaVendors: { catalogVendorId: string; areaPrefix: string | null }[];
+  catalogPrefixJoined: boolean;
+  collectionAreaVendors: { catalogVendorId: string; areaPrefix: string | null; prefixJoined: boolean }[];
 }
 
 /** Build the id → {@link AreaPrefixNode} lookup used by {@link resolveEffectivePrefix}. */
@@ -50,8 +62,12 @@ export function buildAreaPrefixNodes(
         parentId: a.parentId,
         name: a.name,
         catalogPrefix: a.catalogPrefix,
+        catalogPrefixJoined: a.catalogPrefixJoined,
         vendorPrefix: new Map(
           a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
+        ),
+        vendorPrefixJoined: new Set(
+          a.collectionAreaVendors.filter((v) => v.prefixJoined).map((v) => v.catalogVendorId)
         ),
       },
     ])
@@ -73,32 +89,34 @@ export function effectivePrefixFor(
   vendorId: string,
   nodes: Map<string, AreaPrefixNode>,
   issueId: string | null,
-  issuePrefixes: Map<string, Map<string, string>>
-): string | null {
+  issuePrefixes: IssuePrefixMap
+): ResolvedCatalogPrefix | null {
   const override = issueId ? issuePrefixes.get(issueId)?.get(vendorId) : undefined;
-  if (override !== undefined) return override;
+  if (override !== undefined) return override.prefix ? override : null;
   return areaId ? resolveEffectivePrefix(areaId, vendorId, nodes) : null;
 }
 
 /** Resolve the effective area prefix for one vendor: walk toward the root and stop at the first
  * area that states one — a `CollectionAreaVendor` row with a non-null `areaPrefix`, or the area's
  * own `catalogPrefix` — the row winning inside that one area (#675). An empty string at either level
- * is a stated *no prefix* and stops the walk returning null. Mirrors `resolveAreaVendorPrefix` on
- * the client. Prefer {@link effectivePrefixFor} where an issue is known — an issue may override what
- * this returns (#377). */
+ * is a stated *no prefix* and stops the walk returning null. The prefix's joining (#2657) comes from
+ * the level the prefix did. Mirrors `resolveAreaVendorPrefix` on the client. Prefer {@link
+ * effectivePrefixFor} where an issue is known — an issue may override what this returns (#377). */
 export function resolveEffectivePrefix(
   areaId: string,
   vendorId: string,
   nodes: Map<string, AreaPrefixNode>
-): string | null {
+): ResolvedCatalogPrefix | null {
   let current: string | null = areaId;
   let depth = 0;
   while (current && depth < 50) {
     const node: AreaPrefixNode | undefined = nodes.get(current);
     if (!node) break;
     const own = node.vendorPrefix.get(vendorId);
-    if (own != null) return own || null;
-    if (node.catalogPrefix !== null) return node.catalogPrefix || null;
+    if (own != null) return own ? { prefix: own, joined: node.vendorPrefixJoined.has(vendorId) } : null;
+    if (node.catalogPrefix !== null) {
+      return node.catalogPrefix ? { prefix: node.catalogPrefix, joined: node.catalogPrefixJoined } : null;
+    }
     current = node.parentId;
     depth++;
   }

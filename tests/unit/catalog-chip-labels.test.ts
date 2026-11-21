@@ -12,6 +12,7 @@ const entry = (catalogVendorId: string, abbreviation: string, prefix: string): A
   vendorName: abbreviation,
   vendorAbbreviation: abbreviation,
   prefix,
+  prefixJoined: false,
   catalogNameId: null,
   catalogName: null,
 });

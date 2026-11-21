@@ -21,17 +21,23 @@ import {
 
 describe("catalogSearchValue", () => {
   it("keeps the area prefix and drops the vendor (#420)", () => {
-    assert.equal(catalogSearchValue("PL", "200"), "PL 200");
+    assert.equal(catalogSearchValue("PL", "200", false), "PL 200");
   });
 
   it("copies the bare number when the area sets no prefix", () => {
-    assert.equal(catalogSearchValue(null, "200"), "200");
-    assert.equal(catalogSearchValue(undefined, "200"), "200");
-    assert.equal(catalogSearchValue("  ", "200"), "200");
+    assert.equal(catalogSearchValue(null, "200", false), "200");
+    assert.equal(catalogSearchValue(undefined, "200", false), "200");
+    assert.equal(catalogSearchValue("  ", "200", false), "200");
   });
 
   it("keeps a suffixed or prefixed number whole", () => {
-    assert.equal(catalogSearchValue("PL", "BL120a"), "PL BL120a");
+    assert.equal(catalogSearchValue("PL", "BL120a", false), "PL BL120a");
+  });
+
+  it("joins a joined prefix to the number with no space (#2657)", () => {
+    assert.equal(catalogSearchValue("DR D", "12", true), "DR D12");
+    assert.equal(catalogSearchValue("PL TP W", "1", true), "PL TP W1");
+    assert.equal(catalogSearchValue(null, "12", true), "12");
   });
 });
 
@@ -109,12 +115,21 @@ describe("catalogNumberRuns", () => {
 
 describe("formatCatalogNumber", () => {
   it("joins vendor abbreviation, prefix, and number", () => {
-    assert.equal(formatCatalogNumber("Mi", "PL", "200"), "Mi·PL 200");
+    assert.equal(formatCatalogNumber("Mi", "PL", "200", false), "Mi·PL 200");
+  });
+
+  it("joins a joined prefix to the number with no space (#2657)", () => {
+    assert.equal(formatCatalogNumber("Mi", "DR D", "12", true), "Mi·DR D12");
+    assert.equal(formatCatalogNumber("Mi", "PL", "123", false), "Mi·PL 123");
+  });
+
+  it("keeps the space after a bare vendor even when asked to join", () => {
+    assert.equal(formatCatalogNumber("Mi", null, "12", true), "Mi 12");
   });
 
   it("omits the prefix separator when there is no prefix", () => {
-    assert.equal(formatCatalogNumber("Sc", null, "45"), "Sc 45");
-    assert.equal(formatCatalogNumber("Sc", "", "45"), "Sc 45");
+    assert.equal(formatCatalogNumber("Sc", null, "45", false), "Sc 45");
+    assert.equal(formatCatalogNumber("Sc", "", "45", false), "Sc 45");
   });
 });
 

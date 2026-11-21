@@ -152,6 +152,8 @@ interface VendorRowState {
   catalogVendorId: string;
   prefix: string;
   noPrefix: boolean;
+  /** "No space before the number" (#2657) — meaningful only while `prefix` holds text. */
+  prefixJoined: boolean;
 }
 
 /** A vendor as the *Numbering* section lists it — every vendor in the collection, whether or not
@@ -173,6 +175,8 @@ interface CollectionAreaFormProps {
   defaultPrimaryCatalogNameId?: string | null;
   defaultPrimaryCatalogVendorId?: string | null;
   defaultCatalogPrefix?: string | null;
+  /** Whether that prefix joins the number with no space (#2657). */
+  defaultCatalogPrefixJoined?: boolean;
   /** The markets anchoring this area's valuations, as set on it (#1634). */
   defaultAnchorMarkets?: string[];
   /** Whether its stamps may carry forbidden symbols, as set on it (#1891); null follows the parent. */
@@ -218,6 +222,7 @@ export function CollectionAreaForm({
   defaultPrimaryCatalogNameId,
   defaultPrimaryCatalogVendorId,
   defaultCatalogPrefix,
+  defaultCatalogPrefixJoined,
   defaultAnchorMarkets,
   defaultCoverSymbols = null,
   defaultCatalogEntries,
@@ -304,11 +309,13 @@ export function CollectionAreaForm({
 
   // ── Numbering: the area's own prefix, and the vendors it records numbers for ─
   const [catalogPrefix, setCatalogPrefix] = useState(defaultCatalogPrefix ?? "");
+  const [catalogPrefixJoined, setCatalogPrefixJoined] = useState(defaultCatalogPrefixJoined ?? false);
   const [vendorRows, setVendorRows] = useState<VendorRowState[]>(() =>
     (defaultVendorEntries ?? []).map((v) => ({
       catalogVendorId: v.catalogVendorId,
       prefix: v.areaPrefix ?? "",
       noPrefix: v.areaPrefix === "",
+      prefixJoined: v.prefixJoined,
     }))
   );
   const [primaryVendorId, setPrimaryVendorId] = useState(defaultPrimaryCatalogVendorId ?? "");
@@ -342,6 +349,7 @@ export function CollectionAreaForm({
         catalogVendorId,
         prefix: "",
         noPrefix: false,
+        prefixJoined: false,
       }
     );
   }
@@ -352,13 +360,16 @@ export function CollectionAreaForm({
       if (existing) {
         return rows.map((r) => (r.catalogVendorId === catalogVendorId ? { ...r, ...patch } : r));
       }
-      return [...rows, { catalogVendorId, prefix: "", noPrefix: false, ...patch }];
+      return [...rows, { catalogVendorId, prefix: "", noPrefix: false, prefixJoined: false, ...patch }];
     });
   }
 
   function addVendor() {
     if (!addVendorId || listedVendorIds.includes(addVendorId)) return;
-    setVendorRows([...vendorRows, { catalogVendorId: addVendorId, prefix: "", noPrefix: false }]);
+    setVendorRows([
+      ...vendorRows,
+      { catalogVendorId: addVendorId, prefix: "", noPrefix: false, prefixJoined: false },
+    ]);
     setAddVendorId("");
   }
 
@@ -390,12 +401,15 @@ export function CollectionAreaForm({
   }
 
   // What the form submits: the books as ids, and one row per listed vendor carrying the three-state
-  // prefix — null for the ordinary tick, `""` for the stated "no prefix", text for a prefix.
+  // prefix — null for the ordinary tick, `""` for the stated "no prefix", text for a prefix — and its
+  // joining (#2657), which only a prefix typed on the row can carry.
   const submittedVendors = listedVendorIds.map((id) => {
     const row = vendorRow(id);
+    const areaPrefix = row.noPrefix ? "" : row.prefix.trim() || null;
     return {
       catalogVendorId: id,
-      areaPrefix: row.noPrefix ? "" : row.prefix.trim() || null,
+      areaPrefix,
+      prefixJoined: !!areaPrefix && row.prefixJoined,
     };
   });
 
@@ -596,6 +610,19 @@ export function CollectionAreaForm({
                 {...NO_AUTOFILL}
                 style={{ ...INPUT_STYLE, width: "8rem", flex: "none", fontFamily: "monospace" }}
               />
+              {/* How the prefix meets the number (#2657): `DR D12` ticked, `PL 123` not. It travels
+                  with the prefix, so it means nothing — and is disabled — while the box is blank. */}
+              <Tooltip content="The prefix is joined to the number, as in DR D12 — areas below that inherit the prefix inherit this too">
+                <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8125rem", color: "var(--color-text-secondary)", cursor: isPending || !catalogPrefix.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap", flex: "none" }}>
+                  <input
+                    type="checkbox"
+                    checked={!!catalogPrefix.trim() && catalogPrefixJoined}
+                    onChange={(e) => setCatalogPrefixJoined(e.target.checked)}
+                    disabled={isPending || !catalogPrefix.trim()}
+                  />
+                  No space before the number
+                </label>
+              </Tooltip>
               <p style={{ ...HINT_STYLE, margin: 0 }}>
                 Used for <strong>every</strong> vendor below unless one overrides it. Leave blank to
                 inherit from the parent area
@@ -647,6 +674,18 @@ export function CollectionAreaForm({
                       {...NO_AUTOFILL}
                       style={{ ...ROW_INPUT_STYLE, width: "6rem", flex: "none", fontFamily: "monospace" }}
                     />
+                    <Tooltip content="No space before the number — this vendor's prefix is joined to it, as in DR D12">
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "var(--color-text-muted)", cursor: isPending || row.noPrefix || !row.prefix.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                        <input
+                          type="checkbox"
+                          checked={!row.noPrefix && !!row.prefix.trim() && row.prefixJoined}
+                          onChange={(e) => setVendorRow(vendorId, { prefixJoined: e.target.checked })}
+                          disabled={isPending || row.noPrefix || !row.prefix.trim()}
+                          aria-label={`${vendor?.name ?? vendorId}: no space before the number`}
+                        />
+                        no space
+                      </label>
+                    </Tooltip>
                     <Tooltip content="No prefix for this vendor here — stops the area prefix reaching it">
                       <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.75rem", color: "var(--color-text-muted)", cursor: isPending ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
                         <input
@@ -880,6 +919,11 @@ export function CollectionAreaForm({
       {/* Everything the two sections above decide rides to the action as hidden fields, so the
           existing form-data save path is unchanged. */}
       <input type="hidden" name="catalogPrefix" value={catalogPrefix.trim()} />
+      <input
+        type="hidden"
+        name="catalogPrefixJoined"
+        value={String(!!catalogPrefix.trim() && catalogPrefixJoined)}
+      />
       <input type="hidden" name="primaryCatalogNameId" value={primaryCatalogNameId} />
       <input type="hidden" name="primaryCatalogVendorId" value={primaryVendorId} />
       <input type="hidden" name="catalogNameIds" value={JSON.stringify(bookIds)} />

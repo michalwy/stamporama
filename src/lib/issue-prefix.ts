@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { groupIssuePrefixRows, type IssuePrefixMap, type IssuePrefixRow } from "./area-vendor";
+import type { ResolvedCatalogPrefix } from "./catalog-number";
 
 // Per-issue overrides of the area-resolved catalog prefix (#377), loaded once per read.
 //
@@ -37,16 +38,17 @@ export async function getIssueCatalogPrefixes(
   }
   return prisma.issueCatalogPrefix.findMany({
     where: { issue: { collectionId } },
-    select: { issueId: true, catalogVendorId: true, areaPrefix: true },
+    select: { issueId: true, catalogVendorId: true, areaPrefix: true, prefixJoined: true },
     orderBy: [{ issueId: "asc" }, { catalogVendorId: "asc" }],
   });
 }
 
-/** Every per-issue prefix override in a collection, as `issueId → (vendorId → prefix)`. */
+/** Every per-issue prefix override in a collection, as `issueId → (vendorId → prefix)`, each with its
+ * joining (#2657). */
 export async function loadIssuePrefixMap(collectionId: string): Promise<IssuePrefixMap> {
   const rows = await prisma.issueCatalogPrefix.findMany({
     where: { issue: { collectionId } },
-    select: { issueId: true, catalogVendorId: true, areaPrefix: true },
+    select: { issueId: true, catalogVendorId: true, areaPrefix: true, prefixJoined: true },
   });
   return groupIssuePrefixRows(rows);
 }
@@ -54,11 +56,15 @@ export async function loadIssuePrefixMap(collectionId: string): Promise<IssuePre
 /** The overrides of a single issue, as the `vendorId → prefix` map the resolvers take. Used where
  * only one issue is in play (the duplicate check's context issue), so the collection-wide load
  * would read rows nothing asks about. */
-export async function loadIssuePrefixes(issueId: string): Promise<Map<string, string>> {
+export async function loadIssuePrefixes(
+  issueId: string
+): Promise<Map<string, ResolvedCatalogPrefix>> {
   const rows = await prisma.issueCatalogPrefix.findMany({
     where: { issueId },
-    select: { catalogVendorId: true, areaPrefix: true },
+    select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true },
   });
-  return new Map(rows.map((r) => [r.catalogVendorId, r.areaPrefix]));
+  return new Map(
+    rows.map((r) => [r.catalogVendorId, { prefix: r.areaPrefix, joined: r.prefixJoined }])
+  );
 }
 

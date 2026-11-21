@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
-import { catalogIdentityKey, formatCatalogNumber } from "./catalog-number";
+import { catalogIdentityKey, formatCatalogNumber, type ResolvedCatalogPrefix } from "./catalog-number";
 import {
   buildAreaPrefixNodes,
   effectivePrefixFor,
@@ -67,7 +67,7 @@ export async function getCollectionDuplicateMode(
 export interface CatalogPrefixContext {
   areaId: string | null;
   issueId?: string | null;
-  prefixes?: Record<string, string>;
+  prefixes?: Record<string, ResolvedCatalogPrefix>;
 }
 
 async function loadAreaNodes(collectionId: string): Promise<Map<string, AreaPrefixNode>> {
@@ -78,7 +78,8 @@ async function loadAreaNodes(collectionId: string): Promise<Map<string, AreaPref
       name: true,
       parentId: true,
       catalogPrefix: true,
-      collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+      catalogPrefixJoined: true,
+      collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
     },
   });
   return buildAreaPrefixNodes(areaRows);
@@ -89,10 +90,10 @@ function contextPrefix(
   ctx: CatalogPrefixContext,
   vendorId: string,
   nodes: Map<string, AreaPrefixNode>,
-  contextIssuePrefixes: Map<string, string>
-): string | null {
+  contextIssuePrefixes: Map<string, ResolvedCatalogPrefix>
+): ResolvedCatalogPrefix | null {
   const unsaved = ctx.prefixes?.[vendorId];
-  if (unsaved) return unsaved;
+  if (unsaved?.prefix) return unsaved;
   const stored = contextIssuePrefixes.get(vendorId);
   if (stored !== undefined) return stored;
   return ctx.areaId ? resolveEffectivePrefix(ctx.areaId, vendorId, nodes) : null;
@@ -163,7 +164,7 @@ function stampPrefix(
   vendorId: string,
   nodes: Map<string, AreaPrefixNode>,
   issuePrefixes: IssuePrefixMap
-): string | null {
+): ResolvedCatalogPrefix | null {
   return effectivePrefixFor(
     primaryAreaId(stamp),
     vendorId,
@@ -231,7 +232,7 @@ export async function findCatalogDuplicatesForCandidates(
     }),
     loadAreaNodes(collectionId),
     loadIssuePrefixMap(collectionId),
-    context.issueId ? loadIssuePrefixes(context.issueId) : Promise.resolve(new Map<string, string>()),
+    context.issueId ? loadIssuePrefixes(context.issueId) : Promise.resolve(new Map<string, ResolvedCatalogPrefix>()),
   ]);
   const vendorAbbr = new Map(vendors.map((v) => [v.id, v.abbreviation]));
 
@@ -239,14 +240,14 @@ export async function findCatalogDuplicatesForCandidates(
   const groups = new Map<string, CatalogDuplicateGroup>();
   for (const c of clean) {
     const prefix = contextPrefix(context, c.catalogVendorId, nodes, contextIssuePrefixes);
-    const key = catalogIdentityKey(c.catalogVendorId, prefix, c.number);
+    const key = catalogIdentityKey(c.catalogVendorId, prefix?.prefix, c.number);
     if (groups.has(key)) continue;
     const abbr = vendorAbbr.get(c.catalogVendorId) ?? "";
     groups.set(key, {
       catalogVendorId: c.catalogVendorId,
       vendorAbbreviation: abbr,
       number: c.number,
-      label: formatCatalogNumber(abbr, prefix, c.number),
+      label: formatCatalogNumber(abbr, prefix?.prefix, c.number, prefix?.joined ?? false),
       stamps: [],
     });
   }
@@ -267,7 +268,7 @@ export async function findCatalogDuplicatesForCandidates(
 
   for (const row of rows) {
     const prefix = stampPrefix(row.stamp, row.catalogVendorId, nodes, issuePrefixes);
-    const key = catalogIdentityKey(row.catalogVendorId, prefix, row.number);
+    const key = catalogIdentityKey(row.catalogVendorId, prefix?.prefix, row.number);
     const group = groups.get(key);
     if (group) group.stamps.push(stampRef(row.stamp, nodes));
   }
@@ -381,7 +382,7 @@ export async function listCatalogDuplicates(
   const groups = new Map<string, CatalogDuplicateGroup>();
   for (const row of rows) {
     const prefix = stampPrefix(row.stamp, row.catalogVendorId, nodes, issuePrefixes);
-    const key = catalogIdentityKey(row.catalogVendorId, prefix, row.number);
+    const key = catalogIdentityKey(row.catalogVendorId, prefix?.prefix, row.number);
     let group = groups.get(key);
     if (!group) {
       const abbr = vendorAbbr.get(row.catalogVendorId) ?? "";
@@ -389,7 +390,7 @@ export async function listCatalogDuplicates(
         catalogVendorId: row.catalogVendorId,
         vendorAbbreviation: abbr,
         number: row.number,
-        label: formatCatalogNumber(abbr, prefix, row.number),
+        label: formatCatalogNumber(abbr, prefix?.prefix, row.number, prefix?.joined ?? false),
         stamps: [],
       };
       groups.set(key, group);

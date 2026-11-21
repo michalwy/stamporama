@@ -65,12 +65,14 @@ function parseCatalogNameIds(formData: FormData): string[] {
  * blank prefix reaches the domain as a blank and is stored as null — see {@link AreaVendorInput}. */
 function parseAreaVendors(formData: FormData): AreaVendorInput[] {
   return parseJsonArray(formData, "areaVendors").flatMap((v) => {
-    const row = v as { catalogVendorId?: unknown; areaPrefix?: unknown };
+    const row = v as { catalogVendorId?: unknown; areaPrefix?: unknown; prefixJoined?: unknown };
     if (typeof row.catalogVendorId !== "string" || !row.catalogVendorId) return [];
     return [
       {
         catalogVendorId: row.catalogVendorId,
         areaPrefix: typeof row.areaPrefix === "string" ? row.areaPrefix : null,
+        // "No space before the number" (#2657); absent keeps what the row had.
+        ...(typeof row.prefixJoined === "boolean" ? { prefixJoined: row.prefixJoined } : {}),
       },
     ];
   });
@@ -119,6 +121,13 @@ export async function getAreaFormOptionsAction(
   };
 }
 
+/** Whether the area's own prefix joins the number with no space (#2657), as the dialog posts it:
+ * `true` or `false`; absent — a form without the box — leaves it as it is. */
+function parseCatalogPrefixJoined(formData: FormData): boolean | undefined {
+  if (!formData.has("catalogPrefixJoined")) return undefined;
+  return str(formData, "catalogPrefixJoined") === "true";
+}
+
 /** Whether the area's stamps may carry forbidden symbols (#1891), as the dialog posts it: `on`, `off`,
  * or blank for *same as parent*. */
 function parseCoverSymbols(formData: FormData): boolean | null {
@@ -157,6 +166,7 @@ export async function createCollectionAreaAction(
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       primaryCatalogVendorId: optionalStr(formData, "primaryCatalogVendorId"),
       catalogPrefix: optionalStr(formData, "catalogPrefix"),
+      catalogPrefixJoined: parseCatalogPrefixJoined(formData),
       anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
       symbol: optionalStr(formData, "symbol"),
@@ -197,6 +207,7 @@ export async function updateCollectionAreaAction(
       primaryCatalogNameId: optionalStr(formData, "primaryCatalogNameId"),
       primaryCatalogVendorId: optionalStr(formData, "primaryCatalogVendorId"),
       catalogPrefix: optionalStr(formData, "catalogPrefix"),
+      catalogPrefixJoined: parseCatalogPrefixJoined(formData),
       anchorMarkets: parseMarketList(formData),
       titleName: optionalStr(formData, "titleName"),
       symbol: optionalStr(formData, "symbol"),

@@ -106,12 +106,17 @@ function normalizeVendorPrefix(value: string | null | undefined): string | null 
  * something, else its own area prefix, else nothing. The same precedence the tree walk applies at
  * each step ({@link resolveAreaVendorPrefix}). */
 function resolveOwnPrefix(
-  rowPrefix: string | null | undefined,
-  catalogPrefix: string | null
-): string | null {
-  if (rowPrefix != null) return rowPrefix || null;
-  if (catalogPrefix !== null) return catalogPrefix || null;
-  return null;
+  row: { areaPrefix: string | null; prefixJoined: boolean } | undefined,
+  catalogPrefix: string | null,
+  catalogPrefixJoined: boolean
+): { prefix: string | null; prefixJoined: boolean } {
+  if (row && row.areaPrefix != null) {
+    return { prefix: row.areaPrefix || null, prefixJoined: !!row.areaPrefix && row.prefixJoined };
+  }
+  if (catalogPrefix !== null) {
+    return { prefix: catalogPrefix || null, prefixJoined: !!catalogPrefix && catalogPrefixJoined };
+  }
+  return { prefix: null, prefixJoined: false };
 }
 
 /**
@@ -141,6 +146,9 @@ export interface AreaCatalogEntry {
   vendorAbbreviation: string;
   /** The resolved prefix for this (area, vendor) pair — see {@link resolveAreaVendorPrefix}. */
   prefix: string | null;
+  /** Whether {@link AreaCatalogEntry.prefix} joins the number with no space (#2657): `DR D12`
+   * rather than `PL 123`. Resolved with the prefix, from the same level; false without one. */
+  prefixJoined: boolean;
   /** The area's price book for this vendor, where it attaches one; null for a vendor recorded
    * without a book. An area attaching several of a vendor's books reports one of them here. */
   catalogNameId: string | null;
@@ -159,6 +167,9 @@ export interface AreaVendorEntry {
    * ancestor's; null declares the vendor and lets the prefix inherit; anything else is that prefix.
    * The absence of a row entirely means the area does not record this vendor's numbers. */
   areaPrefix: string | null;
+  /** Whether {@link AreaVendorEntry.areaPrefix} joins the number with no space (#2657). Meaningful
+   * only when the row states a prefix. */
+  prefixJoined: boolean;
 }
 
 export interface CollectionAreaData {
@@ -172,6 +183,8 @@ export interface CollectionAreaData {
   primaryCatalogVendorId: string | null;
   /** The area's own prefix for every vendor (#675); null when it says nothing at this level. */
   catalogPrefix: string | null;
+  /** Whether {@link CollectionAreaData.catalogPrefix} joins the number with no space (#2657). */
+  catalogPrefixJoined: boolean;
   /** The markets whose auction results this area's valuations rest on (#1634), as set **here** —
    * empty when it names none and the question passes to its parent. */
   anchorMarkets: string[];
@@ -234,6 +247,7 @@ export async function readCollectionAreas(
       primaryCatalogNameId: true,
       primaryCatalogVendorId: true,
       catalogPrefix: true,
+      catalogPrefixJoined: true,
       anchorMarkets: true,
       titleName: true,
       symbol: true,
@@ -265,6 +279,7 @@ export async function readCollectionAreas(
         select: {
           catalogVendorId: true,
           areaPrefix: true,
+          prefixJoined: true,
           catalogVendor: { select: { name: true, abbreviation: true } },
         },
       },
@@ -278,6 +293,7 @@ export async function readCollectionAreas(
     primaryCatalogNameId: a.primaryCatalogNameId,
     primaryCatalogVendorId: a.primaryCatalogVendorId,
     catalogPrefix: a.catalogPrefix,
+    catalogPrefixJoined: a.catalogPrefixJoined,
     anchorMarkets: a.anchorMarkets,
     titleName: a.titleName,
     titleNameByLanguage: translationsByLanguage(a.translations, (t) => t.titleName),
@@ -293,16 +309,18 @@ export async function readCollectionAreas(
       // What *this* area says about the prefix, at the level it says it: its own vendor row where
       // that row states one, else its own `catalogPrefix` (#675). The tree walk that turns this into
       // an answer for a descendant is `resolveAreaVendorPrefix`.
-      const vendorPrefixMap = new Map(
-        a.collectionAreaVendors.map((v) => [v.catalogVendorId, v.areaPrefix])
-      );
+      const vendorPrefixMap = new Map(a.collectionAreaVendors.map((v) => [v.catalogVendorId, v]));
       return a.collectionAreaCatalogs.map((c) => ({
         catalogNameId: c.catalogNameId,
         catalogVendorId: c.catalogName.vendorId,
         vendorName: c.catalogName.vendor.name,
         catalogName: c.catalogName.name,
         vendorAbbreviation: c.catalogName.vendor.abbreviation,
-        prefix: resolveOwnPrefix(vendorPrefixMap.get(c.catalogName.vendorId), a.catalogPrefix),
+        ...resolveOwnPrefix(
+          vendorPrefixMap.get(c.catalogName.vendorId),
+          a.catalogPrefix,
+          a.catalogPrefixJoined
+        ),
       }));
     })(),
     vendorEntries: a.collectionAreaVendors.map((v) => ({
@@ -310,6 +328,7 @@ export async function readCollectionAreas(
       vendorName: v.catalogVendor.name,
       vendorAbbreviation: v.catalogVendor.abbreviation,
       areaPrefix: v.areaPrefix,
+      prefixJoined: v.prefixJoined,
     })),
   }));
 }
@@ -339,6 +358,8 @@ export async function createCollectionArea(
     primaryCatalogVendorId?: string | null;
     /** The area's prefix for every vendor (#675); blank means "inherit" and stores null. */
     catalogPrefix?: string | null;
+    /** Whether that prefix joins the number with no space (#2657); ignored without a prefix. */
+    catalogPrefixJoined?: boolean;
     /** The markets anchoring this area's valuations (#1634); empty or omitted inherits. */
     anchorMarkets?: string[];
     titleName?: string | null;
@@ -379,6 +400,7 @@ export async function createCollectionArea(
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
       primaryCatalogVendorId: await resolvePrimaryVendorId(data),
       catalogPrefix: blankToNull(data.catalogPrefix),
+      catalogPrefixJoined: !!blankToNull(data.catalogPrefix) && (data.catalogPrefixJoined ?? false),
       anchorMarkets: anchorMarketsData(data.anchorMarkets) ?? [],
       titleName: data.titleName ?? null,
       symbol: blankToNull(data.symbol),
@@ -444,6 +466,10 @@ export async function updateCollectionArea(
     primaryCatalogVendorId?: string | null;
     /** The area's prefix for every vendor (#675); blank means "inherit" and stores null. */
     catalogPrefix?: string | null;
+    /** Whether that prefix joins the number with no space (#2657). **Omitted leaves it as it is**,
+     * so a caller restating the area for another reason cannot split a prefix from its joining; a
+     * blank prefix always clears it, since it means nothing without one. */
+    catalogPrefixJoined?: boolean;
     /** The markets anchoring this area's valuations (#1634); empty inherits, and **omitted leaves
      * them as they are** — unlike the fields around it, so a caller restating an area for another
      * reason (a move) cannot clear them by not knowing about them. */
@@ -470,6 +496,7 @@ export async function updateCollectionArea(
       assignable: true,
       primaryCatalogNameId: true,
       primaryCatalogVendorId: true,
+      catalogPrefixJoined: true,
       _count: { select: { issues: true, stampAreaLinks: true } },
     },
   });
@@ -531,6 +558,9 @@ export async function updateCollectionArea(
       primaryCatalogNameId: data.primaryCatalogNameId ?? null,
       primaryCatalogVendorId: nextPrimaryVendorId,
       catalogPrefix: blankToNull(data.catalogPrefix),
+      catalogPrefixJoined:
+        !!blankToNull(data.catalogPrefix) &&
+        (data.catalogPrefixJoined ?? existing.catalogPrefixJoined),
       ...(data.anchorMarkets !== undefined ? { anchorMarkets: anchorMarketsData(data.anchorMarkets) } : {}),
       titleName: data.titleName ?? null,
       ...(data.symbol !== undefined ? { symbol: blankToNull(data.symbol) } : {}),
@@ -682,6 +712,10 @@ export interface AreaVendorInput {
    * omit it (or pass null) for the ordinary tick, where the prefix inherits; pass `''` for the
    * stated *no prefix for this vendor here*, which stops the walk; pass text for that prefix. */
   areaPrefix?: string | null;
+  /** Whether that prefix joins the number with no space (#2657). Ignored unless the row states a
+   * prefix; **omitted keeps what the vendor's row had**, so a caller restating the vendor list for
+   * another reason cannot split a prefix from its joining. */
+  prefixJoined?: boolean;
 }
 
 /**
@@ -703,7 +737,19 @@ export async function syncAreaVendors(
   // lossy part of the old collapse was merging *different* prefixes of one vendor's several books;
   // there is one row per vendor on this list by construction.
   const byVendor = new Map<string, string | null>();
-  for (const v of vendors) byVendor.set(v.catalogVendorId, normalizeVendorPrefix(v.areaPrefix));
+  const joinedByVendor = new Map<string, boolean | undefined>();
+  for (const v of vendors) {
+    byVendor.set(v.catalogVendorId, normalizeVendorPrefix(v.areaPrefix));
+    joinedByVendor.set(v.catalogVendorId, v.prefixJoined);
+  }
+  const previouslyJoined = new Set(
+    (
+      await prisma.collectionAreaVendor.findMany({
+        where: { collectionAreaId: areaId, prefixJoined: true },
+        select: { catalogVendorId: true },
+      })
+    ).map((r) => r.catalogVendorId)
+  );
 
   if (byVendor.size > 0) {
     const valid = await prisma.catalogVendor.findMany({
@@ -722,6 +768,9 @@ export async function syncAreaVendors(
         collectionAreaId: areaId,
         catalogVendorId,
         areaPrefix,
+        prefixJoined:
+          !!areaPrefix &&
+          (joinedByVendor.get(catalogVendorId) ?? previouslyJoined.has(catalogVendorId)),
       })),
     }),
   ]);

@@ -27,6 +27,7 @@ import {
   parseCatalogNumberSpec,
   AUTO_CREATE_MAX_STAMPS,
   type CatalogNumberSpec,
+  type ResolvedCatalogPrefix,
 } from "@/lib/catalog-number";
 import type { CatalogDuplicateGroup, DuplicateCandidate, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import {
@@ -144,12 +145,18 @@ function autoFillSecondarySpan(
 // The prefix overrides currently typed into the (uncontrolled) form, as the duplicate check's
 // `contextPrefixes`. On create the issue does not exist yet, so its own form is the only place its
 // prefixes can be read from — and they decide the catalog identity being checked for a collision.
-function prefixesFromForm(form: HTMLFormElement, vendorIds: string[]): Record<string, string> {
-  const out: Record<string, string> = {};
+function prefixesFromForm(
+  form: HTMLFormElement,
+  vendorIds: string[]
+): Record<string, ResolvedCatalogPrefix> {
+  const out: Record<string, ResolvedCatalogPrefix> = {};
   for (const catalogVendorId of vendorIds) {
     const el = form.elements.namedItem(`issueCatalogPrefix_${catalogVendorId}`);
     const value = el instanceof HTMLInputElement ? el.value.trim() : "";
-    if (value) out[catalogVendorId] = value;
+    // The "No space before the number" box beside it (#2657) — the label the check reports with.
+    const box = form.elements.namedItem(`issueCatalogPrefixJoined_${catalogVendorId}`);
+    const joined = box instanceof HTMLInputElement && box.checked;
+    if (value) out[catalogVendorId] = { prefix: value, joined };
   }
   return out;
 }
@@ -293,6 +300,11 @@ function IssueForm({
   after,
   catalogAfter,
 }: IssueFormProps) {
+  // What each vendor's prefix override box holds (#2657): its "No space before the number" box means
+  // nothing without a prefix, so it is disabled while the box beside it is blank.
+  const [typedPrefixes, setTypedPrefixes] = useState<Record<string, string>>(() =>
+    Object.fromEntries(defaultCatalogPrefixes.map((p) => [p.catalogVendorId, p.areaPrefix]))
+  );
   const sortedVendors = useMemo(() => {
     if (!primaryVendorId) return vendors;
     return [...vendors].sort((a, b) => {
@@ -462,6 +474,10 @@ function IssueForm({
                   <TextInput
                     name={`issueCatalogPrefix_${v.catalogVendorId}`}
                     defaultValue={prefixOverride?.areaPrefix ?? ""}
+                    onChange={(e) => {
+                      const value = e.currentTarget.value;
+                      setTypedPrefixes((prev) => ({ ...prev, [v.catalogVendorId]: value }));
+                    }}
                     disabled={isPending}
                     placeholder={v.prefix ?? "Prefix"}
                     aria-label={`${v.vendorAbbreviation} catalog prefix for this issue`}
@@ -469,6 +485,36 @@ function IssueForm({
                     {...NO_AUTOFILL}
                     style={{ ...INPUT_STYLE, width: "5.5rem" }}
                   />
+                </Tooltip>
+                {/* How the override meets the number (#2657): `DR D12` with the box ticked, `PL 123`
+                    without. It travels with the prefix typed beside it, so it means nothing — and is
+                    disabled — while that box is blank; out of the tab order with it (#445). */}
+                <Tooltip
+                  content="No space before the number — the prefix is joined to it, as in DR D12. Applies to the prefix typed here."
+                  placement="top"
+                  align="start"
+                  style={{ flexShrink: 0 }}
+                >
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                      fontSize: "0.75rem",
+                      color: "var(--color-text-muted)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      name={`issueCatalogPrefixJoined_${v.catalogVendorId}`}
+                      defaultChecked={prefixOverride?.prefixJoined ?? false}
+                      disabled={isPending || !typedPrefixes[v.catalogVendorId]?.trim()}
+                      aria-label={`${v.vendorAbbreviation}: no space before the number`}
+                      tabIndex={-1}
+                    />
+                    no space
+                  </label>
                 </Tooltip>
                 {(() => {
                   const warning = catalogWarningFor?.(v.catalogVendorId);
