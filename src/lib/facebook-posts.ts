@@ -32,6 +32,7 @@ import {
   isFacebookLotLeftOut,
   isFacebookLotPosted,
   type FacebookApprovalClosing,
+  type FacebookPostDeclinedProposal,
   type FacebookPostDeletion,
   type FacebookPostStage,
   type FacebookPostWithdrawal,
@@ -1122,6 +1123,20 @@ async function readDeletionLots(db: DbTransaction | typeof prisma, postId: strin
   return { lots, soldLots };
 }
 
+/** The declined proposals made from a post (#2643), in number order — what *Delete post…* deletes with
+ *  it. A post can have had several, each declined before the next was made from it. */
+async function readDeclinedPostProposals(
+  db: DbTransaction | typeof prisma,
+  postId: string
+): Promise<(FacebookPostDeclinedProposal & { id: string })[]> {
+  const rows = await db.proposal.findMany({
+    where: { facebookPostId: postId, status: "declined" },
+    orderBy: { proposalNo: "asc" },
+    select: { id: true, proposalNo: true, contact: { select: { name: true } } },
+  });
+  return rows.map((r) => ({ id: r.id, proposalNo: r.proposalNo, contactName: r.contact.name }));
+}
+
 /** What deleting a post would take with it, and what is in the way (#2060) — what *Delete post…*
  *  shows before the collector confirms. */
 export async function readFacebookPostDeletion(ownerId: string, postId: string): Promise<FacebookPostDeletion> {
@@ -1131,12 +1146,14 @@ export async function readFacebookPostDeletion(ownerId: string, postId: string):
     select: { postNo: true, title: true },
   });
   const { lots, soldLots } = await readDeletionLots(prisma, postId);
+  const declined = await readDeclinedPostProposals(prisma, postId);
   return {
     postNo: post.postNo,
     title: post.title,
     offerCount: lots.length,
     soldLots,
     submitted: hasFacebookPostGoneUp(lots),
+    declinedProposals: declined.map(({ proposalNo, contactName }) => ({ proposalNo, contactName })),
   };
 }
 
@@ -1146,6 +1163,8 @@ export async function readFacebookPostDeletion(ownerId: string, postId: string):
  * Refused, naming the lots, while any lot has a sold set: such an offer is withdrawn, never deleted,
  * because the sale record must survive. A post submitted to the group is not touched there; that is
  * the collector's to remove by hand. The post's number is never given again (`allocateEntityNumber`).
+ * A declined proposal made from the post goes with it (#2643): its lots are the post's, so it would be
+ * left empty. An open one still refuses.
  */
 export async function deleteFacebookPost(ownerId: string, postId: string): Promise<{ postNo: number; offerCount: number }> {
   await assertPostOwner(ownerId, postId);
@@ -1163,6 +1182,14 @@ export async function deleteFacebookPost(ownerId: string, postId: string): Promi
       );
     }
     const ids = lots.map((l) => l.id);
+    // A declined proposal made from the post holds nothing but the post's lots, so it goes too (#2643),
+    // as *Delete proposal…* would delete it (#2641): a lot of it no longer in the post — one taken out
+    // after the decline — stays where it is, no longer naming it, with its number and pick cleared.
+    const declined = (await readDeclinedPostProposals(tx, postId)).map((p) => p.id);
+    await tx.offer.updateMany({
+      where: { proposalId: { in: declined }, id: { notIn: ids } },
+      data: { proposalId: null, proposalLotNo: null, proposalPickedAt: null },
+    });
     // Every image the offers own — generated listing images, uploaded attachments, captioned lot photos
     // — goes with their rows by cascade, but never their files: those are read now and deleted below.
     const photos = await tx.photo.findMany({
@@ -1170,6 +1197,7 @@ export async function deleteFacebookPost(ownerId: string, postId: string): Promi
       select: { storageBackend: true, storageKey: true, mime: true },
     });
     await tx.offer.deleteMany({ where: { id: { in: ids } } });
+    await tx.proposal.deleteMany({ where: { id: { in: declined } } });
     const post = await tx.facebookPost.delete({ where: { id: postId }, select: { postNo: true } });
     return { postNo: post.postNo, offerCount: ids.length, photos };
   });

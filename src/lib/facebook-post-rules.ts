@@ -1243,6 +1243,25 @@ export interface FacebookPostDeletion {
   /** Whether the post was submitted to the group — waiting for approval, up or over — so that the
    *  post in the Facebook group is there to be removed by hand. */
   submitted: boolean;
+  /** The declined proposals made from the post (#2643), in number order: they hold only the post's
+   *  lots, so they are deleted with it rather than left behind empty. */
+  declinedProposals: FacebookPostDeclinedProposal[];
+}
+
+/** A declined proposal made from a post (#2602), which goes when the post is deleted (#2643). */
+export interface FacebookPostDeclinedProposal {
+  proposalNo: number;
+  contactName: string;
+}
+
+/** What *Delete post…* says of the declined proposals it deletes with the post (#2643) — *Proposal #4
+ *  for Jan Kowalski, declined, is deleted with the post.* — or null when there is none. */
+export function declinedPostProposalsText(proposals: readonly FacebookPostDeclinedProposal[]): string | null {
+  if (proposals.length === 0) return null;
+  const named = proposals.map((p) => `#${p.proposalNo} for ${p.contactName}`);
+  if (named.length === 1) return `Proposal ${named[0]}, declined, is deleted with the post.`;
+  const list = `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+  return `Proposals ${list}, declined, are deleted with the post.`;
 }
 
 /** Why a post cannot be deleted (#2060): the lots with a sold set, named, since such an offer is

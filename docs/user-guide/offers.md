@@ -3781,7 +3781,8 @@ declined.
   still be sold whatever is unsold, and a lot sold on Facebook shows as no longer available on their
   page.
 - A post with an open proposal can't be deleted; decline or [delete](#deleting-a-proposal) the
-  proposal first.
+  proposal first. Deleting a post whose proposal was **declined** deletes that proposal with it, as
+  it would otherwise be left with no lots; the post's confirmation names it.
 
 Once a proposal made from a post is closed or deleted, the post can be made into a new one; the lots
 still for sale move to it.

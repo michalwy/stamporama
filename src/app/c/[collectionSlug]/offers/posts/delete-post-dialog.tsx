@@ -8,7 +8,11 @@ import {
   DialogSecondaryButton,
   DialogShell,
 } from "@/app/dialog-shell";
-import { facebookPostDeleteRefusal, type FacebookPostDeletion } from "@/lib/facebook-post-rules";
+import {
+  declinedPostProposalsText,
+  facebookPostDeleteRefusal,
+  type FacebookPostDeletion,
+} from "@/lib/facebook-post-rules";
 
 const TEXT: React.CSSProperties = {
   margin: 0,
@@ -27,7 +31,8 @@ export function deletedPostMessage({ postNo, offerCount }: { postNo: number; off
  * every offer in it go in one action, the copies staying in the inventory. What it would take is read
  * from the server when the dialog opens — the number of offers, whether the post was submitted to the
  * group, and the lots with a sold set, which keep the post from going: the dialog then names them and
- * offers nothing but Close.
+ * offers nothing but Close. A declined proposal made from the post is named too, since it goes with the
+ * post (#2643).
  */
 export function DeleteFacebookPostDialog({
   postId,
@@ -85,6 +90,7 @@ export function DeleteFacebookPostDialog({
   const { deletion } = state;
   const name = deletion ? `Post #${deletion.postNo}${deletion.title ? ` · ${deletion.title}` : ""}` : "this post";
   const refusal = deletion ? facebookPostDeleteRefusal(deletion.soldLots) : null;
+  const declined = deletion ? declinedPostProposalsText(deletion.declinedProposals) : null;
 
   return (
     <DialogShell title="Delete post?" onClose={close}>
@@ -106,6 +112,7 @@ export function DeleteFacebookPostDialog({
               {deletion.offerCount === 1 ? "its offer" : `all ${deletion.offerCount} of its offers`}, with their
               sets. The copies stay in your inventory. This cannot be undone.
             </p>
+            {declined && <p style={TEXT}>{declined}</p>}
             {deletion.submitted && (
               <p style={{ ...TEXT, color: "var(--color-warning)" }}>
                 The post in the Facebook group is not touched — remove it there by hand.

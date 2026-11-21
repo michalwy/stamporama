@@ -905,6 +905,11 @@ A post with **any lot that has a sold set cannot be deleted**: the dialog names 
 offers only *Close*. An offer with a sold set is withdrawn, never deleted, because its sale must keep
 its record.
 
+A post made into a [proposal](offers.md#a-proposal-made-from-a-facebook-post) that was **declined**
+takes that proposal with it: the proposal held only the post's lots, so it would be left empty. The
+confirmation names it — *Proposal #4 for Jan Kowalski, declined, is deleted with the post.* A post whose
+proposal is still open (Preparing or Sent) can't be deleted until the proposal is declined or deleted.
+
 #### Preview for a buyer
 
 A buyer after one period or area can see the next post before it goes up — useful while a post waits
