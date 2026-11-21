@@ -272,7 +272,9 @@ Offers. Details, Checklists and Stamps are always there.
   [tags](tags.md). The issue's tags sit on this line as chips; they say nothing about the stamps
   inside the issue, which carry their own.
 - **Details** — area, year, stamp counts, and the catalog value of the required stamps with how
-  many of them are actually priced.
+  many of them are actually priced. With several checklists, a **Catalog value** line comes first:
+  the issue's own value, every stamp on its checklists counted once — the figure on the Issues
+  list's row — and then one line per checklist with that checklist's own total.
 - **Checklists** — every [checklist](collections.md#checklists) the issue carries, in the order
   you arranged them: its name, how many stamps are on it, how many of those you hold (in any
   disposition and condition, with **×** and the number of complete sets once there is one) and its

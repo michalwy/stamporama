@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type { IssueListItem, StampNodeData, IssueChecklistTotals } from "@/lib/issues";
+import type { IssuePriceTotal } from "@/lib/catalog-price";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { IssueCompleteness, ChecklistCompleteness } from "@/lib/checklist-completeness";
 import {
@@ -274,12 +275,26 @@ export function IssueDetailPanel({
                 <Field label="Stamps">
                   {issue.memberCount} ({issue.requiredCount} on a checklist)
                 </Field>
-                {/* One value line per checklist (#531): summing them would double-count a stamp a
-                    basic and a specialized set both claim, so each set states its own worth. */}
+                {/* With several checklists, the issue's own value first (#2659): their stamps,
+                    each counted once — the figure the Issues row shows. Then one line per checklist
+                    (#531), each set stating its own worth. With one, its line is the issue's. */}
+                {issue.checklists.length > 1 && issue.priceTotal && (
+                  <Field label="Catalog value">
+                    <ChecklistValue
+                      total={issue.priceTotal}
+                      stale={issue.priceStale}
+                      scope="on its checklists"
+                    />
+                  </Field>
+                )}
                 {issue.checklists.map((c) =>
                   c.priceTotal ? (
                     <Field key={c.id} label={`Catalog value — ${markedChecklistName(c)}`}>
-                      <ChecklistValue checklist={c} />
+                      <ChecklistValue
+                        total={c.priceTotal}
+                        stale={c.priceStale}
+                        scope="on this checklist"
+                      />
                     </Field>
                   ) : null
                 )}
@@ -640,24 +655,38 @@ function ChecklistsCardRow({
           </span>
         </Tooltip>
       )}
-      <ChecklistValue checklist={checklist} />
+      {checklist.priceTotal && (
+        <ChecklistValue
+          total={checklist.priceTotal}
+          stale={checklist.priceStale}
+          scope="on this checklist"
+        />
+      )}
     </div>
   );
 }
 
-/** What one checklist is worth, with the caveats the figure carries. */
-function ChecklistValue({ checklist }: { checklist: IssueChecklistTotals }) {
-  const total = checklist.priceTotal;
-  if (!total) return null;
+/** What a checklist — or, with several, the issue (#2659) — is worth, with the caveats the figure
+ *  carries. */
+function ChecklistValue({
+  total,
+  stale,
+  scope,
+}: {
+  total: IssuePriceTotal;
+  stale: boolean;
+  /** Which stamps the count is of, finishing "N of M stamps … are priced". */
+  scope: string;
+}) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
       <span style={PRICE_MAIN}>{moneyPrimaryText(total)}</span>
       {moneySecondaryText(total) && (
         <span style={PRICE_CONVERTED}>{moneySecondaryText(total)}</span>
       )}
-      {checklist.priceStale && <StalePriceIcon />}
+      {stale && <StalePriceIcon />}
       <Tooltip
-        content={`${total.pricedCount} of ${total.requiredCount} stamps on this checklist are priced${
+        content={`${total.pricedCount} of ${total.requiredCount} stamps ${scope} are priced${
           total.estimatedCount
             ? `; ${total.estimatedCount} rolled up from a variant child (estimate)`
             : ""

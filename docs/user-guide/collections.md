@@ -871,7 +871,7 @@ Some publications are collected more than one way, and those need several:
 - **perforated** beside **imperforate**, printed by the catalog as two series in one block;
 - the **tabbed** stamps as the goal, with the plain ones as background — or both, separately.
 
-Each checklist has its own completeness and its own catalog value, and its own **order** — the sequence the set reads in, which starts as the catalog's and is yours to change.
+Each checklist has its own completeness and its own catalog value (the issue's row adds them up with each stamp counted once — see [What the issue row shows](#what-the-issue-row-shows)), and its own **order** — the sequence the set reads in, which starts as the catalog's and is yours to change.
 
 ### Standard and specialised checklists
 
@@ -979,7 +979,7 @@ An issue with a single checklist gets no filter: there is nothing to choose betw
 ### What the issue row shows
 
 - **One checklist** — the row is unchanged: `12/14` (stamps on the checklist over stamps in the issue) and the set's catalog-value total beside it.
-- **Several** — the badge reads `3 checklists`; hover it to see each name, its size and its total. The row deliberately does not grow a line per set.
+- **Several** — the badge reads `3 checklists`; hover it to see each name, its size and its total. The row deliberately does not grow a line per set. It still shows **one** catalog-value total beside the badge: the stamps on all its checklists, **each counted once** even when two checklists both list it. Two checklists with no stamp in common — *Imperforate (A)* at ~180 PLN and *Perforated (B)* at 120 PLN — read `~ 300.00 PLN`. The total counts the stamps the issue's completeness count does, so while [specialised checklists](#standard-and-specialised-checklists) are not shown, a stamp only they list is not in it.
 
 The issue's own **detail page** is where several checklists get room: a **Checklists** card listing them all — click one to narrow the stamp tree to it, or **Manage…** to open the same editor as the row's **⋮ → Checklists…** — and one completeness grid and one catalog-value card each. See [The issue page](detail-pages.md#the-issue-page).
 

@@ -595,6 +595,12 @@ export interface IssueListItem {
   /** Distinct stamps on any of the issue's checklists (#531) — the union. With one checklist this
    *  is that checklist's size, which is exactly what the badge showed before checklists existed. */
   requiredCount: number;
+  /** The issue's catalogue value (#2659): its checklists' stamps — the {@link requiredCount} union,
+   *  so the same stamps the completeness count is taken from — each counted **once**, priced as a
+   *  checklist's total is. With one checklist this is that checklist's total; null with none. */
+  priceTotal: IssuePriceTotal | null;
+  /** True when at least one price counted in {@link priceTotal} is on a non-latest edition. */
+  priceStale: boolean;
   /** The issue's checklists with their own counts and totals (#531), in display order. Empty for
    *  an issue nothing is a goal on yet; one entry is the ordinary case. The row shows the single
    *  entry as before, and collapses several into one `N checklists` badge. */
@@ -616,9 +622,8 @@ export interface IssueListItem {
 
 /** One checklist on a list row: what it is called, how big it is, and what it is worth. */
 export interface IssueChecklistTotals extends IssueChecklistSummary {
-  /** Sum of this checklist's stamps' main catalog prices. Deliberately **per checklist**: summing
-   *  the union would count a stamp shared by a basic and a specialized set once for a total that
-   *  answers neither question. */
+  /** Sum of this checklist's stamps' main catalog prices — this checklist's own. The issue's value,
+   *  each stamp once across every checklist, is `IssueListItem.priceTotal` (#2659). */
   priceTotal: IssuePriceTotal | null;
   /** True when at least one counted price is on a non-latest edition. */
   priceStale: boolean;
@@ -959,6 +964,23 @@ function toIssueListItem(
   );
   const requiredMembers = issue.members.filter((m) => requiredStampIds.has(m.stampId));
 
+  // The issue's own catalogue value (#2659): the same union, each stamp once, priced by the rule
+  // each checklist's total is priced by. With one checklist it is that checklist's total.
+  const priceTotal =
+    issue.checklists.length === 0
+      ? null
+      : computeChecklistPriceTotal(
+          requiredMembers,
+          primaryNameId,
+          baseCurrency,
+          latestYearByName,
+          displayConditionId,
+          rates,
+          variantPricesByStamp,
+          displayFormatId,
+          formatFactor
+        );
+
   // One representative main photo per checklist stamp (already filtered to role="main").
   const photos = toPhotoSummaries(requiredMembers.flatMap((m) => m.stamp.photos));
 
@@ -992,6 +1014,8 @@ function toIssueListItem(
     catalogPrefixes: issue.catalogPrefixes,
     memberCount: issue.members.length,
     requiredCount: requiredStampIds.size,
+    priceTotal,
+    priceStale: priceTotal?.usesOlderEdition ?? false,
     checklists,
     rangeSuggestions,
     photos,
