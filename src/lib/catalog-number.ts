@@ -601,6 +601,11 @@ export function parseCatalogNumberSpec(input: string): CatalogNumberSpec | { err
 // letters and Roman numerals. A **lone** suffix is taken literally instead, so a base that is
 // itself a variant takes the suffixes its catalogue actually prints: `309A` + `P` is `309AP`,
 // which no sequence would have produced.
+//
+// Some catalogues print such variants with a space between the base and the suffix — `88B T.I`
+// rather than `88BT.I` — so the collector may ask for one (#2652). It is one ordinary space, for
+// every suffix the spec hangs off the base and only those: a number typed in full is written as
+// typed, because the collector has already said exactly what it is.
 
 /** Expand a variant spec typed under `baseNumber` — the base stamp's number in the catalogue the
  *  variants are being numbered in — into the catalog numbers it generates, in the order typed.
@@ -610,9 +615,12 @@ export function parseCatalogNumberSpec(input: string): CatalogNumberSpec | { err
  *  generating a number with nothing in front of it. */
 export function parseVariantNumberSpec(
   input: string,
-  baseNumber: string
+  baseNumber: string,
+  options: { separateWithSpace?: boolean } = {}
 ): { numbers: string[] } | { error: string } {
   const base = baseNumber.trim();
+  // What a bare suffix is hung off: the base itself, or the base and one space (#2652).
+  const head = options.separateWithSpace ? `${base} ` : base;
   const numbers: string[] = [];
 
   for (const piece of input.split(",")) {
@@ -639,12 +647,12 @@ export function parseVariantNumberSpec(
 
     // Suffixes alone, against the base number.
     if (parts.length === 1) {
-      numbers.push(`${base}${parts[0]}`);
+      numbers.push(`${head}${parts[0]}`);
       continue;
     }
     const range = resolveSuffixRange(parts[0], parts[1]);
     if ("error" in range) return range;
-    const scheme: CatalogRangeScheme = { kind: range.kind, prefix: "", base, from: range.from };
+    const scheme: CatalogRangeScheme = { kind: range.kind, prefix: "", base: head, from: range.from };
     numbers.push(...generateCatalogNumbers(scheme, range.span));
   }
 

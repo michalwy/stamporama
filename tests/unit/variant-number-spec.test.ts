@@ -93,3 +93,35 @@ describe("parseVariantNumberSpec — the base number is understood (#722)", () =
     assert.deepEqual(numbers("240a-240b", ""), ["240a", "240b"]);
   });
 });
+
+describe("parseVariantNumberSpec — Separate with a space (#2652)", () => {
+  const spaced = (input: string, base = "88B") => {
+    const spec = parseVariantNumberSpec(input, base, { separateWithSpace: true });
+    return "error" in spec ? spec.error : spec.numbers;
+  };
+
+  it("puts one space between the base and each lone suffix", () => {
+    assert.deepEqual(spaced("T.I, T.II, T.III"), ["88B T.I", "88B T.II", "88B T.III"]);
+  });
+
+  it("separates every suffix a range generates", () => {
+    assert.deepEqual(spaced("a-c"), ["88B a", "88B b", "88B c"]);
+    assert.deepEqual(spaced("I-III", "240"), ["240 I", "240 II", "240 III"]);
+  });
+
+  it("uses one space, whatever spaces are typed around the commas", () => {
+    assert.deepEqual(spaced("  T.I ,   T.II  "), ["88B T.I", "88B T.II"]);
+    assert.deepEqual(spaced("a - b", " 88B "), ["88B a", "88B b"]);
+  });
+
+  it("leaves a number typed in full as typed", () => {
+    assert.deepEqual(spaced("240a-240b, c", "240"), ["240a", "240b", "240 c"]);
+    assert.deepEqual(spaced("88BT.I, T.II"), ["88BT.I", "88B T.II"]);
+  });
+
+  it("joins the suffixes straight on when unticked, as before", () => {
+    assert.deepEqual(numbers("T.I, T.II, T.III", "88B"), ["88BT.I", "88BT.II", "88BT.III"]);
+    const spec = parseVariantNumberSpec("T.I", "88B", { separateWithSpace: false });
+    assert.deepEqual(spec, { numbers: ["88BT.I"] });
+  });
+});

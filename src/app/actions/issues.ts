@@ -760,7 +760,10 @@ export async function addVariantRangeAction(
     parentStampId,
     catalogVendorId
   );
-  const parsed = parseVariantNumberSpec(raw, baseNumber ?? "");
+  const parsed = parseVariantNumberSpec(raw, baseNumber ?? "", {
+    // *Separate with a space* (#2652): `88B T.I` rather than `88BT.I`.
+    separateWithSpace: formData.get("separateWithSpace") === "1",
+  });
   if ("error" in parsed) return { status: "error", message: parsed.error };
   if (parsed.numbers.length > AUTO_CREATE_MAX_STAMPS) {
     return { status: "error", message: `Range cannot exceed ${AUTO_CREATE_MAX_STAMPS} stamps.` };

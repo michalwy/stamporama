@@ -16,7 +16,7 @@ import {
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
-import { LS_LAST_SUBTYPE, readLast, writeLast } from "./add-copy-defaults";
+import { LS_LAST_SUBTYPE, LS_LAST_VARIANT_SPACE, readLast, writeLast } from "./add-copy-defaults";
 import { TextInput } from "./text-input";
 import { formControl } from "@/app/control-style";
 
@@ -98,6 +98,12 @@ export function AddVariantRangeDialog({
     : null;
 
   const [spec, setSpec] = useState("");
+  // One space between the base number and each suffix (#2652), for catalogues that print `88B T.I`.
+  // It starts where the collector last left it, as the subtype does; the dialog only ever mounts
+  // on a click, so reading the browser's storage while it is first drawn is safe.
+  const [separateWithSpace, setSeparateWithSpace] = useState(
+    () => readLast(LS_LAST_VARIANT_SPACE, collectionId) === "1"
+  );
 
   // ── Subtype (#342): one for the whole run, starting where the single add dialog starts ──
   const [subtypes, setSubtypes] = useState<StampSubtypeData[]>([]);
@@ -119,8 +125,8 @@ export function AddVariantRangeDialog({
   }, [collectionId]);
 
   const parsed = useMemo(
-    () => (spec.trim() ? parseVariantNumberSpec(spec, baseNumber) : null),
-    [spec, baseNumber]
+    () => (spec.trim() ? parseVariantNumberSpec(spec, baseNumber, { separateWithSpace }) : null),
+    [spec, baseNumber, separateWithSpace]
   );
   const numbers = parsed && !("error" in parsed) ? parsed.numbers : [];
   const specError = parsed && "error" in parsed ? parsed.error : null;
@@ -132,13 +138,14 @@ export function AddVariantRangeDialog({
     groups: [],
   });
   // The generated numbers as one scalar, so the debounce re-runs when they change and not on every
-  // keystroke that leaves them the same ("a-f" and "a-f " generate the same six).
-  const numbersKey = numbers.join(",");
+  // keystroke that leaves them the same ("a-f" and "a-f " generate the same six). Joined on a
+  // character no catalog number carries, since a number may now hold a space (#2652).
+  const numbersKey = numbers.join("\n");
   const catalogVendorId = vendor?.catalogVendorId ?? "";
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const list = numbersKey ? numbersKey.split(",") : [];
+      const list = numbersKey ? numbersKey.split("\n") : [];
       if (!catalogVendorId || list.length === 0 || list.length > AUTO_CREATE_MAX_STAMPS) {
         if (!cancelled) setDup((prev) => ({ mode: prev.mode, groups: [] }));
         return;
@@ -183,6 +190,7 @@ export function AddVariantRangeDialog({
           if (!canSubmit) return;
           // Remember the subtype just used, so the next child stamp starts there (#342).
           if (subtypeId) writeLast(LS_LAST_SUBTYPE, collectionId, subtypeId);
+          writeLast(LS_LAST_VARIANT_SPACE, collectionId, separateWithSpace ? "1" : "");
           onSubmit(new FormData(e.currentTarget));
         }}
         style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
@@ -232,6 +240,29 @@ export function AddVariantRangeDialog({
                 {baseNumber ? <strong>{baseNumber}</strong> : "the base number"}; full numbers work
                 too.
               </div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  marginTop: "0.5rem",
+                  fontSize: "0.8125rem",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  name="separateWithSpace"
+                  value="1"
+                  checked={separateWithSpace}
+                  disabled={isPending}
+                  onChange={(e) => setSeparateWithSpace(e.target.checked)}
+                />
+                Separate with a space
+                <span style={{ color: "var(--color-text-muted)" }}>
+                  — {baseNumber || "240"} a, not {baseNumber || "240"}a
+                </span>
+              </label>
 
               {subtypes.length > 0 && (
                 <div style={{ marginTop: "1rem" }}>
