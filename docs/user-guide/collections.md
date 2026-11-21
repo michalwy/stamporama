@@ -969,7 +969,7 @@ A checklist's branch has its own **⋮** menu with the issue's actions that make
 
 - **Add stamp** and **Add stamp range…** add the new stamps to the issue **and to this checklist** (rather than the issue's first one).
 - **Add copy** offers only this checklist's stamps to pick from; **View copies** and **View offers** list the copies and offers of its stamps; **Show valuation** opens its own valuation.
-- **Price variants…** and **Edit catalog numbers…** open the grids over this checklist's stamps, with any stamp they hang under for context.
+- **Price variants…** and **Edit catalog numbers…** open the grids over this checklist's stamps, with any stamp they hang under for context. **Price variants…** also brings each stamp's **variants**, at any depth, whether or not they are on the checklist — a stamp with variants takes its value from them, so without them it could not be priced. They are priced as on the issue's whole grid. Errors, plate flaws and other entries filed under a stamp are not variants and stay off unless the checklist lists them.
 - **Add missing to want list…** and **Apply size…** work on this checklist, as from the issue's checklists editor.
 - The checklist's own: **Edit checklist…**, which opens the issue's checklists editor with this checklist picked — its name and translations, its type, its stamps and their order — and **Delete checklist**, which asks first and says what uses it.
 

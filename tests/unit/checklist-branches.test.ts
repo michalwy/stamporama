@@ -4,6 +4,7 @@ import {
   checklistBranches,
   countOffChecklist,
   withIssueAncestors,
+  withIssueAncestorsAndVariants,
 } from "../../src/lib/checklist-branches";
 import { CHECKLIST_HUES, checklistColorMap, checklistHue } from "../../src/lib/checklist-colors";
 
@@ -146,6 +147,61 @@ describe("withIssueAncestors (#1520)", () => {
       { stampId: "b", parentId: "a" },
     ];
     assert.deepEqual([...withIssueAncestors(members, new Set(["a"]))].sort(), ["a", "b"]);
+  });
+});
+
+describe("withIssueAncestorsAndVariants (#2674)", () => {
+  /** `91C` is an umbrella on the checklist with two variants, one of which has its own variant;
+   *  `91Cf` is a plate flaw filed under it, with a variant of its own; `92` is listed and has none;
+   *  `93` is not listed, nor are its variants. */
+  const MEMBERS = [
+    { stampId: "91", parentId: null, isVariant: false },
+    { stampId: "91C", parentId: "91", isVariant: true },
+    { stampId: "91Ca", parentId: "91C", isVariant: true },
+    { stampId: "91Cb", parentId: "91C", isVariant: true },
+    { stampId: "91Cbx", parentId: "91Cb", isVariant: true },
+    { stampId: "91Cf", parentId: "91C", isVariant: false },
+    { stampId: "91Cfa", parentId: "91Cf", isVariant: true },
+    { stampId: "92", parentId: null, isVariant: false },
+    { stampId: "93", parentId: null, isVariant: false },
+    { stampId: "93a", parentId: "93", isVariant: true },
+  ];
+
+  it("adds a listed umbrella's variants at any depth, and its ancestors", () => {
+    assert.deepEqual(
+      [...withIssueAncestorsAndVariants(MEMBERS, new Set(["91C", "92"]))].sort(),
+      ["91", "91C", "91Ca", "91Cb", "91Cbx", "92"]
+    );
+  });
+
+  it("leaves off a distinct entry filed under a listed stamp, and what hangs under it", () => {
+    const out = withIssueAncestorsAndVariants(MEMBERS, new Set(["91C"]));
+    assert.ok(!out.has("91Cf"));
+    assert.ok(!out.has("91Cfa"));
+  });
+
+  it("keeps a distinct entry the checklist lists, with its own variants", () => {
+    const out = withIssueAncestorsAndVariants(MEMBERS, new Set(["91Cf"]));
+    assert.deepEqual([...out].sort(), ["91", "91C", "91Cf", "91Cfa"]);
+  });
+
+  it("adds nothing to a checklist with no umbrellas", () => {
+    const listed = new Set(["92"]);
+    assert.deepEqual(
+      [...withIssueAncestorsAndVariants(MEMBERS, listed)],
+      [...withIssueAncestors(MEMBERS, listed)]
+    );
+  });
+
+  it("ignores a listed stamp that is not a member, and stops on a cycle", () => {
+    const members = [
+      { stampId: "a", parentId: "b", isVariant: true },
+      { stampId: "b", parentId: "a", isVariant: true },
+    ];
+    assert.deepEqual([...withIssueAncestorsAndVariants(members, new Set(["a", "zz"]))].sort(), [
+      "a",
+      "b",
+    ]);
   });
 });
 
