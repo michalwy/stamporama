@@ -25,7 +25,9 @@ import {
   leadingNotKept,
   noValuingBook,
   notSiblings,
+  nothingToJoin,
   parseCatalogueEntries,
+  parseJoinedPrefixes,
   resolvedCatalogues,
   sameResolvedCatalogues,
   siblingGroups,
@@ -166,7 +168,7 @@ export async function listAreasFromParams(
 }
 
 const AREA_ROW =
-  "`areaId`, `name`, `areaPath` from the root, `parentId`, `position` among its siblings (1 is first), `assignable` (false on a grouping-only area), `description`, `titleName` and `translatedTitleNames` (the names listing titles use), `symbol` (usually its flag, for templates' `{areaSymbol}`; absent when unset, and never taken from a parent), `issueCount` and `stampCount` filed directly under it, `childCount`, `own` — the catalogue configuration it sets itself, in the spelling `create_area` and `update_area` take — `resolved`, what its issues actually get after walking up the tree: `leadingCatalogue`, every catalogue with the prefix it resolves to (`Mi·PL`), and `valuingBook` — and `anchorMarkets` (set on it) and `anchoringMarkets` (in force after walking up; absent means the collection's home market), the countries whose auction results its valuations rest on.";
+  "`areaId`, `name`, `areaPath` from the root, `parentId`, `position` among its siblings (1 is first), `assignable` (false on a grouping-only area), `description`, `titleName` and `translatedTitleNames` (the names listing titles use), `symbol` (usually its flag, for templates' `{areaSymbol}`; absent when unset, and never taken from a parent), `issueCount` and `stampCount` filed directly under it, `childCount`, `own` — the catalogue configuration it sets itself, in the spelling `create_area` and `update_area` take, `prefixJoined` beside its `prefix` and `joinedPrefixes` naming the catalogues whose own prefix joins its numbers with no space — `resolved`, what its issues actually get after walking up the tree: `leadingCatalogue`, every catalogue with the prefix it resolves to (`Mi·PL`), `joinedPrefixes` naming the catalogues whose resolved prefix is joined (`Mi·DR D` numbers read `Mi·DR D12`; absent when none), and `valuingBook` — and `anchorMarkets` (set on it) and `anchoringMarkets` (in force after walking up; absent means the collection's home market), the countries whose auction results its valuations rest on.";
 
 export const listAreasOperation: Operation = {
   name: "list_areas",
@@ -215,6 +217,8 @@ async function titleNameWrites(
 /** The catalogue configuration an area will have after a write: what was sent, else what it has. */
 interface CatalogueConfig {
   prefix: string | null;
+  /** Whether `prefix` joins its number (#2658); undefined when not sent, so the area keeps its own. */
+  prefixJoined: boolean | undefined;
   vendors: AreaVendorInput[];
   bookIds: string[];
   leadingVendorId: string | null;
@@ -262,6 +266,14 @@ function catalogueConfig(
   refuseSentAndCleared("valuing_book", valuingRef !== null, cleared);
 
   const prefix = cleared.has("prefix") ? null : prefixSent !== null ? prefixSent.trim() || null : (current?.catalogPrefix ?? null);
+  const prefixJoined = optionalBoolean(params, "prefix_joined") ?? undefined;
+  if (prefixJoined && prefix === null) {
+    throw nothingToJoin(
+      "the area's prefix",
+      "prefix_joined",
+      'Send "prefix" with it, or leave "prefix_joined" out — an area without a prefix of its own follows its parent\'s, joining and all.'
+    );
+  }
 
   const bookIds = cleared.has("price_books")
     ? []
@@ -283,6 +295,27 @@ function catalogueConfig(
   for (const bookId of bookIds) {
     const vendorId = world.bookEntries.find((book) => book.id === bookId)!.vendorId;
     if (!vendors.some((vendor) => vendor.catalogVendorId === vendorId)) vendors.push({ catalogVendorId: vendorId, areaPrefix: null });
+  }
+  // Whether a catalogue's own prefix here joins its numbers (#2658). A catalogue not named keeps its
+  // joining — `syncAreaVendors` reads the stored one for a row that states none — so a new prefix
+  // starts with its space and a changed one keeps what it had.
+  for (const { key, joined } of parseJoinedPrefixes(stringList(params, "joined_prefixes"), "joined_prefixes")) {
+    const vendorId = resolveVocabularyValue(key, world.catalogueEntries, { vocabulary: "catalog vendor", parameter: "joined_prefixes" });
+    const index = vendors.findIndex((vendor) => vendor.catalogVendorId === vendorId);
+    if (index < 0) {
+      throw invalidRequest(
+        `"joined_prefixes" names "${key}", which is not one of this area's own catalogues. Nothing was written. Add it to "catalogues" with a prefix of its own — "${key}: DR D" — or name one of them.`,
+        world.catalogueEntries.filter((entry) => vendors.some((vendor) => vendor.catalogVendorId === entry.id)).map((entry) => entry.abbreviation ?? entry.name)
+      );
+    }
+    if (joined && !vendors[index].areaPrefix) {
+      throw nothingToJoin(
+        `"${key}" on this area`,
+        "joined_prefixes",
+        `Give it a prefix of its own in "catalogues" — "${key}: DR D" — or join the area's prefix with "prefix_joined".`
+      );
+    }
+    vendors[index] = { ...vendors[index], prefixJoined: joined };
   }
 
   const vendorIds = new Set(vendors.map((vendor) => vendor.catalogVendorId));
@@ -309,13 +342,14 @@ function catalogueConfig(
     if (valuingBookId !== null && !bookIds.includes(valuingBookId)) valuingBookId = null;
   }
 
-  return { prefix, vendors, bookIds, leadingVendorId, valuingBookId };
+  return { prefix, prefixJoined, vendors, bookIds, leadingVendorId, valuingBookId };
 }
 
 function catalogueSent(params: ParsedParams, cleared: ReadonlySet<string>): boolean {
   return (
     stringList(params, "catalogues").length > 0 ||
     stringList(params, "price_books").length > 0 ||
+    stringList(params, "joined_prefixes").length > 0 ||
     cleared.has("catalogues") ||
     cleared.has("price_books")
   );
@@ -351,6 +385,7 @@ export async function createAreaFromParams(context: OperationContext, params: Pa
     primaryCatalogNameId: config.valuingBookId,
     primaryCatalogVendorId: config.leadingVendorId,
     catalogPrefix: config.prefix,
+    catalogPrefixJoined: config.prefixJoined,
     // The form fills the title name with the name and keeps it there until it is given its own.
     titleName: optionalString(params, "title_name")?.trim() || name,
     symbol: optionalString(params, "symbol")?.trim() || null,
@@ -369,14 +404,30 @@ const CATALOGUE_PARAMETERS: ParameterSpec[] = [
     in: "body",
     type: "string",
     required: false,
-    description: "The area's prefix for every catalogue, `PL` — what its numbers are prefixed with, `Mi·PL 200`. Left out on a new area, the parent's applies.",
+    description: "The area's prefix for every catalogue, `PL` — what its numbers are prefixed with, `Mi·PL 200`. Left out on a new area, the parent's applies. Changing it keeps its `prefix_joined`.",
+  },
+  {
+    name: "prefix_joined",
+    in: "body",
+    type: "boolean",
+    required: false,
+    description:
+      "true when the area's `prefix` joins its numbers with no space — `DR D` and `12` read `Mi·DR D12` — false for the usual space, `Mi·PL 200`. Left out, the area keeps what it has; a new prefix starts with the space. Needs a prefix on the area itself.",
   },
   {
     name: "catalogues",
     in: "body",
     type: "string[]",
     required: false,
-    description: `The catalogues this area's stamps carry numbers in, by abbreviation or name, replacing the list: \`"Mi"\` with the prefix inherited, \`"Mi: GG"\` for a prefix of its own for that catalogue here, \`"Mi: ${NO_PREFIX}"\` for none here. A price book's catalogue is always among them. An area that sets none inherits its parent's.`,
+    description: `The catalogues this area's stamps carry numbers in, by abbreviation or name, replacing the list: \`"Mi"\` with the prefix inherited, \`"Mi: GG"\` for a prefix of its own for that catalogue here, \`"Mi: ${NO_PREFIX}"\` for none here. A price book's catalogue is always among them. An area that sets none inherits its parent's. Whether a catalogue's prefix here joins its numbers is \`joined_prefixes\`.`,
+  },
+  {
+    name: "joined_prefixes",
+    in: "body",
+    type: "string[]",
+    required: false,
+    description:
+      'Whether a catalogue\'s own prefix on this area joins its numbers with no space, one entry per catalogue: `"Mi: true"` reads `Mi·DR D12`, `"Mi: false"` puts the space back, `Mi·DR D 12`. Only the catalogues named change; the rest — and a prefix changed in `catalogues` without being named here — keep their joining, and a new prefix starts with the space. The catalogue needs a prefix of its own here (`"Mi: DR D"` in `catalogues`); the area\'s prefix for every catalogue is joined with `prefix_joined`.',
   },
   {
     name: "leading_catalogue",
@@ -512,6 +563,7 @@ export async function updateAreaFromParams(context: OperationContext, params: Pa
     primaryCatalogNameId: config.valuingBookId,
     primaryCatalogVendorId: config.leadingVendorId,
     catalogPrefix: config.prefix,
+    catalogPrefixJoined: config.prefixJoined,
     anchorMarkets: anchorMarketsParam(params, cleared),
     titleName: nextTitleName,
     // Left out, the symbol stays as it is (#1740) — `updateCollectionArea` leaves an omitted one alone.
@@ -718,7 +770,7 @@ export async function moveIssueToAreaFromParams(
       id: true,
       name: true,
       collectionAreaId: true,
-      catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true } },
+      catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
     },
   });
   if (!issue) {
@@ -733,7 +785,9 @@ export async function moveIssueToAreaFromParams(
       children.map((area) => area.name)
     );
   }
-  const own = new Map(issue.catalogPrefixes.map((row) => [row.catalogVendorId, row.areaPrefix]));
+  const own = new Map(
+    issue.catalogPrefixes.map((row) => [row.catalogVendorId, { prefix: row.areaPrefix, joined: row.prefixJoined }])
+  );
   const before = resolvedCatalogues(world.areas, issue.collectionAreaId, world.names, own);
   const from = { areaId: issue.collectionAreaId, areaPath: pathOf(world, issue.collectionAreaId) ?? issue.collectionAreaId };
   const moved = target.id !== issue.collectionAreaId;
@@ -777,7 +831,7 @@ export const moveIssueToAreaOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "`issueId`, `name`, `moved` (false when it was already there), `from` and `to` with each area's `areaPath`, `catalogues` — the issue's resolved `leadingCatalogue`, `catalogues` with their prefixes and `valuingBook`, `before` and `after`, and whether they `changed` — and `numbersOutsideArea`, catalogues its stamps carry numbers in that the new area does not keep.",
+      "`issueId`, `name`, `moved` (false when it was already there), `from` and `to` with each area's `areaPath`, `catalogues` — the issue's resolved `leadingCatalogue`, `catalogues` with their prefixes, `joinedPrefixes` and `valuingBook`, `before` and `after`, and whether they `changed` — and `numbersOutsideArea`, catalogues its stamps carry numbers in that the new area does not keep.",
   },
   handler: async (context, params) => moveIssueToAreaFromParams(context, params),
 };

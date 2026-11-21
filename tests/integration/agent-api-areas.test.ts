@@ -162,6 +162,7 @@ describe("areas through the agent API (#1539)", () => {
       assert.deepEqual(poland.translatedTitleNames, { de: "Polen" });
       assert.deepEqual(poland.own, {
         prefix: "PL",
+        prefixJoined: false,
         catalogues: ["Fi: -", "Mi"],
         leadingCatalogue: "Mi",
         priceBooks: ["Michel Europa"],
@@ -172,7 +173,7 @@ describe("areas through the agent API (#1539)", () => {
 
     it("lets a sub-area inherit what it does not set", async () => {
       gg = await ok<AgentArea>(token, "POST", "/areas", { name: "General Government", parent: poland.areaId, prefix: "GG" });
-      assert.deepEqual(gg.own, { prefix: "GG", catalogues: [], priceBooks: [] });
+      assert.deepEqual(gg.own, { prefix: "GG", prefixJoined: false, catalogues: [], priceBooks: [] });
       assert.deepEqual(gg.resolved, { leadingCatalogue: "Mi", catalogues: ["Fi·GG", "Mi·GG"], valuingBook: "Michel Europa" });
     });
 

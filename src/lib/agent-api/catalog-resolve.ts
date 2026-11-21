@@ -130,8 +130,9 @@ const MAX_VENDOR_WORD_LETTERS = 12;
  * - a word carrying **anything but letters** — `"BL30"`, and `"Ark. 103"`, whose `Ark.` is a real
  *   stored number prefix;
  * - a word **longer than {@link MAX_VENDOR_WORD_LETTERS}**;
- * - a word this collection uses as an **area prefix** — `"PL 200"` names no catalogue at all, and
- *   the prefix set is what the caller passes in.
+ * - a word this collection uses as an **area prefix**, or that **begins one the string starts
+ *   with** — `"PL 200"` names no catalogue at all, nor does `"DR D12"` under a `DR D` prefix (#2658),
+ *   whose first word alone is no prefix; the prefix set is what the caller passes in.
  *
  * `·` ends the word as a space does, because `Mi·PL 200` is how this app itself writes one.
  */
@@ -145,7 +146,11 @@ export function leadingCatalogueWord(
   if (head === trimmed && !head.includes("·")) return null;
   const word = head.split("·")[0];
   if (!new RegExp(`^\\p{L}{1,${MAX_VENDOR_WORD_LETTERS}}$`, "u").test(word)) return null;
-  if (areaPrefixKeys.has(normalizeCatalogKey(word))) return null;
+  const wordKey = normalizeCatalogKey(word);
+  const inputKey = normalizeCatalogKey(trimmed);
+  for (const prefixKey of areaPrefixKeys) {
+    if (prefixKey.startsWith(wordKey) && inputKey.startsWith(prefixKey)) return null;
+  }
   return word;
 }
 

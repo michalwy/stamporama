@@ -212,6 +212,21 @@ describe("what is deliberately not read as a catalogue's name", () => {
     assert.equal(leadingCatalogueWord("Extraordinarily 1", PREFIXES), null);
     assert.equal(leadingCatalogueWord("PL 200", PREFIXES), null);
   });
+
+  it("a prefix of several words, joined to its number or not, is no catalogue's name (#2658)", () => {
+    const prefixes = new Set(["drd", "pl"]);
+    for (const input of ["DR D12", "DR D 12", "dr d12"]) {
+      const parsed = parseForeignCatalogNumber(input, VENDORS, prefixes);
+      assert.equal(parsed.unknownVendorToken, null, input);
+      assert.equal(matchesForeignCatalogNumber(parsed, stampCatalogKeys("Mi", "DR D", "12")), true, input);
+      assert.equal(catalogVerdict(parsed, 1), "resolved", input);
+    }
+    for (const input of ["Mi DR D12", "Mi·DR D12"]) {
+      assert.equal(matchesForeignCatalogNumber(parseForeignCatalogNumber(input, VENDORS, prefixes), stampCatalogKeys("Mi", "DR D", "12")), true, input);
+    }
+    // The first word of a prefix the string does not go on to spell is still read as a catalogue.
+    assert.equal(leadingCatalogueWord("DR 12", prefixes), "DR");
+  });
 });
 
 describe("the keys are catalog-number.ts's, and the comparison is equality", () => {

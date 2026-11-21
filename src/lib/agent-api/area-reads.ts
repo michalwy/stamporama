@@ -14,6 +14,11 @@
 // here*, which stops both the area's own prefix and any ancestor's — the three states of the column
 // (`CollectionAreaVendor.areaPrefix`, #675).
 //
+// **Whether a prefix joins its number with no space (#2657, #2658) is stated beside the spelling, never
+// in it**: `prefixJoined` beside the area's `prefix`, and `joinedPrefixes` — the catalogues among the
+// strings whose prefix is joined — beside each list of catalogue strings. A write names the joining
+// the same way (`prefix_joined`, `joined_prefixes`), and a write that says nothing of it keeps it.
+//
 // Pure: no Prisma. `CollectionAreaData` is imported as a type only, because the resolvers this module
 // reuses are typed against it; the import is erased before it runs.
 
@@ -21,6 +26,7 @@ import { buildAreaPath } from "../area-path";
 import { effectivePrimaryVendorId, effectiveVendorsForArea } from "../area-vendor";
 import { resolveEffectivePrimaryCatalogNameId } from "../area-inheritance";
 import type { CollectionAreaData } from "../areas";
+import type { ResolvedCatalogPrefix } from "../catalog-number";
 import { compact, type AgentIssueCatalogues } from "./collection-reads";
 import { invalidRequest, type ApiError } from "./errors";
 import { resolveEffectiveAnchorMarkets } from "../area-inheritance";
@@ -37,8 +43,12 @@ export interface AreaNames {
 export interface AgentAreaOwnCatalogues {
   /** The area's prefix for every catalogue; absent when it says nothing and the parent's applies. */
   readonly prefix?: string;
+  /** Whether `prefix` joins the number with no space (#2658): `DR D12`. Stated whenever `prefix` is. */
+  readonly prefixJoined?: boolean;
   /** Its numbering catalogues, `"Mi"`, `"Mi: PL"` or `"Mi: -"` — the spelling `catalogues` takes. */
   readonly catalogues: readonly string[];
+  /** The catalogues whose own prefix here joins the number with no space (#2658); absent when none. */
+  readonly joinedPrefixes?: readonly string[];
   /** The catalogue that leads numbering here; absent when the parent's leads. */
   readonly leadingCatalogue?: string;
   /** The books that price this area. */
@@ -52,6 +62,9 @@ export interface AgentAreaResolvedCatalogues {
   readonly leadingCatalogue?: string;
   /** Every catalogue its stamps carry numbers in, with the prefix each resolves to — `Mi·PL`. */
   readonly catalogues: readonly string[];
+  /** The catalogues whose resolved prefix joins the number with no space (#2658) — `Mi` where
+   * `Mi·DR D` numbers read `Mi·DR D12`; absent when none. */
+  readonly joinedPrefixes?: readonly string[];
   readonly valuingBook?: string;
 }
 
@@ -134,13 +147,24 @@ function catalogueEntry(abbreviation: string, areaPrefix: string | null): string
   return `${abbreviation}: ${areaPrefix === "" ? NO_PREFIX : areaPrefix}`;
 }
 
+/** A list of catalogues, or undefined when it is empty — `joinedPrefixes` is absent rather than `[]`. */
+function nonEmpty(values: string[]): string[] | undefined {
+  return values.length > 0 ? values.sort((a, b) => a.localeCompare(b)) : undefined;
+}
+
 /** What the area sets itself, in the spelling the writes take. */
 export function ownCatalogues(area: CollectionAreaData, names: AreaNames): AgentAreaOwnCatalogues {
   const abbreviation = (id: string) => names.catalogues.get(id) ?? id;
   return compact({
     prefix: area.catalogPrefix ?? undefined,
+    prefixJoined: area.catalogPrefix ? area.catalogPrefixJoined : undefined,
     catalogues: area.vendorEntries.map((entry) =>
       catalogueEntry(abbreviation(entry.catalogVendorId), entry.areaPrefix)
+    ),
+    joinedPrefixes: nonEmpty(
+      area.vendorEntries
+        .filter((entry) => !!entry.areaPrefix && entry.prefixJoined)
+        .map((entry) => abbreviation(entry.catalogVendorId))
     ),
     leadingCatalogue: area.primaryCatalogVendorId ? abbreviation(area.primaryCatalogVendorId) : undefined,
     priceBooks: area.catalogEntries.flatMap((entry) =>
@@ -156,26 +180,29 @@ export function ownCatalogues(area: CollectionAreaData, names: AreaNames): Agent
  * What an issue under `areaId` gets: the catalogues `effectiveVendorsForArea` resolves, each with the
  * prefix it walks up to, the leading catalogue and the valuing book — the same three walks the issue
  * and stamp forms make. `issuePrefixes` is an issue's own prefix per catalogue (#377), which replaces
- * the area's for that issue alone and moves with it.
+ * the area's for that issue alone and moves with it — its joining with it (#2657).
  */
 export function resolvedCatalogues(
   areas: CollectionAreaData[],
   areaId: string,
   names: AreaNames,
-  issuePrefixes?: ReadonlyMap<string, string>
+  issuePrefixes?: ReadonlyMap<string, ResolvedCatalogPrefix>
 ): AgentAreaResolvedCatalogues {
   const leading = effectivePrimaryVendorId(areas, areaId);
   const valuing = resolveEffectivePrimaryCatalogNameId(areas, areaId);
-  const catalogues = effectiveVendorsForArea(areas, areaId)
-    .map((entry) => {
-      const abbreviation = names.catalogues.get(entry.catalogVendorId) ?? entry.vendorAbbreviation;
-      const prefix = issuePrefixes?.get(entry.catalogVendorId) ?? entry.prefix;
-      return prefix ? `${abbreviation}·${prefix}` : abbreviation;
-    })
-    .sort((a, b) => a.localeCompare(b));
+  const resolved = effectiveVendorsForArea(areas, areaId).map((entry) => {
+    const abbreviation = names.catalogues.get(entry.catalogVendorId) ?? entry.vendorAbbreviation;
+    const own = issuePrefixes?.get(entry.catalogVendorId);
+    const prefix = own ? own.prefix : entry.prefix;
+    const joined = own ? own.joined : entry.prefixJoined;
+    return { abbreviation, prefix, joined: !!prefix && joined };
+  });
   return compact({
     leadingCatalogue: leading ? (names.catalogues.get(leading) ?? leading) : undefined,
-    catalogues,
+    catalogues: resolved
+      .map(({ abbreviation, prefix }) => (prefix ? `${abbreviation}·${prefix}` : abbreviation))
+      .sort((a, b) => a.localeCompare(b)),
+    joinedPrefixes: nonEmpty(resolved.filter((entry) => entry.joined).map((entry) => entry.abbreviation)),
     valuingBook: valuing ? (names.books.get(valuing) ?? valuing) : undefined,
   });
 }
@@ -189,24 +216,34 @@ export function issueCatalogues(
   areas: CollectionAreaData[],
   areaId: string,
   names: AreaNames,
-  issuePrefixes: ReadonlyMap<string, string>
+  issuePrefixes: ReadonlyMap<string, ResolvedCatalogPrefix>
 ): AgentIssueCatalogues {
-  const own = effectiveVendorsForArea(areas, areaId)
-    .map((entry) => {
-      const abbreviation = names.catalogues.get(entry.catalogVendorId) ?? entry.vendorAbbreviation;
-      const prefix = issuePrefixes.get(entry.catalogVendorId);
-      return prefix ? `${abbreviation}: ${prefix}` : abbreviation;
-    })
+  const kept = effectiveVendorsForArea(areas, areaId).map((entry) => ({
+    abbreviation: names.catalogues.get(entry.catalogVendorId) ?? entry.vendorAbbreviation,
+    own: issuePrefixes.get(entry.catalogVendorId),
+  }));
+  const own = kept
+    .map(({ abbreviation, own }) => (own ? `${abbreviation}: ${own.prefix}` : abbreviation))
     .sort((a, b) => a.localeCompare(b));
-  return { own, resolved: resolvedCatalogues(areas, areaId, names, issuePrefixes).catalogues };
+  const resolved = resolvedCatalogues(areas, areaId, names, issuePrefixes);
+  return compact({
+    own,
+    ownJoinedPrefixes: nonEmpty(kept.filter(({ own }) => own?.joined).map(({ abbreviation }) => abbreviation)),
+    resolved: resolved.catalogues,
+    resolvedJoinedPrefixes: resolved.joinedPrefixes,
+  });
+}
+
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i]);
 }
 
 export function sameResolvedCatalogues(a: AgentAreaResolvedCatalogues, b: AgentAreaResolvedCatalogues): boolean {
   return (
     a.leadingCatalogue === b.leadingCatalogue &&
     a.valuingBook === b.valuingBook &&
-    a.catalogues.length === b.catalogues.length &&
-    a.catalogues.every((label, i) => label === b.catalogues[i])
+    sameList(a.catalogues, b.catalogues) &&
+    sameList(a.joinedPrefixes ?? [], b.joinedPrefixes ?? [])
   );
 }
 
@@ -278,6 +315,44 @@ export function parseCatalogueEntries(entries: readonly string[], parameter: str
     seen.add(folded);
     return { key, areaPrefix: value === null ? null : value === NO_PREFIX ? "" : value };
   });
+}
+
+/** One catalogue's joining as sent in `joined_prefixes` (#2658): its key, and whether its prefix joins. */
+export interface JoinedPrefixInput {
+  readonly key: string;
+  readonly joined: boolean;
+}
+
+/**
+ * Read `"Mi: true"` and `"Mi: false"` — whether that catalogue's prefix joins its number with no
+ * space — refusing a catalogue named twice or a value that is neither. Only the catalogues named
+ * change; the rest keep their joining.
+ */
+export function parseJoinedPrefixes(entries: readonly string[], parameter: string): JoinedPrefixInput[] {
+  const seen = new Set<string>();
+  return entries.map((entry) => {
+    const colon = entry.indexOf(":");
+    const key = (colon < 0 ? "" : entry.slice(0, colon)).trim();
+    const value = (colon < 0 ? "" : entry.slice(colon + 1)).trim().toLocaleLowerCase();
+    if (!key || (value !== "true" && value !== "false")) {
+      throw invalidRequest(
+        `"${parameter}" entry "${entry}" cannot be read. Write "Mi: true" to join that catalogue's prefix to its numbers with no space (\`DR D12\`), or "Mi: false" to put the space back (\`DR D 12\`).`
+      );
+    }
+    const folded = key.toLocaleLowerCase();
+    if (seen.has(folded)) {
+      throw invalidRequest(`"${parameter}" names the catalogue "${key}" twice. Send one entry per catalogue.`);
+    }
+    seen.add(folded);
+    return { key, joined: value === "true" };
+  });
+}
+
+/** A joining asked for where there is no prefix to join — the dialogs grey the box out there. */
+export function nothingToJoin(what: string, parameter: string, remedy: string): ApiError {
+  return invalidRequest(
+    `"${parameter}" joins ${what} to its numbers with no space, and ${what} has no prefix to join. Nothing was written. ${remedy}`
+  );
 }
 
 // ── Refusals ────────────────────────────────────────────────────────────────
