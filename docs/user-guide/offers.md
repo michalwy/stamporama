@@ -3759,7 +3759,8 @@ review. Sending and declining stay here.
 A regular buyer may get first refusal on a post before it goes up. Rather than sending them the post's
 preview, make the post into a proposal for them: **Make a proposal…**, in the **⋮** beside the title on
 the post's screen, asks who it is for and opens a new **Preparing** proposal. It is offered while the
-post is not yet up and no proposal made from it is still open.
+post is not yet up and no proposal made from it is still open. The post's screen on the phone offers it
+too ([Making a proposal of a post](phone.md#making-a-proposal-of-a-post)).
 
 **The proposal's lots are the post's own offers**, not copies of them. They stay on Facebook in the
 post's group, carry the post's lot numbers, and the two screens link to each other — *made from post

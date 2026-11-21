@@ -7,6 +7,7 @@ import { facebookPostAuctionsEnd } from "../../src/lib/facebook-post-list-figure
 import {
   parsePhonePostsShow,
   PHONE_POSTS_SHOW_OPTIONS,
+  phonePostCanPropose,
   phonePostLotBidding,
   phonePostLotPhotoId,
   phonePostLots,
@@ -216,5 +217,29 @@ describe("when a post that is up closes (#2626)", () => {
       ]),
       null
     );
+  });
+});
+
+describe("Make a proposal on a post's phone screen (#2632)", () => {
+  const ready = { state: "ready", facebookPostSnapshot: null };
+  const up = { state: "active", facebookPostSnapshot: { title: "Mercury" } };
+  const soldBefore = { state: "sold", facebookPostSnapshot: null };
+  const proposal = (status: "preparing" | "sent" | "sold" | "declined") => ({ proposalNo: 4, contactName: "Anna", status });
+
+  it("is offered before the post is up, with lots, and no proposal made from it", () => {
+    assert.equal(phonePostCanPropose({ postNo: 7, kit: { lots: [ready, ready] }, proposal: null }), true);
+    // A lot a buyer took before the post went up leaves it not up (#2560).
+    assert.equal(phonePostCanPropose({ postNo: 7, kit: { lots: [soldBefore, ready] }, proposal: null }), true);
+  });
+
+  it("is not offered once the post is up, or with no lots", () => {
+    assert.equal(phonePostCanPropose({ postNo: 7, kit: { lots: [up, ready] }, proposal: null }), false);
+    assert.equal(phonePostCanPropose({ postNo: 7, kit: { lots: [] }, proposal: null }), false);
+  });
+
+  it("gives way to an open proposal, which the screen links, and comes back once it is closed", () => {
+    assert.equal(phonePostCanPropose({ postNo: 7, kit: { lots: [ready] }, proposal: proposal("preparing") }), false);
+    assert.equal(phonePostCanPropose({ postNo: 7, kit: { lots: [ready] }, proposal: proposal("sent") }), false);
+    assert.equal(phonePostCanPropose({ postNo: 7, kit: { lots: [ready] }, proposal: proposal("declined") }), true);
   });
 });

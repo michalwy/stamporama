@@ -18,6 +18,7 @@ import { PhonePostPublishing } from "./phone-post-publishing";
 import { CopyCaption } from "./phone-post-caption";
 import { PhonePostLotBid } from "./phone-post-lot-bid";
 import { PhonePostClosing } from "./phone-post-closing";
+import { PhonePostProposal } from "./phone-post-proposal";
 
 /**
  * The post's phone screen's body (#2626): what the post is — its title, group, stage and, while it is
@@ -27,7 +28,8 @@ import { PhonePostClosing } from "./phone-post-closing";
  * post ready to go up is published from here, and one waiting for the group's approval is approved or
  * rejected (#2629, `PhonePostPublishing`); a captioned post's lots then carry *Copy caption*. A lot still
  * up has a tick: one winner's ticked lots are sold into one sale, and the lots left withdrawn, from the
- * bar the ticks bring up (#2631, `PhonePostClosing`).
+ * bar the ticks bring up (#2631, `PhonePostClosing`). A post not yet up is made into a proposal for one
+ * buyer from here, as at the desk (#2632, `PhonePostProposal`); once one is open it is linked instead.
  *
  * A client module for the closing time, which is the collector's own zone and drawn once mounted (#490),
  * and for the photo address the lot's thumbnail is drawn from.
@@ -84,6 +86,7 @@ export function PhonePostPanel({
         )}
       </div>
 
+      <PhonePostProposal collectionId={collectionId} collectionSlug={collectionSlug} post={post} />
       <PhonePostPublishing collectionId={collectionId} post={post} />
 
       {post.lots.length === 0 ? (

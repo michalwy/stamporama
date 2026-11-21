@@ -1025,6 +1025,10 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   withdrawn one by one as the lot `⋮` *Withdraw* does, after the same sentence
   (`facebookLotWithdrawMessage`, `facebook-post-rules.ts`, shared with the desk).
 
+- **A post is made into a proposal from the phone too** (#2632, [`phone.md`](phone.md)): offered where
+  the desk's ⋮ *Make a proposal…* is (`phonePostCanPropose`, over `postProposalRefusal`), written by
+  the desk's `createProposalFromPost`.
+
 - **The kit's text is rendered in the browser** (`renderFacebookPostText`, pure): `{closesAt}` is a
   local time and the browser is the only place the zone is known (#490's rule). **A post is only what
   its template places** (#1692, decided with the collector on 2026-10-09): nothing is substituted,

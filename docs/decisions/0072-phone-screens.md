@@ -96,6 +96,8 @@ guide's phone page states the requirement.
   same bid #2010 records on each lot's own screen.
 - **#2631** (added 2026-11-21) — closing a Facebook post: one winner's ticked lots sold into a new sale
   or that buyer's open sale, each at its recorded bid, and the ticked lots left withdrawn.
+- **#2632** (added 2026-11-21) — a Facebook post not yet up made into a proposal for one contact, as the
+  desk's *Make a proposal…* makes it; the phone then opens the proposal's screen to share it.
 
 **#2002** is the shell all of them stand on: the path, the manifest and icon, the phone frame, the
 links both ways and a sign-in screen usable at phone width.

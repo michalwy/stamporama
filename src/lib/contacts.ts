@@ -439,13 +439,14 @@ export async function searchContacts(
  *     tampered/cross-collection id); otherwise it is ignored and we fall through to name.
  *  2. A `name` is matched case-insensitively against existing contacts and reused, so the
  *     same supplier is never duplicated.
- *  3. Failing both, a new contact is created carrying `role` (a supplier gets `seller`).
- *     Returns `null` when neither id nor name is given.
+ *  3. Failing both, a new contact is created carrying `role` (a supplier gets `seller`), or no
+ *     role when none is given — as the desk's *Create* in a contact field makes one (a proposal's
+ *     buyer on the phone, #2632). Returns `null` when neither id nor name is given.
  *
  * The caller must already have asserted ownership of `collectionId`. */
 export async function resolvePurchaseContact(
   collectionId: string,
-  input: { id?: string | null; name?: string | null; role: keyof ContactRoles }
+  input: { id?: string | null; name?: string | null; role?: keyof ContactRoles }
 ): Promise<string | null> {
   const id = input.id?.trim();
   if (id) {
@@ -467,7 +468,7 @@ export async function resolvePurchaseContact(
 
   try {
     const created = await prisma.contact.create({
-      data: { collectionId, name, [input.role]: true },
+      data: { collectionId, name, ...(input.role ? { [input.role]: true } : {}) },
       select: { id: true },
     });
     return created.id;

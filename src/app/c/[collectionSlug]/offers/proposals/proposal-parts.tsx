@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { DialogActions, DialogBody, DialogShell, LabelWithError } from "@/app/dialog-shell";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { ContactSelect } from "@/app/c/[collectionSlug]/inventory/contact-select";
-import { buyerPickedText, PROPOSAL_STATUS_LABEL, type ProposalLotPick, type ProposalStatus } from "@/lib/proposal-rules";
+import { buyerPickedText, POST_PROPOSAL_SHARES_LOTS, PROPOSAL_STATUS_LABEL, type ProposalLotPick, type ProposalStatus } from "@/lib/proposal-rules";
 
 // What the list of proposals, a proposal's screen and a contact's page share (#2287).
 
@@ -149,8 +149,7 @@ export function NewProposalDialog({
         <DialogBody>
           {post && (
             <p style={{ margin: "0 0 0.75rem", fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.6 }}>
-              The proposal shares the post&apos;s lots and their numbers: a lot the buyer takes is sold in the post, and
-              the rest stay in it.
+              {POST_PROPOSAL_SHARES_LOTS}
             </p>
           )}
           {contact ? (

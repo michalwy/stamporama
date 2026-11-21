@@ -577,6 +577,10 @@ export function postProposalRefusal(facts: {
   return null;
 }
 
+/** What making a proposal of a post says the proposal is (#2602), at the desk and on the phone (#2632). */
+export const POST_PROPOSAL_SHARES_LOTS =
+  "The proposal shares the post's lots and their numbers: a lot the buyer takes is sold in the post, and the rest stay in it.";
+
 /** What publishing a post asks first while a proposal made from it is still open (#2602). */
 export function postProposalPublishWarning(facts: { proposalNo: number; contactName: string }): string {
   return `Proposal #${facts.proposalNo} for ${facts.contactName} is still open — publish anyway?`;
