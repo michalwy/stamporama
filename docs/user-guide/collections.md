@@ -614,6 +614,8 @@ You can write the numbers in full — `240a-240f`, or `240a, 240c` — but you d
 
 Ranges run over the same sequences the rest of the app knows — lowercase letters, uppercase letters and Roman numerals — under [the same rules](#writing-the-numbers) the issue's own range field follows, so `A-F` under `240` is `240A` … `240F`. A **single** suffix is taken literally instead of enumerated, so a base that is itself a variant takes whatever its catalogue prints: `P` under `309A` is `309AP`.
 
+Some catalogues print the suffix apart from the base number — `88B T.I` rather than `88BT.I`. Tick **Separate with a space** under the field and every suffix in the run is joined to the base number with one space: `T.I, T.II, T.III` under `88B` gives `88B T.I`, `88B T.II`, `88B T.III`, and `a-c` gives `88B a`, `88B b`, `88B c`. The preview shows the numbers with the space before you save. Numbers you type in full are written exactly as typed, ticked or not, and the box starts the way you last left it.
+
 Pick the **Subtype** every stamp in the run should carry — it starts on the one you used last, exactly as the single add dialog does — and the dialog shows how many stamps it will create, with a preview of the numbers and the same [duplicate check](duplicate-catalog-numbers.md) the other range dialog runs.
 
 Each variant comes out the way one added through the single dialog does: the base stamp as its parent, that subtype, the **base stamp's** year, no name, and — because a variant is not part of the issue's set — no [checklist](#checklists) tick. Everything else is filled in by editing the variants themselves.

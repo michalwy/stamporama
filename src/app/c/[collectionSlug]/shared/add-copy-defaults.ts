@@ -41,6 +41,11 @@ export const LS_VARIANT_PRICES_CLOSED = "stamporama:intake:variantPricesClosed";
 // the two flows are reached from different screens.
 export const LS_LAST_SUBTYPE = "stamporama:stamp:subtypeId";
 
+// Whether *Add variant range* last separated its suffixes from the base number with a space
+// (#2652), remembered per collection the way the subtype above is: a collector working through a
+// catalogue that prints `88B T.I` prints it that way on every page. Stored only as `1`.
+export const LS_LAST_VARIANT_SPACE = "stamporama:stamp:variantSpace";
+
 // The last acceptance profile a want was saved on (#533), remembered per collection so a run of
 // wants entered at a fair is picked once and repeated. Its own `want` namespace for the reason the
 // subtype has one: this is a property of what is being *looked for*, not of a copy or a catalog
