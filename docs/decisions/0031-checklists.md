@@ -6,6 +6,7 @@ Accepted (#531). Supersedes the `IssueMember.requiredForCompleteness` flag, whic
 Amended by #1617: a checklist is standard or specialised (§11).
 Amended by #2659: an issue has one catalogue value too, its checklists' union (§6, §7).
 Amended by #2660: a checklist's branch heading shows that checklist's total (§7).
+Amended by #2681: an issue with one checklist is drawn as branches when stamps sit off it (§9).
 
 ## Context
 
@@ -168,6 +169,17 @@ with nothing to choose.
 > its *Not on a checklist* branch holds only the stamps with no ancestor on a checklist; a variant
 > under a listed stamp is not repeated there. Counts and completeness still count the listed stamps
 > only. The list filter's stamp matches (#631) hide a variant as they hide anything else.
+>
+> **Amended by #2681: one checklist is drawn as branches too, when stamps sit off it.** #1520 drew
+> branches only for an issue with several checklists. With one, every stamp sat flat under the issue
+> and the checklist's few stamps could be told apart only by their bold catalogue chip — a two-stamp
+> souvenir-sheet checklist in a forty-two-stamp issue could not be found without reading every row.
+> So tree mode draws one checklist as a branch followed by *Not on a checklist* whenever that second
+> branch would hold anything (`drawsChecklistBranches`, `checklist-branches.ts`): a stamp off the
+> checklist that is not a variant, at any depth, of a stamp on it. Where the checklist's stamps and
+> their variants are the whole issue, the tree stays flat — one branch holding every row adds a level
+> and shows nothing (settled with the collector on 2026-11-21). The issue's own page keeps its
+> layout; it already narrows to the checklist with its Checklists card. Flat mode is unchanged.
 
 `filterStampTreeByChecklists` (`src/lib/stamp-tree-filter.ts`, pure) drops stamps that are on none
 of the picked checklists — **except** a node with a surviving descendant, which is kept and returned

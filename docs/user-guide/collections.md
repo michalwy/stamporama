@@ -958,12 +958,12 @@ On the **Issues** list, when an issue carries **more than one** checklist, every
 
 ### Checklists as branches
 
-The **Checklists** control in the Issues list's toolbar decides how an expanded issue with several checklists shows its stamps. It applies to every issue and is remembered.
+The **Checklists** control in the Issues list's toolbar decides how an expanded issue's checklists show its stamps. It applies to every issue and is remembered.
 
 - **Tree** (the default) — each checklist is a **branch** under the issue, collapsed when the issue opens, so you see the sets first. A branch's heading names the checklist in its colour, with its stamp count and how complete it is (stamps held over stamps on it, in any condition, and how many complete sets — the figure the issue's own page shows) and, at its right end, what the checklist is worth by the catalogue — the same total the issue's page gives that checklist, with the same `~` when part of it is an estimate and the same warning when it is partial or uses older-edition prices. A checklist with nothing priced shows no value, and **Not on a checklist** never does. The value is the checklist's own: a search narrowing the list does not change it, any more than it changes how complete the checklist is. Click the heading to open it. A stamp on two checklists appears under both. Under a stamp on the checklist hang **all its variants**, at any depth: those on the checklist are drawn as usual, those not on it — on no checklist, or on another one — dimmed, so at the checklist you can see whether the stamp has variants at all. They still open and keep their menu, and they do not add to the branch's count or completeness. Stamps on no checklist and not hanging under a stamp on one get a branch of their own, **Not on a checklist**, shown only when there are any. A branch you open stays open until you collapse the issue. While a search narrows the list, the branches holding a match start open and the others are left out.
 - **Flat** — every stamp in one run, with the **Checklist** filter chips described below.
 
-An issue with one checklist has no branches in either mode: its stamps sit straight under it.
+An issue with **one** checklist is drawn as branches in **Tree** mode too — the checklist's branch, then **Not on a checklist** — whenever there are stamps that are not on the checklist and do not hang under a stamp that is, so a checklist of two stamps in an issue of forty is found at a glance. When every stamp is on the checklist or is a variant of one that is, there is nothing to set apart and the stamps sit straight under the issue. In **Flat** mode an issue with one checklist always lists its stamps straight under it.
 
 A checklist's branch has its own **⋮** menu with the issue's actions that make sense for one checklist, each acting on **that checklist's stamps** only:
 
