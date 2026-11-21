@@ -9,12 +9,14 @@ import {
   type ReactNode,
 } from "react";
 import type { TradeFeedbackEntry } from "@/lib/trade-feedback";
+import { TRADE_FEEDBACK_NOTE_MAX } from "@/lib/trade-feedback-rules";
+import type { TradeSide, TradeStatus } from "@/lib/trade-rules";
 import {
-  tradeFeedbackRejectLabel,
-  tradeFeedbackSideSummary,
-  TRADE_FEEDBACK_NOTE_MAX,
-} from "@/lib/trade-feedback-rules";
-import type { TradeSide } from "@/lib/trade-rules";
+  tradeShareLabels,
+  tradeShareRejectLabel,
+  tradeShareSideSummary,
+  type TradeShareLabels,
+} from "@/lib/trade-share-labels";
 import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 
 // **The partner answering back** (#641), and seeing what they already answered (#667) — the client
@@ -51,6 +53,10 @@ interface PartnerFeedback {
   /** Record what came back from a write. `null` is the partner having withdrawn what they said,
    *  which is a row deleted rather than an empty one kept. */
   put: (lineId: string, entry: TradeFeedbackEntry | null) => void;
+  /** The page's language (#2606) and its words in it, for every control under the provider. */
+  language: string | null;
+  status: TradeStatus;
+  words: TradeShareLabels;
 }
 
 const PartnerFeedbackContext = createContext<PartnerFeedback | null>(null);
@@ -67,10 +73,14 @@ export function PartnerFeedbackProvider({
   token,
   canLeave,
   initial,
+  language,
+  status,
   children,
 }: {
   token: string;
   canLeave: boolean;
+  language: string | null;
+  status: TradeStatus;
   /** What the server rendered — so a reload shows every answered line marked, rather than an empty
    *  page that fills in once something is typed. */
   initial: Record<string, TradeFeedbackEntry>;
@@ -86,19 +96,28 @@ export function PartnerFeedbackProvider({
     });
   }, []);
   const value = useMemo(
-    () => ({ token, canLeave, byLine, put }),
-    [token, canLeave, byLine, put]
+    () => ({ token, canLeave, byLine, put, language, status, words: tradeShareLabels(language) }),
+    [token, canLeave, byLine, put, language, status]
   );
   return (
     <PartnerFeedbackContext.Provider value={value}>{children}</PartnerFeedbackContext.Provider>
   );
 }
 
+/** The page's language, its status and its words — for the controls on it that are not feedback (the
+ *  copy picker, #658), which sit under the same provider. */
+export function useShareWords(): Pick<PartnerFeedback, "language" | "status" | "words"> {
+  const { language, status, words } = usePartnerFeedback();
+  return { language, status, words };
+}
+
+
 async function postFeedback(
   token: string,
   lineId: string | null,
   note: string,
-  rejected: boolean
+  rejected: boolean,
+  failed: string
 ): Promise<TradeFeedbackEntry | null> {
   const res = await fetch(`/api/t/${encodeURIComponent(token)}/feedback`, {
     method: "POST",
@@ -106,7 +125,7 @@ async function postFeedback(
     body: JSON.stringify({ lineId, note, rejected }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? "That could not be saved.");
+  if (!res.ok) throw new Error(data?.error ?? failed);
   return data.entry ?? null;
 }
 
@@ -116,21 +135,23 @@ async function postFeedback(
  *  through a one-line input is a note the partner has to click into to finish reading, on the one
  *  page in the app where nobody can search for it instead. */
 function Said({ note, rejected, side }: { note: string; rejected: boolean; side?: TradeSide }) {
+  const { language } = usePartnerFeedback();
   if (!note && !rejected) return null;
   return (
     <span className="ts-fb-said">
-      {rejected && side && <span className="ts-fb-mark">{tradeFeedbackRejectLabel(side)}</span>}
+      {rejected && side && <span className="ts-fb-mark">{tradeShareRejectLabel(language, side)}</span>}
       {note && <span className="ts-fb-quote">{note}</span>}
     </span>
   );
 }
 
 function StateNote({ state }: { state: SaveState }) {
+  const { words } = usePartnerFeedback();
   if (state.kind === "idle") return null;
   if (state.kind === "error") {
     return <span className="ts-fb-state ts-fb-bad">{state.message}</span>;
   }
-  return <span className="ts-fb-state">{state.kind === "saving" ? "Saving…" : "Saved"}</span>;
+  return <span className="ts-fb-state">{state.kind === "saving" ? words.saving : words.saved}</span>;
 }
 
 /**
@@ -162,7 +183,7 @@ export function ShareRow({ lineId, children }: { lineId: string; children: React
  * only when there is something to say, since *0 notes* is a sentence about nothing.
  */
 export function SideRemarks({ side, lineIds }: { side: TradeSide; lineIds: string[] }) {
-  const { byLine } = usePartnerFeedback();
+  const { byLine, language } = usePartnerFeedback();
   let notes = 0;
   let rejected = 0;
   for (const lineId of lineIds) {
@@ -171,7 +192,7 @@ export function SideRemarks({ side, lineIds }: { side: TradeSide; lineIds: strin
     if (entry.note) notes += 1;
     if (entry.rejected) rejected += 1;
   }
-  const summary = tradeFeedbackSideSummary(side, { notes, rejected });
+  const summary = tradeShareSideSummary(language, side, { notes, rejected });
   if (!summary) return null;
   return <p className="ts-side-said">{summary}</p>;
 }
@@ -189,7 +210,7 @@ export function SideRemarks({ side, lineIds }: { side: TradeSide; lineIds: strin
  * four lines that were and re-reading all of them.
  */
 export function LineFeedback({ lineId, side }: { lineId: string; side: TradeSide }) {
-  const { token, canLeave, byLine, put } = usePartnerFeedback();
+  const { token, canLeave, byLine, put, words, language } = usePartnerFeedback();
   const entry = byLine[lineId] ?? null;
   const note = entry?.note ?? "";
   const rejected = entry?.rejected ?? false;
@@ -213,7 +234,7 @@ export function LineFeedback({ lineId, side }: { lineId: string; side: TradeSide
       resolution: entry?.resolution ?? null,
     });
     try {
-      const saved = await postFeedback(token, lineId, nextNote, nextRejected);
+      const saved = await postFeedback(token, lineId, nextNote, nextRejected, words.saveFailed);
       put(lineId, saved);
       setDraft(saved?.note ?? "");
       setState({ kind: "saved" });
@@ -223,7 +244,7 @@ export function LineFeedback({ lineId, side }: { lineId: string; side: TradeSide
       put(lineId, entry);
       setState({
         kind: "error",
-        message: error instanceof Error ? error.message : "That could not be saved.",
+        message: error instanceof Error ? error.message : words.saveFailed,
       });
     }
   }
@@ -242,7 +263,7 @@ export function LineFeedback({ lineId, side }: { lineId: string; side: TradeSide
             setEditing(true);
           }}
         >
-          Change
+          {words.change}
         </button>
       </div>
     );
@@ -262,14 +283,14 @@ export function LineFeedback({ lineId, side }: { lineId: string; side: TradeSide
             void save(draft, e.target.checked, { collapse: false });
           }}
         />
-        {tradeFeedbackRejectLabel(side)}
+        {tradeShareRejectLabel(language, side)}
       </label>
       <TextInput
         className="ts-fb-input"
         value={draft}
         maxLength={TRADE_FEEDBACK_NOTE_MAX}
-        placeholder="Add a note"
-        aria-label="Note about this line"
+        placeholder={words.addNote}
+        aria-label={words.lineNoteLabel}
         onChange={(e) => setDraft(e.target.value)}
         // Nothing is sent while the words are still being typed, and nothing is sent that has not
         // changed — a partner tabbing down a list must not write a row per line they passed over.
@@ -299,7 +320,7 @@ export function TradeNoteFeedback({
   closedMessage: string | null;
   collectorName: string;
 }) {
-  const { token, canLeave } = usePartnerFeedback();
+  const { token, canLeave, words } = usePartnerFeedback();
   const [note, setNote] = useState(initial?.note ?? "");
   const [saved, setSaved] = useState(initial?.note ?? "");
   const [state, setState] = useState<SaveState>({ kind: "idle" });
@@ -307,14 +328,14 @@ export function TradeNoteFeedback({
   async function save(next: string) {
     setState({ kind: "saving" });
     try {
-      const entry = await postFeedback(token, null, next, false);
+      const entry = await postFeedback(token, null, next, false, words.saveFailed);
       setNote(entry?.note ?? "");
       setSaved(entry?.note ?? "");
       setState({ kind: "saved" });
     } catch (error) {
       setState({
         kind: "error",
-        message: error instanceof Error ? error.message : "That could not be saved.",
+        message: error instanceof Error ? error.message : words.saveFailed,
       });
     }
   }
@@ -322,7 +343,7 @@ export function TradeNoteFeedback({
   if (!canLeave) {
     return (
       <section className="ts-fb-box">
-        <h2 className="ts-fb-heading">Your comments</h2>
+        <h2 className="ts-fb-heading">{words.yourComments}</h2>
         {closedMessage && <p className="ts-note">{closedMessage}</p>}
         {note && <p className="ts-fb-quote">{note}</p>}
       </section>
@@ -331,19 +352,15 @@ export function TradeNoteFeedback({
 
   return (
     <section className="ts-fb-box">
-      <h2 className="ts-fb-heading">Your comments</h2>
-      <p className="ts-note">
-        Tick a line you do not want, or add a note to it — {collectorName} sees everything you leave
-        here, and nothing you write changes the list itself. Use the box below for anything about the
-        exchange as a whole.
-      </p>
+      <h2 className="ts-fb-heading">{words.yourComments}</h2>
+      <p className="ts-note">{words.feedbackIntro(collectorName)}</p>
       <TextArea
         className="ts-fb-textarea"
         rows={3}
         value={note}
         maxLength={TRADE_FEEDBACK_NOTE_MAX}
-        placeholder="A note about the whole exchange"
-        aria-label="Note about the whole exchange"
+        placeholder={words.tradeNotePlaceholder}
+        aria-label={words.tradeNoteLabel}
         onChange={(e) => setNote(e.target.value)}
         onBlur={() => {
           if (note.trim() !== saved.trim()) void save(note);

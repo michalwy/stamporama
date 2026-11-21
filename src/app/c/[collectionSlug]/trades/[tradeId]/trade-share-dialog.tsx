@@ -11,13 +11,20 @@ import {
 } from "@/app/dialog-shell";
 import type { TradeShareState } from "@/lib/trades";
 import type { ShareAddressRefusal } from "@/lib/share-address";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createTradeShareLinkAction,
+  getTradeShareLanguageAction,
   revokeTradeShareLinkAction,
+  setTradeShareLanguageAction,
   setTradeShareOptionsAction,
 } from "@/app/actions/trades";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 import { ShareLinkVisitsLine } from "@/app/c/[collectionSlug]/shared/share-link-visits";
+import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
+import { useToast } from "@/app/toast-provider";
+import { languageLabel } from "@/lib/languages";
+import { hasTradeShareLabels } from "@/lib/trade-share-labels";
 
 // The collector's end of the partner's link (#640; ADR-0039 §9).
 //
@@ -89,6 +96,69 @@ const UNREADABLE_MESSAGE: Record<ShareAddressRefusal, string> = {
   unconfigured:
     "This link cannot be shown because this install has no STAMPORAMA_SECRET_KEY set, so there is nothing to unlock it with. Your partner's copy still works, and a new link would be just as unreadable — set the key first.",
 };
+
+/** The share dialog's read of the page's language (#2606). */
+const tradeShareLanguageKey = (collectionId: string, tradeId: string) =>
+  ["trades", collectionId, tradeId, "share-language"] as const;
+
+/**
+ * **The language the partner's page is in** (#2606). It opens in the partner's own, else the
+ * collection's; a choice here is saved on the partner's contact at once — apart from *Save*, because it
+ * changes neither the address nor what the link shows — and the page they already hold follows.
+ */
+function TradeShareLanguageSelect({ collectionId, tradeId }: { collectionId: string; tradeId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
+  const { data } = useQuery({
+    queryKey: tradeShareLanguageKey(collectionId, tradeId),
+    queryFn: () => getTradeShareLanguageAction(tradeId),
+  });
+
+  function choose(next: string) {
+    startTransition(async () => {
+      const result = await setTradeShareLanguageAction(tradeId, next);
+      if (result.status === "error") {
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: tradeShareLanguageKey(collectionId, tradeId) });
+      toast({ message: `${languageLabel(next)} saved on ${data?.partnerName ?? "the partner"} for their next material too` });
+    });
+  }
+
+  const language = data?.language ?? null;
+  return (
+    <div>
+      <LabelWithError htmlFor="trade-share-language">Language</LabelWithError>
+      <select
+        id="trade-share-language"
+        value={language ?? ""}
+        disabled={!data || isPending || data.languages.length === 0}
+        onChange={(e) => choose(e.target.value)}
+        style={INPUT_STYLE}
+      >
+        {language === null && <option value="">—</option>}
+        {(data?.languages ?? []).map((code) => (
+          <option key={code} value={code}>
+            {languageLabel(code)}
+          </option>
+        ))}
+      </select>
+      <p style={HINT}>
+        Saved on {data?.partnerName ?? "the partner"} — the page follows at the same address.
+        {language !== null && !hasTradeShareLabels(language) && (
+          <>
+            {" "}
+            <Tooltip content="The page has no headings or notices in this language. Stamp, series and condition names are still in it where the collection has them translated.">
+              <span style={{ color: "var(--color-warning)" }}>Page words in English</span>
+            </Tooltip>
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
 
 /** A stored timestamp as the `yyyy-mm-dd` a date input takes. */
 function dayValue(iso: string | null): string {
@@ -220,6 +290,8 @@ export function TradeShareDialog({
               subjectId={tradeId}
               createdAt={share?.createdAt ?? null}
             />
+
+            <TradeShareLanguageSelect collectionId={collectionId} tradeId={tradeId} />
 
             <div>
               <label style={CHECK_ROW}>

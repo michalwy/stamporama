@@ -2,10 +2,15 @@ import { formatIssuedDate } from "@/app/stamp-display";
 import type {
   TradeShareLineView,
   TradeShareSideView,
-  TradeShareTotalsView,
 } from "@/lib/trade-share";
 import type { TradeSide } from "@/lib/trade-rules";
 import type { TradeShareChoiceRead } from "@/lib/trade-proposals";
+import {
+  tradeShareCount,
+  tradeShareCountText,
+  tradeShareLabels,
+  type TradeShareLabels,
+} from "@/lib/trade-share-labels";
 import { LineFeedback, ShareRow, SideRemarks } from "./feedback-controls";
 import { SharePhotos } from "@/app/share/share-photos";
 import { LineCopyChoice } from "./share-choice";
@@ -36,26 +41,30 @@ export function ShareSide({
   side,
   token,
   choices,
+  language,
 }: {
   side: TradeShareSideView;
   token: string;
+  /** The page's language (#2606), which its own words here are in. */
+  language: string | null;
   /** **Which copy would you like?** (#658), by line id, with a line that has no choice to offer
    *  simply absent. Passed whole rather than looked up per row for the reason every other read on
    *  this page is one read: it is one question about one exchange. */
   choices: TradeShareChoiceRead;
 }) {
+  const words = tradeShareLabels(language);
   return (
     <div className="ts-side">
       <div className="ts-side-head">
         <span className="ts-side-title">{side.heading}</span>
-        <span className="ts-side-count">{countText(side.totals)}</span>
+        <span className="ts-side-count">{tradeShareCountText(language, side.totals)}</span>
       </div>
       {/* What this column already carries of the partner's own answers (#667) — scattered down a
           list of two hundred lines, they are otherwise findable only by re-reading it. */}
       <SideRemarks side={side.side} lineIds={side.lines.map((line) => line.lineId)} />
 
       {side.lines.length === 0 ? (
-        <p className="ts-empty">Nothing on this side.</p>
+        <p className="ts-empty">{words.emptySide}</p>
       ) : (
         side.lines.map((line, index) => {
           // The path arrives **on the row**, cumulative, so the headings a row opens are simply the
@@ -86,6 +95,7 @@ export function ShareSide({
                 token={token}
                 side={side.side}
                 choice={choices[line.lineId]}
+                words={words}
               />
             </div>
           );
@@ -94,18 +104,11 @@ export function ShareSide({
 
       {side.truncated && (
         <p className="ts-empty">
-          Only the first {side.lines.length} lines of this side are shown.
+          {words.truncated(tradeShareCount(language, side.lines.length, (l) => l.lines))}
         </p>
       )}
     </div>
   );
-}
-
-/** *12 pieces (9 lines)*, or just the count where a line is a piece — which it always is on the give
- *  side, and routinely is not on the other. */
-export function countText(totals: TradeShareTotalsView): string {
-  if (totals.pieces === totals.lines) return `${totals.lines} ${totals.lines === 1 ? "stamp" : "stamps"}`;
-  return `${totals.pieces} stamps (${totals.lines} lines)`;
 }
 
 function ShareLineRow({
@@ -113,11 +116,13 @@ function ShareLineRow({
   token,
   side,
   choice,
+  words,
 }: {
   line: TradeShareLineView;
   token: string;
   side: TradeSide;
   choice: TradeShareChoiceRead[string] | undefined;
+  words: TradeShareLabels;
 }) {
   const issued = formatIssuedDate(line.issuedDay, line.issuedMonth, line.issuedYear);
   return (
@@ -135,7 +140,7 @@ function ShareLineRow({
         <div className="ts-line1">
           {line.primaryNumber && <span className="ts-cn">{line.primaryNumber}</span>}
           {line.name && <span className="ts-name">{line.name}</span>}
-          {!line.primaryNumber && !line.name && <span className="ts-name">Stamp</span>}
+          {!line.primaryNumber && !line.name && <span className="ts-name">{words.stamp}</span>}
           {line.otherNumbers.length > 0 && (
             <span className="ts-cn-other">{line.otherNumbers.join(" · ")}</span>
           )}
@@ -151,7 +156,7 @@ function ShareLineRow({
           {line.format && <span className="ts-tag">{line.format}</span>}
           {/* Said plainly rather than left to be discovered in the envelope: the stamp is one of a
               group of variants and which one it is has not been recorded. */}
-          {line.unknownVariant && <span className="ts-tag">variant not specified</span>}
+          {line.unknownVariant && <span className="ts-tag">{words.variantNotSpecified}</span>}
           {line.areaPath && <span>{line.areaPath}</span>}
           {line.issueLabel && <span>{line.issueLabel}</span>}
           {issued && <span>{issued}</span>}
@@ -178,8 +183,8 @@ function ShareLineRow({
               <span className="ts-value-note">
                 {[
                   line.value.attribution,
-                  line.value.uncertain ? "estimate" : null,
-                  line.value.manual ? "own figure" : null,
+                  line.value.uncertain ? words.estimate : null,
+                  line.value.manual ? words.ownFigure : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

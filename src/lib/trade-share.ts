@@ -6,13 +6,15 @@ import { assertTradeOwner } from "./trade-access";
 import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import { listTradeLinePage, type TradeLinePageItem } from "./trade-lines";
 import { readTradeBalance, type TradeLineValueRead, type TradeRateRead } from "./trade-valuation";
-import { isTradeSide, TRADE_STATUS_LABEL, type TradeSide, type TradeStatus } from "./trade-rules";
+import { isTradeSide, type TradeSide, type TradeStatus } from "./trade-rules";
 import { readTradeLineFulfillments } from "./trade-realisation";
-import { tradeShareFulfillmentLabel } from "./trade-realisation-rules";
 import type { TradeGroupHeading, TradeGroupLevel } from "./trade-grouping";
 import { readCollectionAreas } from "./areas";
-import { buildAreaPath } from "./area-path";
 import { buildAreaVendorMaps, catalogLabel, formatStampCN } from "./area-vendor";
+import { buyerMaterialLanguage, normalizeLanguage } from "./languages";
+import { getCollectionLanguageChoices, setContactLanguage } from "./contacts";
+import { tradeShareLabels, type TradeShareLabels } from "./trade-share-labels";
+import { loadTradeShareNames, type NamePair, type TradeShareNames } from "./trade-share-translation";
 import { loadIssuePrefixMap } from "./issue-prefix";
 import {
   readShareAddress,
@@ -22,7 +24,6 @@ import {
 import {
   isTradeShareTokenShape,
   resolveTradeShareAccess,
-  tradeShareSideHeading,
   TRADE_SHARE_TOKEN_PREFIX,
   type TradeShareRefusal,
 } from "./trade-share-rules";
@@ -203,6 +204,63 @@ export async function setTradeShareOptions(
 
 /** Withdraw the link. The row is deleted rather than flagged: a revoked credential kept around is a
  *  credential someone can un-revoke, and there is nothing here worth an audit trail. */
+/** The language the partner's page is in, as the collector's share dialog reads it (#2606). */
+export interface TradeShareLanguage {
+  /** The page's language: the partner's, else the collection's own. */
+  language: string | null;
+  /** The languages the selector offers — the ones the collection uses, the partner's own kept. */
+  languages: string[];
+  partnerName: string;
+}
+
+async function readTradePartnerLanguage(tradeId: string) {
+  const trade = await prisma.trade.findUniqueOrThrow({
+    where: { id: tradeId },
+    select: {
+      partner: { select: { id: true, name: true, language: true } },
+      collection: { select: { defaultLanguage: true } },
+    },
+  });
+  return {
+    partnerId: trade.partner.id,
+    partnerName: trade.partner.name,
+    partnerLanguage: normalizeLanguage(trade.partner.language),
+    language: buyerMaterialLanguage(trade.partner.language, trade.collection.defaultLanguage),
+  };
+}
+
+/**
+ * The language a trade's shared page is in (#2606), and the choice the collector's dialog offers. A
+ * trade is a material for its partner like a proposal is for its buyer (#2603): it opens in the
+ * contact's language, else the collection's.
+ */
+export async function readTradeShareLanguage(ownerId: string, tradeId: string): Promise<TradeShareLanguage> {
+  const { collectionId } = await assertTradeOwner(ownerId, tradeId);
+  const head = await readTradePartnerLanguage(tradeId);
+  return {
+    language: head.language,
+    languages: await getCollectionLanguageChoices(ownerId, collectionId, [head.language]),
+    partnerName: head.partnerName,
+  };
+}
+
+/**
+ * Put the partner's page in another language (#2606). The choice is **saved on the partner's
+ * contact**, so the next material for them opens in it too; there is no column on the trade or its
+ * link, so the page the partner already holds follows at the same address. Only a language the
+ * collection uses (or the one the partner already has) is taken. Returns the language now in force.
+ */
+export async function setTradeShareLanguage(ownerId: string, tradeId: string, language: string): Promise<string> {
+  const { collectionId } = await assertTradeOwner(ownerId, tradeId);
+  const head = await readTradePartnerLanguage(tradeId);
+  const code = normalizeLanguage(language);
+  const choices = await getCollectionLanguageChoices(ownerId, collectionId, [head.partnerLanguage]);
+  if (!code || !choices.includes(code)) {
+    throw new Error("That language is not one this collection uses. Add it to a platform or an album first.");
+  }
+  return (await setContactLanguage(ownerId, head.partnerId, code)) ?? code;
+}
+
 export async function revokeTradeShareToken(ownerId: string, tradeId: string): Promise<void> {
   await assertTradeOwner(ownerId, tradeId);
   await prisma.$transaction(async (tx) => {
@@ -411,6 +469,11 @@ export interface TradeShareView {
   /** The collection the list comes from, which is how the partner knows whose it is. */
   collectorName: string;
   partnerName: string;
+  /** The language the page is in (#2606): the partner's, else the collection's own. Its own words
+   *  come from `trade-share-labels.ts`; every name on it is already in it where the collection has a
+   *  translation, and in the collection's own wording where it has none. */
+  language: string | null;
+  status: TradeStatus;
   statusLabel: string;
   showValues: boolean;
   /**
@@ -470,8 +533,8 @@ export async function readTradeShareView(
       id: true,
       tradeNo: true,
       status: true,
-      partner: { select: { name: true } },
-      collection: { select: { name: true } },
+      partner: { select: { name: true, language: true } },
+      collection: { select: { name: true, defaultLanguage: true } },
       sections: {
         orderBy: [{ position: "asc" }, { name: "asc" }],
         select: {
@@ -486,6 +549,12 @@ export async function readTradeShareView(
     },
   });
   if (!trade) return null;
+
+  // The partner's language, else the collection's (#2606) — read live off the contact, so choosing
+  // another in the collector's share dialog moves the page the partner already holds, at the same
+  // address.
+  const language = buyerMaterialLanguage(trade.partner.language, trade.collection.defaultLanguage);
+  const words = tradeShareLabels(language);
 
   // The figures are read once for the whole trade — the balance engine's own rule, since the totals
   // and the lines have to come off one set of numbers taken at one moment.
@@ -510,8 +579,10 @@ export async function readTradeShareView(
   const maps = buildAreaVendorMaps(areas, issuePrefixes);
 
   function realisationOf(lineId: string): string | null {
-    const line = fulfillments.get(lineId);
-    return line ? tradeShareFulfillmentLabel(line.fulfillment) : null;
+    const fulfillment = fulfillments.get(lineId)?.fulfillment;
+    if (fulfillment === "withdrawn") return words.withdrawn;
+    if (fulfillment === "missing") return words.neverArrived;
+    return null;
   }
 
   /** The figure a line contributes, in the printed valuation — the same choice `valueOf` makes, so a
@@ -552,9 +623,9 @@ export async function readTradeShareView(
     };
   }
 
-  const sections: TradeShareSectionView[] = [];
+  // Every side read first, so the names on all of them are translated in one read (#2606).
+  const pages: { sectionId: string; side: TradeSide; page: Awaited<ReturnType<typeof listTradeLinePage>> }[] = [];
   for (const section of trade.sections) {
-    const sides: TradeShareSideView[] = [];
     for (const side of ["give", "receive"] as const) {
       const page = await listTradeLinePage(access.ownerId, access.tradeId, {
         sectionId: section.id,
@@ -562,14 +633,31 @@ export async function readTradeShareView(
         levels,
         pageSize: TRADE_SHARE_SIDE_LIMIT,
       });
+      pages.push({ sectionId: section.id, side, page });
+    }
+  }
+  const subjects = pages.flatMap(({ page }) => page.items.map(lineSubject));
+  const names = await loadTradeShareNames(areas, trade.collection.defaultLanguage, language, {
+    stampIds: subjects.flatMap((s) => [s.stampId, ...s.candidateStampIds]),
+    issueIds: subjects.flatMap((s) => (s.issueId ? [s.issueId] : [])),
+    conditionIds: subjects.flatMap((s) => (s.conditionId ? [s.conditionId] : [])),
+    certificateStatusIds: subjects.flatMap((s) => (s.certificateStatusId ? [s.certificateStatusId] : [])),
+    formatIds: subjects.flatMap((s) => (s.formatId ? [s.formatId] : [])),
+  });
+
+  const sections: TradeShareSectionView[] = [];
+  for (const section of trade.sections) {
+    const sides: TradeShareSideView[] = [];
+    for (const { side, page } of pages.filter((p) => p.sectionId === section.id)) {
       const lines = page.items.map((item) =>
-        toShareLine(item, maps, areas, valueOf, realisationOf)
+        toShareLine(item, maps, names, words, valueOf, realisationOf)
       );
       sides.push({
         side,
-        heading: tradeShareSideHeading(side, trade.collection.name, trade.partner.name),
+        // Headed by name, never by *give* and *receive* (`tradeShareSideHeading`), in the page's words.
+        heading: words.from(side === "give" ? trade.collection.name : trade.partner.name),
         lines,
-        headings: page.headings,
+        headings: relabelHeadings(page.headings, names, words),
         totals: tallySide(
           page.total,
           page.pieces,
@@ -595,7 +683,9 @@ export async function readTradeShareView(
     tradeNo: trade.tradeNo,
     collectorName: trade.collection.name,
     partnerName: trade.partner.name,
-    statusLabel: TRADE_STATUS_LABEL[trade.status as TradeStatus],
+    language: normalizeLanguage(language),
+    status: trade.status as TradeStatus,
+    statusLabel: words.status[trade.status as TradeStatus],
     showValues: access.showValues,
     valuation: balance
       ? {
@@ -668,47 +758,12 @@ function sumTotals(all: readonly TradeShareTotalsView[]): TradeShareTotalsView {
 function toShareLine(
   item: TradeLinePageItem,
   maps: ReturnType<typeof buildAreaVendorMaps>,
-  areas: Awaited<ReturnType<typeof readCollectionAreas>>,
+  names: TradeShareNames,
+  words: TradeShareLabels,
   valueOf: (lineId: string) => TradeShareValueView | null,
   realisationOf: (lineId: string) => string | null
 ): TradeShareLineView {
-  const source =
-    item.side === "give"
-      ? {
-          catalogNumbers: item.copy.catalogNumbers,
-          name: item.copy.stampName,
-          areaId: item.copy.areaId,
-          issueId: item.copy.issueId,
-          issueName: item.copy.issueName,
-          issueYear: item.copy.issueYear,
-          issuedDay: item.copy.issuedDay,
-          issuedMonth: item.copy.issuedMonth,
-          issuedYear: item.copy.issuedYear,
-          condition: item.copy.conditionAbbreviation || item.copy.conditionName,
-          certificate: item.copy.certificateStatusName,
-          format: item.copy.formatAbbreviation || item.copy.formatName,
-          // A give line is one copy, always — a multiple is one copy in one format, never N singles.
-          quantity: 1,
-          unknownVariant: item.copy.unknownVariant,
-          photos: item.copy.photos,
-        }
-      : {
-          catalogNumbers: item.line.catalogNumbers,
-          name: item.line.stampName,
-          areaId: item.line.areaId,
-          issueId: item.line.issueId,
-          issueName: item.line.issueName,
-          issueYear: item.line.issueYear,
-          issuedDay: item.line.issuedDay,
-          issuedMonth: item.line.issuedMonth,
-          issuedYear: item.line.issuedYear,
-          condition: item.line.conditionAbbreviation || item.line.conditionName,
-          certificate: item.line.certificateStatusName,
-          format: item.line.formatAbbreviation || item.line.formatName,
-          quantity: item.line.quantity,
-          unknownVariant: item.line.unknownVariant,
-          photos: item.line.photos,
-        };
+  const source = lineSubject(item);
 
   const primaryVendorId = source.areaId
     ? (maps.primaryVendorByArea.get(source.areaId) ?? null)
@@ -719,17 +774,27 @@ function toShareLine(
 
   // A copy that is one of several stamps (#1651) is named as the set — the partner reads *123aI or
   // 123bI*, never the one it happens to be filed under — and marked as not pinned down.
-  const candidates = "copy" in item && item.copy.candidates.length > 1 ? item.copy.candidates : null;
+  const candidates = source.candidates;
   const candidateLabel = candidates
     ? candidateSetLabel(
         candidates.map((c) =>
           catalogLabel(
-            { areaId: c.areaId, issueId: c.issueId, catalogNumbers: c.catalogNumbers, name: c.stampName },
+            {
+              areaId: c.areaId,
+              issueId: c.issueId,
+              catalogNumbers: c.catalogNumbers,
+              name: names.stamp(c.stampId, c.stampName),
+            },
             maps
           )
         )
       )
     : null;
+
+  // Every name in the page's language where the collection has it in it (#2606).
+  const condition = names.condition(source.conditionId, source.condition);
+  const certificate = names.certificate(source.certificateStatusId, source.certificate);
+  const format = names.format(source.formatId, source.format);
 
   return {
     lineId: item.lineId,
@@ -742,21 +807,107 @@ function toShareLine(
       : source.catalogNumbers
           .filter((cn) => cn !== primary)
           .map((cn) => formatStampCN(cn.number, vendorMap.get(cn.catalogVendorId))),
-    name: source.name,
-    areaPath: source.areaId ? (buildAreaPath(areas, source.areaId) ?? null) : null,
-    issueLabel: issueLabelOf(source.issueName, source.issueYear),
+    name: names.stamp(source.stampId, source.name),
+    areaPath: names.areaPath(source.areaId),
+    issueLabel: issueLabelOf(names.issue(source.issueId, source.issueName), source.issueYear),
     issuedDay: source.issuedDay,
     issuedMonth: source.issuedMonth,
     issuedYear: source.issuedYear,
-    condition: source.condition,
-    certificate: source.certificate,
-    format: source.format,
+    condition: condition.abbreviation || condition.name,
+    certificate: certificate.name,
+    format: format.abbreviation || format.name,
     quantity: source.quantity,
     unknownVariant: source.unknownVariant || candidates !== null,
     photoIds: source.photos.map((photo) => photo.id),
     value: valueOf(item.lineId),
     realisation: realisationOf(item.lineId),
   };
+}
+
+/** What either side's row says about its stamp, with the ids its names are translated by. */
+function lineSubject(item: TradeLinePageItem) {
+  const row = item.side === "give" ? item.copy : item.line;
+  const candidates = item.side === "give" && item.copy.candidates.length > 1 ? item.copy.candidates : null;
+  return {
+    stampId: row.stampId,
+    candidates,
+    candidateStampIds: (candidates ?? []).map((c) => c.stampId),
+    catalogNumbers: row.catalogNumbers,
+    name: row.stampName,
+    areaId: row.areaId,
+    issueId: row.issueId,
+    issueName: row.issueName,
+    issueYear: row.issueYear,
+    issuedDay: row.issuedDay,
+    issuedMonth: row.issuedMonth,
+    issuedYear: row.issuedYear,
+    conditionId: row.conditionId,
+    condition: { name: row.conditionName || null, abbreviation: row.conditionAbbreviation || null } as NamePair,
+    certificateStatusId: row.certificateStatusId,
+    certificate: {
+      name: row.certificateStatusName,
+      abbreviation: item.side === "receive" ? item.line.certificateStatusAbbreviation : null,
+    } as NamePair,
+    formatId: row.formatId,
+    format: { name: row.formatName || null, abbreviation: row.formatAbbreviation || null } as NamePair,
+    // A give line is one copy, always — a multiple is one copy in one format, never N singles.
+    quantity: item.side === "give" ? 1 : item.line.quantity,
+    unknownVariant: row.unknownVariant,
+    photos: row.photos,
+  };
+}
+
+/**
+ * The arrangement's headings in the page's language (#2606). The grouping itself is the collector's
+ * screen's own (`arrangeByGroups`) and is left alone — only what a heading *says* changes: its area,
+ * series, condition and certificate names, and the words for a group with none.
+ *
+ * A heading's key ends in its level and its bucket's id, which is all that is needed to name it again.
+ */
+function relabelHeadings(
+  headings: Record<string, TradeGroupHeading>,
+  names: TradeShareNames,
+  words: TradeShareLabels
+): Record<string, TradeGroupHeading> {
+  const out: Record<string, TradeGroupHeading> = {};
+  for (const [key, heading] of Object.entries(headings)) {
+    const segment = key.slice(key.lastIndexOf("/") + 1);
+    const id = segment.slice(segment.indexOf(":") + 1);
+    out[key] = { ...heading, ...relabel(heading, id, names, words) };
+  }
+  return out;
+}
+
+function relabel(
+  heading: TradeGroupHeading,
+  id: string,
+  names: TradeShareNames,
+  words: TradeShareLabels
+): Pick<TradeGroupHeading, "label" | "detail"> {
+  const none = id === "__none__";
+  switch (heading.level) {
+    case "area":
+      return { label: (none ? null : names.areaPath(id)) || words.noArea, detail: null };
+    case "year":
+      return { label: none ? words.noYear : heading.label, detail: heading.detail };
+    case "issue":
+      if (none) return { label: words.noIssue, detail: heading.detail };
+      return { label: names.issue(id, heading.label === "(unnamed issue)" ? null : heading.label) ?? words.unnamedIssue, detail: heading.detail };
+    case "condition": {
+      // `${conditionId}:${certificateStatusId}` — a piece has no condition (#2383), keyed `null`.
+      const [conditionId, certificateId] = id.split(":");
+      const condition = conditionId === "null" ? null : names.conditionById(conditionId);
+      const conditionAbbr = condition?.abbreviation ?? words.noCondition;
+      const conditionName = condition?.name ?? words.noCondition;
+      const certificate =
+        certificateId && certificateId !== "__none__" ? names.certificateById(certificateId) : null;
+      if (!certificate?.abbreviation) return { label: conditionAbbr, detail: conditionName };
+      return {
+        label: `${conditionAbbr} + ${certificate.abbreviation}`,
+        detail: `${conditionName} · ${certificate.name}`,
+      };
+    }
+  }
 }
 
 /** `Chopin (1949)`, or whichever half of it there is. */

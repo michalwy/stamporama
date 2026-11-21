@@ -33,8 +33,11 @@ import {
 } from "@/lib/trade-valuation";
 import {
   createTradeShareToken,
+  readTradeShareLanguage,
   revokeTradeShareToken,
+  setTradeShareLanguage,
   setTradeShareOptions,
+  type TradeShareLanguage,
 } from "@/lib/trade-share";
 import { resolveTradeFeedback } from "@/lib/trade-feedback";
 import {
@@ -824,6 +827,24 @@ export async function revokeTradeShareLinkAction(tradeId: string): Promise<Trade
     return { status: "success" };
   } catch (e) {
     return { status: "error", message: message(e, "Failed to withdraw the link. Please try again.") };
+  }
+}
+
+/** The language the partner's page is in, and the languages the share dialog offers (#2606). */
+export async function getTradeShareLanguageAction(tradeId: string): Promise<TradeShareLanguage> {
+  const session = await getSession();
+  return readTradeShareLanguage(session.user.id, tradeId);
+}
+
+/** Put the partner's page in another language (#2606) — saved on the partner's contact, so the link
+ *  they hold follows at the same address and their next material opens in it too. */
+export async function setTradeShareLanguageAction(tradeId: string, language: string): Promise<TradeActionState> {
+  const session = await getSession();
+  try {
+    await setTradeShareLanguage(session.user.id, tradeId, language);
+    return { status: "success" };
+  } catch (e) {
+    return { status: "error", message: message(e, "Failed to change the language. Please try again.") };
   }
 }
 

@@ -240,6 +240,17 @@ trade's lines. And what the partner has already said is **on the row** — a rem
 struck line drawn struck, and a count at the head of each side — the same argument #662 made on the
 collector's screen, for the same reason: a signal about a line belongs on that line.
 
+**The page is in the partner's language** (#2606, on ADR-0075 §12's rule for every material for a
+buyer). It opens in the partner contact's language, else the collection's, and the collector's share
+dialog offers a **Language** choice — the languages the collection uses — that is **saved on the
+contact**, not on the trade or its link. So there is no column to keep in step and no new address:
+the page reads the contact live, and the link the partner already holds follows the choice. The page's
+own words come from a pure table (`trade-share-labels.ts`) in the languages the offer specification
+has words in, English otherwise — the dialog says so; the names on it are translated by id where the
+collection has a translation and left in its own wording where it has none. What is said before a
+link has resolved to a trade — a dead link, the rate limit, the tab's title — stays English: there is
+no partner yet whose language it could be.
+
 ### 10. Partner feedback is feedback, never an edit — and *responded* falls out of it
 
 The partner needs a way to answer (#641), and the shape of that answer is decided by one thing: **a

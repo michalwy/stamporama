@@ -45,14 +45,9 @@ export function describeTradeProposalClosed(status: TradeStatus): string {
 }
 
 // ── What the partner reads ──────────────────────────────────────────────────────────────────────
-
-/** The heading over one line's copies. Stated as a question, because that is what it is — and with
- *  the count, so a reader knows how many pictures to compare before they start. */
-export function tradeProposalPrompt(options: number): string {
-  return options === 2
-    ? "Two of these would do — which would you like?"
-    : `${options} of these would do — which would you like?`;
-}
+//
+// The partner's page says the rest of its words in the partner's language (#2606) — the prompt over a
+// line's copies, the badges, the hint — and they live in `trade-share-labels.ts`.
 
 /**
  * What one copy is called on the partner's page.
@@ -65,21 +60,6 @@ export function tradeProposalPrompt(options: number): string {
 export function tradeProposalOptionLabel(index: number): string {
   return `Copy ${index + 1}`;
 }
-
-/** The copy the line names today — what every other option is an alternative *to*. Always first. */
-export const TRADE_PROPOSAL_CURRENT_LABEL = "Chosen now";
-
-/** The partner's own standing suggestion, drawn **beside** the current choice rather than replacing
- *  it: the two are different things and a page that showed only the pick would suggest the swap had
- *  already happened. */
-export const TRADE_PROPOSAL_PICKED_LABEL = "You asked for this one";
-
-/** How the partner takes a suggestion back. There is deliberately no second control for it: picking
- *  the copy that is already chosen *is* withdrawing the request, so the choice is one radio group
- *  rather than a radio group and a clear button that can disagree with it. Said in words, because a
- *  gesture that is obvious once you know it is not obvious the first time. */
-export const TRADE_PROPOSAL_CLEAR_HINT =
-  "Nothing is decided by choosing here — it is a request, and your partner confirms it. Picking the copy that is already chosen takes the request back.";
 
 /** A suggestion the collector never answered, on a list that has since been locked. Said once, on
  *  the row, because the alternative is a partner who thinks a swap is coming. */

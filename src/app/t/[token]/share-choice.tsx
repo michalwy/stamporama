@@ -2,13 +2,8 @@
 
 import { useState } from "react";
 import type { TradeShareChoiceLine } from "@/lib/trade-proposals";
-import {
-  tradeProposalPrompt,
-  TRADE_PROPOSAL_CLEAR_HINT,
-  TRADE_PROPOSAL_CURRENT_LABEL,
-  TRADE_PROPOSAL_PICKED_LABEL,
-} from "@/lib/trade-proposal-rules";
 import { SharePhotos } from "@/app/share/share-photos";
+import { useShareWords } from "./feedback-controls";
 
 // **Which of these copies would you like?** (#658) — the partner's half, and the second thing on this
 // page that is client code (#641's controls being the first).
@@ -37,7 +32,8 @@ type SaveState =
 async function postProposal(
   token: string,
   lineId: string,
-  itemId: string | null
+  itemId: string | null,
+  failed: string
 ): Promise<string | null> {
   const res = await fetch(`/api/t/${encodeURIComponent(token)}/proposal`, {
     method: "POST",
@@ -45,7 +41,7 @@ async function postProposal(
     body: JSON.stringify({ lineId, itemId }),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error ?? "That could not be saved.");
+  if (!res.ok) throw new Error(data?.error ?? failed);
   return data.proposedItemId ?? null;
 }
 
@@ -56,6 +52,10 @@ export function LineCopyChoice({
   token: string;
   choice: TradeShareChoiceLine;
 }) {
+  // In the page's language (#2606): the prompt, the badges and the sentences that stand in for the
+  // picker are said here from the status rather than read off the choice, whose words are English.
+  const { status, words } = useShareWords();
+  const statusLabel = words.status[status];
   const current = choice.options.find((option) => option.current) ?? null;
   const standing = choice.options.find((option) => option.proposed) ?? null;
   // What is picked right now. Starts on the partner's own standing request where there is one, and
@@ -70,7 +70,7 @@ export function LineCopyChoice({
   // alternative is a partner who goes on thinking a swap is coming.
   if (choice.options.length === 0) {
     return choice.unansweredNote ? (
-      <p className="ts-choice-closed">{choice.unansweredNote}</p>
+      <p className="ts-choice-closed">{words.unanswered(statusLabel)}</p>
     ) : null;
   }
 
@@ -81,7 +81,7 @@ export function LineCopyChoice({
     setPicked(itemId);
     setState({ kind: "saving" });
     try {
-      const saved = await postProposal(token, choice.lineId, itemId);
+      const saved = await postProposal(token, choice.lineId, itemId, words.saveFailed);
       setPicked(saved ?? current?.itemId ?? null);
       setState({ kind: "saved" });
     } catch (error) {
@@ -90,7 +90,7 @@ export function LineCopyChoice({
       setPicked(previous);
       setState({
         kind: "error",
-        message: error instanceof Error ? error.message : "That could not be saved.",
+        message: error instanceof Error ? error.message : words.saveFailed,
       });
     }
   }
@@ -98,14 +98,18 @@ export function LineCopyChoice({
   return (
     <div className="ts-choice">
       <p className="ts-choice-prompt">
-        {tradeProposalPrompt(choice.options.length)}
+        {words.choicePrompt(choice.options.length)}
         <span className="ts-choice-hint">
-          {choice.open ? TRADE_PROPOSAL_CLEAR_HINT : choice.closedMessage}
+          {choice.open
+            ? words.choiceHint
+            : status === "preparing"
+              ? words.choicePreparing
+              : words.choiceSettled(statusLabel)}
         </span>
       </p>
 
       <div className="ts-choice-opts">
-        {choice.options.map((option) => {
+        {choice.options.map((option, index) => {
           const isPicked = picked === option.itemId;
           return (
             <div
@@ -119,7 +123,7 @@ export function LineCopyChoice({
                 {option.photoIds.length === 0 && (
                   // Said rather than left as a gap: a copy with no scan is a copy the partner cannot
                   // judge, and knowing that is itself worth knowing.
-                  <span className="ts-choice-nopic">No scan</span>
+                  <span className="ts-choice-nopic">{words.noScan}</span>
                 )}
               </div>
               <label className="ts-choice-pick">
@@ -130,14 +134,15 @@ export function LineCopyChoice({
                   disabled={!choice.open || state.kind === "saving"}
                   onChange={() => void save(option.itemId)}
                 />
-                {option.label}
+                {/* `tradeProposalOptionLabel`, which numbers the options in this order. */}
+                {words.copyNo(index + 1)}
               </label>
               {option.current && (
-                <span className="ts-choice-badge">{TRADE_PROPOSAL_CURRENT_LABEL}</span>
+                <span className="ts-choice-badge">{words.chosenNow}</span>
               )}
               {isPicked && !option.current && (
                 <span className="ts-choice-badge" data-tone="asked">
-                  {TRADE_PROPOSAL_PICKED_LABEL}
+                  {words.youAsked}
                 </span>
               )}
             </div>
@@ -150,8 +155,8 @@ export function LineCopyChoice({
           {state.kind === "error"
             ? state.message
             : state.kind === "saving"
-              ? "Saving…"
-              : "Saved"}
+              ? words.saving
+              : words.saved}
         </span>
       )}
     </div>
