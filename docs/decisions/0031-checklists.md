@@ -4,6 +4,7 @@
 
 Accepted (#531). Supersedes the `IssueMember.requiredForCompleteness` flag, which is dropped.
 Amended by #1617: a checklist is standard or specialised (§11).
+Amended by #2659: an issue has one catalogue value too, its checklists' union (§6, §7).
 
 ## Context
 
@@ -98,6 +99,16 @@ consumer needs to say which one it means:
 | Intake fan-out (#121), auction lot composition (#353), the picker's *whole issue* button | **one checklist**, named by the button |
 | Stamp-tree bolding, the stamp list's "required" styling | **on at least one checklist** |
 
+> **Amended by #2659: the issue has a catalogue value of its own as well — the union.** Each
+> checklist keeps its own total, unchanged. Beside them, `IssueListItem.priceTotal` values the
+> **union** — every stamp on the issue's checklists once, the set `requiredCount` and the
+> completeness count read, by the same switch for specialised checklists (#1617) — priced by the
+> rule a checklist total is (`computeChecklistPriceTotal`). The row above said a union "answers
+> neither question"; the collector's answer (2026-11-21) is that it answers *what is this issue
+> worth*, and that leaving the most specialised issues without a headline figure was the worse
+> outcome. With disjoint checklists (imperforate beside perforated) it is their sum; with a
+> shared stamp it counts that stamp once, which a plain sum of the totals would not.
+
 ### 7. The issue list collapses several checklists to a count
 
 With one checklist a row is byte-for-byte what it was before: `12/14`, and the total beside it. With
@@ -108,6 +119,11 @@ stops scanning evenly, and three names never fit where one number does.
 The headline price chip is dropped in that case rather than repeated three times; the totals are in
 the tooltip. The issue's own detail page is where several checklists get room — one completeness
 card and one catalog-value card each.
+
+> **Amended by #2659: the chip comes back, as the union.** Several checklists no longer mean no
+> headline figure: the row's price chip shows §6's union value, one chip still, and the per-checklist
+> totals stay in the badge's tooltip. The detail page's Details card puts the same figure first, as
+> *Catalog value*, above the per-checklist lines.
 
 ### 8. The badge counts; the tree filters
 

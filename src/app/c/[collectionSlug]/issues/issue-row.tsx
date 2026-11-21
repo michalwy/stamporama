@@ -1108,11 +1108,12 @@ export function IssueRow({
               />
             )}
 
-            {/* One checklist's total reads as the row's own figure, as it did when an issue had
-                exactly one set. With several, the totals live in the badge's tooltip instead: a
-                row carrying three money chips is no longer a row anybody scans. */}
-            {issue.checklists.length === 1 && issue.checklists[0].priceTotal && (() => {
-              const t = issue.checklists[0].priceTotal!;
+            {/* The issue's one catalogue value (#2659): its checklists' stamps, each counted once
+                — with one checklist, that checklist's total, as before. Each checklist's own total
+                stays in the badge's tooltip: a row carrying three money chips is no longer a row
+                anybody scans. */}
+            {issue.priceTotal && (() => {
+              const t = issue.priceTotal;
               const incomplete = t.pricedCount < t.requiredCount;
               const unpriced = t.requiredCount - t.pricedCount - t.olderEditionExcludedCount;
               const showWarning = t.usesOlderEdition || incomplete;
@@ -1124,7 +1125,11 @@ export function IssueRow({
               return (
                 <Tooltip
                   content={
-                    showWarning ? undefined : `Total of "${issue.checklists[0].name}" (main catalog)`
+                    showWarning
+                      ? undefined
+                      : issue.checklists.length === 1
+                        ? `Total of "${issue.checklists[0].name}" (main catalog)`
+                        : `Total of its ${issue.checklists.length} checklists, each stamp counted once (main catalog)`
                   }
                   align="end"
                   style={{ marginLeft: "auto" }}
