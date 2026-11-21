@@ -739,7 +739,8 @@ describe("the agent API's operation modules (#2445)", () => {
  * **#1512 lifted it for checklists, and for exactly its operations**: deleting a checklist nothing
  * prints and setting the order of a checklist's stamps (`deleteChecklist`, `reorderChecklistStamps`)
  * left this map for {@link CHECKLIST_WRITES}. The order of an issue's checklists among themselves
- * (`reorderChecklists`) was not asked for and joined it instead.
+ * (`reorderChecklists`) was not asked for and joined it instead — until #2679 asked for it, and it
+ * moved to {@link CHECKLIST_WRITES} too.
  *
  * **#1540 lifted it for one catalogue price at a time, through the grid's own write** — see
  * {@link CATALOG_PRICE_WRITES}. A catalogue, a book or an edition is not a price: deleting one takes
@@ -767,7 +768,6 @@ const CATALOG_BOUNDARY = new Map<string, { module: string; why: string }>([
   ["removeStampFromIssue", { module: "src/lib/issues.ts", why: "takes a stamp out of its issue" }],
   ["mergeIssues", { module: "src/lib/issues.ts", why: "folds one issue into another and deletes it" }],
   ["reorderIssueMembers", { module: "src/lib/issues.ts", why: "rewrites the collector's order of the stamp tree" }],
-  ["reorderChecklists", { module: "src/lib/checklists.ts", why: "rewrites the collector's order of an issue's checklists" }],
   ["deleteCollectionArea", { module: "src/lib/areas.ts", why: "deletes an area" }],
 ]);
 
@@ -891,8 +891,9 @@ describe("the agent API's operation modules (#2169, #2172)", () => {
 /**
  * **The checklist writes the agent may make, and the one module that may make them** (#1512). The
  * collector allowed a checklist to be created, renamed and translated, its stamps added, removed and
- * put in order, and one nothing prints to be deleted — and nothing else: every other catalogue
- * delete, move and reorder stays in {@link CATALOG_BOUNDARY}. Pinned both ways: the checklist module
+ * put in order, the checklists themselves put in order (#2679), and one nothing prints to be
+ * deleted — and nothing else: every other catalogue delete, move and reorder stays in
+ * {@link CATALOG_BOUNDARY}. Pinned both ways: the checklist module
  * imports exactly these writes, and no other operation module imports any of them, so a delete or a
  * reorder cannot arrive through a module whose own guards were written for something else.
  */
@@ -904,6 +905,7 @@ const CHECKLIST_WRITES = [
   "setChecklistStamps",
   "reorderChecklistStamps",
   "followIssueOrder",
+  "reorderChecklists",
   "deleteChecklist",
 ] as const;
 

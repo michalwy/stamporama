@@ -618,15 +618,21 @@ for you: *a checklist of the watermark Y stamps of this issue*, *a checklist of 
   dragging its stamps does;
 - **put an issue's checklist back to following the issue's order** — *Follow the issue's order* on
   the screen. A checklist spanning issues has no issue to follow, and is refused;
+- **set the order of an issue's checklists** among themselves — putting *Imperforate (A)* before
+  *Perforated (B)* — as dragging them in the issue's
+  [checklists editor](collections.md#managing-an-issues-checklists) does, or of the checklists
+  spanning issues among themselves. The order matters: the issue's first checklist is the one its
+  row's badge shows and the one a new stamp joins. The checklists it names take the places they held
+  among themselves, in the order named, and every one it leaves out stays where it was — so naming
+  only the standard ones leaves each specialised one in its place;
 - **delete a checklist no album prints.** One that an album prints is refused, and the assistant is
   told which albums — take it out of them first, or delete it yourself on the screen, where the
   confirmation says what it takes with it.
 
-Taking a stamp off or setting the order is safe to repeat: a stamp that is not on the checklist, or a
-number it cannot place, is reported and the rest is still done. A checklist printed in an album
-changes just as it would from the screen — the printed card reports the difference, and nothing is
-reprinted. It **cannot change the order of an issue's checklists** among themselves; that stays on
-the issue.
+Taking a stamp off or setting either order is safe to repeat: a stamp that is not on the checklist, a
+checklist of another issue, or a number or name it cannot place, is reported and the rest is still
+done; an order that is already so changes nothing. A checklist printed in an album changes just as it
+would from the screen — the printed card reports the difference, and nothing is reprinted.
 
 The assistant sees checklists the way the app shows them by default: **only standard ones are listed
 and counted** — in its list of checklists, an issue's and a stamp's checklists, the gaps it finds,

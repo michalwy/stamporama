@@ -55,7 +55,8 @@ export interface ChecklistRow {
   readonly albums: readonly string[];
 }
 
-function issueOf(issue: { id: string; name: string | null; year: number | null }): AgentChecklistIssue {
+/** An issue as a checklist answer states it. */
+export function issueOf(issue: { id: string; name: string | null; year: number | null }): AgentChecklistIssue {
   return compact({ issueId: issue.id, name: issue.name ?? undefined, year: issue.year ?? undefined });
 }
 
@@ -178,4 +179,79 @@ export function checklistInUse(checklistName: string, albums: readonly { id: str
   return invalidRequest(
     `"${checklistName}" is printed in ${albums.length === 1 ? "the album" : `${albums.length} albums`} ${names}, and deleting it would take its card out of ${albums.length === 1 ? "it" : "each"}. Nothing was deleted. The collector takes it out of ${albums.length === 1 ? "that album" : "those albums"} first, or deletes it on the screen.`
   );
+}
+
+// ── The order of the checklists themselves (#2679) ─────────────────────────
+
+/** An entry `order_checklists` could not turn into one checklist of the issue, and why. */
+export interface AgentUnfoundChecklist {
+  readonly input: string;
+  readonly reason: string;
+}
+
+/** A checklist `order_checklists` was sent that is not among the ones it orders — another issue's,
+ *  a spanning one sent for an issue, or an issue's sent for the spanning ones. Reported, not placed. */
+export interface AgentChecklistElsewhere {
+  readonly checklistId: string;
+  readonly name: string;
+  readonly spansIssues: boolean;
+  readonly issue?: AgentChecklistIssue;
+}
+
+/**
+ * The checklists of one issue — or the spanning ones — that `refs` name, in the order sent. An entry
+ * is a checklist's id, or its name compared trimmed and case-folded as a repeated name is
+ * (`sameNameAs`); an id wins over a name. A name two of them share is reported with both ids rather
+ * than guessed. What names none of them is handed back in `unmatched`, for the caller to tell a
+ * checklist of somewhere else from one that does not exist. A repeat is placed once.
+ */
+export function resolveChecklistRefs(
+  refs: readonly string[],
+  scope: readonly { readonly id: string; readonly name: string }[]
+): { placing: string[]; ambiguous: AgentUnfoundChecklist[]; unmatched: string[] } {
+  const byId = new Set(scope.map((row) => row.id));
+  const byName = new Map<string, string[]>();
+  for (const row of scope) {
+    const key = row.name.trim().toLowerCase();
+    byName.set(key, [...(byName.get(key) ?? []), row.id]);
+  }
+  const placing: string[] = [];
+  const ambiguous: AgentUnfoundChecklist[] = [];
+  const unmatched: string[] = [];
+  for (const raw of refs) {
+    const ref = raw.trim();
+    if (ref === "") continue;
+    if (byId.has(ref)) {
+      if (!placing.includes(ref)) placing.push(ref);
+      continue;
+    }
+    const named = byName.get(ref.toLowerCase()) ?? [];
+    if (named.length === 1) {
+      if (!placing.includes(named[0])) placing.push(named[0]);
+    } else if (named.length > 1) {
+      ambiguous.push({ input: raw, reason: `${named.length} of them are called that: ${named.join(", ")}; send the id` });
+    } else if (!unmatched.includes(ref)) {
+      unmatched.push(ref);
+    }
+  }
+  return { placing, ambiguous, unmatched };
+}
+
+/** A checklist sent to `order_checklists` that belongs somewhere else, as the answer states it. */
+export function checklistElsewhere(row: {
+  readonly id: string;
+  readonly name: string;
+  readonly issue: { readonly id: string; readonly name: string | null; readonly year: number | null } | null;
+}): AgentChecklistElsewhere {
+  return compact({
+    checklistId: row.id,
+    name: row.name,
+    spansIssues: row.issue === null,
+    issue: row.issue ? issueOf(row.issue) : undefined,
+  });
+}
+
+/** Why an entry named none of the checklists `order_checklists` was ordering, nor any checklist. */
+export function unfoundChecklist(input: string, scope: string): AgentUnfoundChecklist {
+  return { input, reason: `is no checklist id in this collection and the name of none of ${scope}` };
 }

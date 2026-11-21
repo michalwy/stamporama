@@ -2,13 +2,17 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   agentChecklist,
+  checklistElsewhere,
   checklistInUse,
   compareChecklistOrder,
+  resolveChecklistRefs,
   stampsNotOnIssue,
+  unfoundChecklist,
   unfoundStamp,
   type ChecklistOrderKey,
   type ChecklistRow,
 } from "../../src/lib/agent-api/checklist-reads";
+import { placeAmongThemselves } from "../../src/lib/checklist-order";
 
 // The pure half of the checklist operations (#1512): what a checklist is stated as, the order they
 // are listed in, and the refusals. The operations are driven end to end in
@@ -132,5 +136,53 @@ describe("the refusals and the lenient report", () => {
       input: "nope",
       reason: "is no stamp id and no catalogue number of a stamp in this collection",
     });
+  });
+});
+
+describe("the order of the checklists themselves (#2679)", () => {
+  const SCOPE = [
+    { id: "b", name: "Perforated (B)" },
+    { id: "s", name: "Shades" },
+    { id: "a", name: "Imperforate (A)" },
+  ];
+
+  it("names a checklist by id or by its name, trimmed and in any case, each once", () => {
+    assert.deepEqual(resolveChecklistRefs([" imperforate (a) ", "b", "a", "Perforated (B)"], SCOPE), {
+      placing: ["a", "b"],
+      ambiguous: [],
+      unmatched: [],
+    });
+  });
+
+  it("reports a name two of them share with both ids, and hands back what names none of them", () => {
+    const twins = [...SCOPE, { id: "a2", name: "imperforate (A)" }];
+    const resolved = resolveChecklistRefs(["Imperforate (A)", "elsewhere-id", "Nothing", "elsewhere-id", ""], twins);
+    assert.deepEqual(resolved.placing, []);
+    assert.deepEqual(resolved.ambiguous, [{ input: "Imperforate (A)", reason: "2 of them are called that: a, a2; send the id" }]);
+    assert.deepEqual(resolved.unmatched, ["elsewhere-id", "Nothing"]);
+  });
+
+  it("puts the ones sent in the places they held among themselves, every other where it stood", () => {
+    // Perforated, Shades (specialised, not sent), Imperforate — sending the two standard ones swapped.
+    assert.deepEqual(placeAmongThemselves(["b", "s", "a"], ["a", "b"]), ["a", "s", "b"]);
+    assert.deepEqual(placeAmongThemselves(["b", "s", "a"], ["s", "a", "b"]), ["s", "a", "b"]);
+    // One sent alone has only its own place to take; an unknown id and a repeat are ignored.
+    assert.deepEqual(placeAmongThemselves(["b", "s", "a"], ["a"]), ["b", "s", "a"]);
+    assert.deepEqual(placeAmongThemselves(["b", "s", "a"], ["x", "a", "a", "b"]), ["a", "s", "b"]);
+  });
+
+  it("states a checklist of somewhere else, and an entry that names none", () => {
+    assert.deepEqual(checklistElsewhere({ id: "o", name: "Other", issue: { id: "i9", name: "Later", year: 1930 } }), {
+      checklistId: "o",
+      name: "Other",
+      spansIssues: false,
+      issue: { issueId: "i9", name: "Later", year: 1930 },
+    });
+    assert.deepEqual(checklistElsewhere({ id: "sp", name: "Thematic", issue: null }), {
+      checklistId: "sp",
+      name: "Thematic",
+      spansIssues: true,
+    });
+    assert.match(unfoundChecklist("Nothing", 'the checklists of "Grosik"').reason, /the name of none of the checklists of "Grosik"/);
   });
 });

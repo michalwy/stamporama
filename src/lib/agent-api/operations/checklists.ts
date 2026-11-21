@@ -3,23 +3,33 @@ import { prisma } from "../../db";
 import {
   addStampsToIssueChecklist,
   addStampsToSpanningChecklist,
+  CHECKLIST_ORDER,
   CHECKLIST_STAMP_ORDER,
   createChecklist,
   deleteChecklist,
   followIssueOrder,
   getChecklistUsage,
   renameChecklist,
+  reorderChecklists,
   reorderChecklistStamps,
   setChecklistStamps,
 } from "../../checklists";
+import { placeAmongThemselves } from "../../checklist-order";
 import { translationsByLanguage } from "../../translations";
 import {
   agentChecklist,
+  checklistElsewhere,
   checklistInUse,
   compareChecklistOrder,
+  issueOf,
+  resolveChecklistRefs,
   stampsNotOnIssue,
+  unfoundChecklist,
   unfoundStamp,
   type AgentChecklist,
+  type AgentChecklistElsewhere,
+  type AgentChecklistIssue,
+  type AgentUnfoundChecklist,
   type AgentChecklistStamp,
   type AgentNamedStamp,
   type AgentUnfoundStamp,
@@ -42,22 +52,22 @@ import {
 
 // Checklists through the agent API (#1512): list and read them, create one on an issue or spanning
 // several (#1416), rename it and set its translations, add stamps, remove stamps, set their order
-// (#764), put an issue's checklist back to following the issue's order (#2208), and delete one
-// nothing prints.
+// (#764), put an issue's checklist back to following the issue's order (#2208), set the order of an
+// issue's checklists or of the spanning ones among themselves (#2679), and delete one nothing prints.
 //
 // **Every write is the app's own**, and the screens' rules hold unchanged: `createChecklist`,
-// `renameChecklist`, `setChecklistStamps`, `reorderChecklistStamps`, `followIssueOrder` and
-// `deleteChecklist` are the editors' writes; an add goes through `addStampsToSpanningChecklist` or, on an issue's own checklist,
+// `renameChecklist`, `setChecklistStamps`, `reorderChecklistStamps`, `followIssueOrder`,
+// `reorderChecklists` and `deleteChecklist` are the editors' writes; an add goes through `addStampsToSpanningChecklist` or, on an issue's own checklist,
 // `addStampsToIssueChecklist`, which admits only that issue's stamps as its editor does. A checklist
 // printed on an album card changes as it would from the screen: the card reports the difference
 // (#778) at read time, and nothing is reprinted.
 //
 // **This lifts #1438's catalogue boundary for checklists only, and for exactly these operations.**
-// `reorderChecklists` (the order of an issue's checklists) stays out, and so does every other
-// catalogue delete, move and reorder — `tests/unit/agent-api-operation-boundary.test.ts`.
+// `reorderChecklists` (the order of an issue's checklists) stayed out until #2679 lifted it; every
+// other catalogue delete, move and reorder still does — `tests/unit/agent-api-operation-boundary.test.ts`.
 //
 // **Removing and ordering are idempotent** and name the entries they could not place, rather than
-// refusing a batch over one stamp. Adding is not: a stamp the call cannot name, or one an issue's
+// refusing a batch over one stamp — or, ordering the checklists themselves, over one checklist. Adding is not: a stamp the call cannot name, or one an issue's
 // checklist may not hold, refuses the whole call, because an add is a statement about what the set
 // contains.
 //
@@ -646,6 +656,126 @@ export const followIssueOrderOperation: Operation = {
     description: "`checklist` as `list_checklists` now states it, `followsIssueOrder` true. `list_checklist_stamps` reads the order back.",
   },
   handler: async (context, params) => followIssueOrderFromParams(context, params),
+};
+
+// ── The order of the checklists themselves (#2679) ─────────────────────────
+
+export async function orderChecklistsFromParams(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<{
+  issue?: AgentChecklistIssue;
+  spansIssues: boolean;
+  changed: boolean;
+  placed: number;
+  checklists: AgentChecklist[];
+  elsewhere: AgentChecklistElsewhere[];
+  notFound: AgentUnfoundChecklist[];
+}> {
+  const issueId = optionalString(params, "issue_id");
+  const spanning = optionalBoolean(params, "spanning") === true;
+  if (issueId !== null && spanning) {
+    throw invalidRequest('"issue_id" orders one issue\'s own checklists and "spanning": true the checklists spanning issues. Send one or the other.');
+  }
+  if (issueId === null && !spanning) {
+    throw invalidRequest('Say whose checklists to order: "issue_id" for one issue\'s own, or "spanning": true for the checklists spanning issues.');
+  }
+  const issue =
+    issueId === null
+      ? null
+      : await prisma.issue.findFirst({
+          where: { id: issueId, collectionId: context.collectionId },
+          select: { id: true, name: true, year: true },
+        });
+  if (issueId !== null && !issue) {
+    throw notFound(`No issue with id "${issueId}" is in this token's collection. Use \`search_collection\` to find the right id.`);
+  }
+  const refs = stringList(params, "checklists").filter((ref) => ref.trim() !== "");
+  if (refs.length === 0) {
+    throw invalidRequest('"checklists" must name at least one checklist, by id from `list_checklists` or by name.');
+  }
+
+  // Every one of them, the specialised included: their places are what the order is about (#1617).
+  const scope = await prisma.checklist.findMany({
+    where: { collectionId: context.collectionId, issueId: issue?.id ?? null },
+    orderBy: [...CHECKLIST_ORDER],
+    select: { id: true, name: true },
+  });
+  const { placing, ambiguous, unmatched } = resolveChecklistRefs(refs, scope);
+  const others =
+    unmatched.length === 0
+      ? []
+      : await prisma.checklist.findMany({
+          where: { id: { in: unmatched }, collectionId: context.collectionId },
+          select: { id: true, name: true, issue: { select: { id: true, name: true, year: true } } },
+        });
+  const otherById = new Map(others.map((row) => [row.id, row]));
+  const scopeLabel = issue ? `the checklists of "${issue.name ?? issue.id}"` : "the checklists spanning issues";
+
+  const current = scope.map((row) => row.id);
+  const ordered = placeAmongThemselves(current, placing);
+  const changed = ordered.some((id, i) => id !== current[i]);
+  // The screen's own write, and only when it changes something: the same order sent again writes nothing.
+  if (changed) await reorderChecklists(context.ownerId, context.collectionId, issue?.id ?? null, placing);
+
+  const after = await prisma.checklist.findMany({
+    where: { collectionId: context.collectionId, issueId: issue?.id ?? null },
+    orderBy: [...CHECKLIST_ORDER],
+    select: { id: true },
+  });
+  return {
+    ...(issue ? { issue: issueOf(issue) } : {}),
+    spansIssues: issue === null,
+    changed,
+    placed: placing.length,
+    checklists: await describeChecklists(context, after.map((row) => row.id)),
+    elsewhere: unmatched.flatMap((ref) => {
+      const row = otherById.get(ref);
+      return row ? [checklistElsewhere(row)] : [];
+    }),
+    notFound: [
+      ...ambiguous,
+      ...unmatched.filter((ref) => !otherById.has(ref)).map((ref) => unfoundChecklist(ref, scopeLabel)),
+    ],
+  };
+}
+
+export const orderChecklistsOperation: Operation = {
+  name: "order_checklists",
+  method: "POST",
+  path: "/checklists/order",
+  description:
+    "Set the order of one issue's own checklists among themselves, or of the checklists spanning issues among themselves, as dragging them in the checklists editor does. The order is the collector's and it matters: the issue's first standard checklist is the one a single-checklist badge shows and the one a new stamp of the issue joins by default. The checklists sent take the places they held among themselves, in the order sent; every checklist not sent keeps its place — so sending only the standard ones leaves each specialised one where it stands. Send them all to set the whole order. This orders the checklists; `set_checklist_order` orders the stamps on one. Idempotent: a checklist of another issue, or an entry naming none, is reported and the rest are still placed; the order the checklists already have is answered with `changed` false and nothing written.",
+  writes: true,
+  parameters: [
+    {
+      name: "issue_id",
+      in: "body",
+      type: "string",
+      required: false,
+      description: "The issue whose own checklists to order, by id from `search_collection` or `get_stamp`. Send this or `spanning`.",
+    },
+    {
+      name: "spanning",
+      in: "body",
+      type: "boolean",
+      required: false,
+      description: "true to order the checklists spanning issues among themselves. Send this or `issue_id`.",
+    },
+    {
+      name: "checklists",
+      in: "body",
+      type: "string[]",
+      required: true,
+      description: "The checklists in the order they should read, each by id from `list_checklists` or by its name — a name two of them share is reported, send the id.",
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "`issue` (absent for the spanning ones), `spansIssues`, `changed` — false when they already read so and nothing was written — `placed`, how many of those sent took their places, `checklists`: every one of them, specialised included, in their new order as `list_checklists` states each, `elsewhere`: checklists sent that belong to another issue or the other kind, and `notFound`, each entry that named none with the reason.",
+  },
+  handler: async (context, params) => orderChecklistsFromParams(context, params),
 };
 
 // ── Deleting ───────────────────────────────────────────────────────────────

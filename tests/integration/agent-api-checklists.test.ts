@@ -6,7 +6,14 @@ import { createAssistantToken } from "../../src/lib/api-tokens";
 import { addAlbumEntry, createAlbum } from "../../src/lib/albums";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
 import { DELETE, GET, PATCH, POST } from "../../src/app/api/v1/[...path]/route";
-import type { AgentChecklist, AgentChecklistStamp, AgentNamedStamp, AgentUnfoundStamp } from "../../src/lib/agent-api/checklist-reads";
+import type {
+  AgentChecklist,
+  AgentChecklistElsewhere,
+  AgentChecklistStamp,
+  AgentNamedStamp,
+  AgentUnfoundChecklist,
+  AgentUnfoundStamp,
+} from "../../src/lib/agent-api/checklist-reads";
 import type { ListResponse } from "../../src/lib/agent-api/list";
 import type { AgentIssueDetail } from "../../src/lib/agent-api/collection-reads";
 import type { AgentCreatedStamp } from "../../src/lib/agent-api/operations/catalog-edits";
@@ -19,7 +26,10 @@ import type { AgentCreatedStamp } from "../../src/lib/agent-api/operations/catal
 // added, removed and put in order and read back, a stamp of another issue refused on an issue's own
 // checklist, removing and ordering idempotent over entries they cannot place, a checklist an album
 // prints refused a delete naming the album, an unused one deleted with its stamps kept, a read-only
-// token refused on every write, and the exact list of checklist operations.
+// token refused on every write, and the exact list of checklist operations. #2679 added the order of
+// the checklists themselves: an issue's, by name or id, a specialised one not sent kept where it
+// stood, the same order sent again writing nothing, another issue's checklist reported, and the
+// spanning ones among themselves.
 
 const ts = Date.now();
 
@@ -62,6 +72,15 @@ type StampsPage = ListResponse<AgentChecklistStamp> & Named;
 type Added = Named & { added: AgentNamedStamp[]; alreadyOn: AgentNamedStamp[] };
 type Removed = Named & { removed: AgentNamedStamp[]; notOnChecklist: AgentNamedStamp[]; notFound: AgentUnfoundStamp[] };
 type Ordered = Named & { placed: number; keptAfter: number; notOnChecklist: AgentNamedStamp[]; notFound: AgentUnfoundStamp[] };
+type ChecklistsOrdered = {
+  issue?: { issueId: string };
+  spansIssues: boolean;
+  changed: boolean;
+  placed: number;
+  checklists: AgentChecklist[];
+  elsewhere: AgentChecklistElsewhere[];
+  notFound: AgentUnfoundChecklist[];
+};
 
 const CHECKLIST_OPERATIONS = [
   "GET /checklists list_checklists",
@@ -72,6 +91,7 @@ const CHECKLIST_OPERATIONS = [
   "POST /checklists/{checklist_id}/stamps/remove remove_checklist_stamps",
   "POST /checklists/{checklist_id}/order set_checklist_order",
   "POST /checklists/{checklist_id}/order/follow-issue follow_issue_order",
+  "POST /checklists/order order_checklists",
   "DELETE /checklists/{checklist_id} delete_checklist",
 ];
 
@@ -268,6 +288,115 @@ describe("checklists through the agent API (#1512)", () => {
     });
   });
 
+  describe("the order of the checklists themselves (#2679)", () => {
+    let shadesId: string;
+    let thematicId: string;
+    const issueOrder = async () =>
+      (await ok<ListResponse<AgentChecklist>>(token, "GET", `/checklists?issue_id=${grosik.issueId}&include_specialised=true`)).items.map(
+        (row) => row.name
+      );
+
+    before(async () => {
+      shadesId = (
+        await ok<AgentChecklist>(token, "POST", "/checklists", { name: "Shades", issue_id: grosik.issueId, type: "specialised" })
+      ).checklistId;
+      // Grosik, Shades (specialised), Imperforate.
+      const set = await ok<ChecklistsOrdered>(token, "POST", "/checklists/order", {
+        issue_id: grosik.issueId,
+        checklists: [grosik.checklists[0].checklistId, shadesId, imperforateId],
+      });
+      assert.deepEqual(set.checklists.map((row) => row.name), ["Grosik", "Shades", "Imperforate"]);
+    });
+
+    after(async () => {
+      await ok(token, "DELETE", `/checklists/${shadesId}`);
+      await ok(token, "DELETE", `/checklists/${thematicId}`);
+      await ok(token, "POST", "/checklists/order", { issue_id: grosik.issueId, checklists: [grosik.checklists[0].checklistId, imperforateId] });
+    });
+
+    it("puts the standard ones sent in their places by name, leaving the specialised one where it was, and every read agrees", async () => {
+      const ordered = await ok<ChecklistsOrdered>(token, "POST", "/checklists/order", {
+        issue_id: grosik.issueId,
+        checklists: ["imperforate", "Grosik"],
+      });
+      assert.equal(ordered.changed, true);
+      assert.equal(ordered.placed, 2);
+      assert.equal(ordered.issue?.issueId, grosik.issueId);
+      assert.equal(ordered.spansIssues, false);
+      assert.deepEqual(
+        ordered.checklists.map((row) => [row.name, row.type]),
+        [
+          ["Imperforate", "standard"],
+          ["Shades", "specialised"],
+          ["Grosik", "standard"],
+        ]
+      );
+      assert.deepEqual(await issueOrder(), ["Imperforate", "Shades", "Grosik"]);
+      const issue = await ok<AgentIssueDetail>(token, "GET", `/issues/${grosik.issueId}`);
+      assert.deepEqual(issue.checklists.map((row) => row.name), ["Imperforate", "Grosik"]);
+    });
+
+    it("answers the order the issue already has as unchanged, writing nothing", async () => {
+      const before = await prisma.checklist.findMany({ where: { issueId: grosik.issueId }, select: { id: true, sortOrder: true }, orderBy: { id: "asc" } });
+      const again = await ok<ChecklistsOrdered>(token, "POST", "/checklists/order", {
+        issue_id: grosik.issueId,
+        checklists: [imperforateId, grosik.checklists[0].checklistId],
+      });
+      assert.equal(again.changed, false);
+      assert.equal(again.placed, 2);
+      assert.deepEqual(
+        await prisma.checklist.findMany({ where: { issueId: grosik.issueId }, select: { id: true, sortOrder: true }, orderBy: { id: "asc" } }),
+        before
+      );
+    });
+
+    it("reports another issue's checklist, a spanning one and an entry naming none, and still places the rest", async () => {
+      const ordered = await ok<ChecklistsOrdered>(token, "POST", "/checklists/order", {
+        issue_id: grosik.issueId,
+        checklists: [later.checklists[0].checklistId, spanningId, "Nothing", shadesId, imperforateId],
+      });
+      assert.equal(ordered.changed, true);
+      assert.equal(ordered.placed, 2);
+      assert.deepEqual(
+        ordered.elsewhere.map((row) => [row.name, row.spansIssues, row.issue?.name]),
+        [
+          ["Later", false, "Later"],
+          ["Grosik 1928–1932", true, undefined],
+        ]
+      );
+      assert.deepEqual(ordered.notFound.map((row) => row.input), ["Nothing"]);
+      assert.deepEqual(await issueOrder(), ["Shades", "Imperforate", "Grosik"]);
+    });
+
+    it("orders the checklists spanning issues among themselves, an issue's own reported", async () => {
+      thematicId = (await ok<AgentChecklist>(token, "POST", "/checklists", { name: "Thematic" })).checklistId;
+      const ordered = await ok<ChecklistsOrdered>(token, "POST", "/checklists/order", {
+        spanning: true,
+        checklists: [thematicId, imperforateId, spanningId],
+      });
+      assert.equal(ordered.changed, true);
+      assert.equal(ordered.spansIssues, true);
+      assert.equal(ordered.issue, undefined);
+      assert.deepEqual(ordered.checklists.map((row) => row.name), ["Thematic", "Grosik 1928–1932"]);
+      assert.deepEqual(ordered.elsewhere.map((row) => row.checklistId), [imperforateId]);
+      const spanning = await ok<ListResponse<AgentChecklist>>(token, "GET", "/checklists?spanning=true");
+      assert.deepEqual(spanning.items.map((row) => row.name), ["Thematic", "Grosik 1928–1932"]);
+      assert.deepEqual(await issueOrder(), ["Shades", "Imperforate", "Grosik"], "an issue's own kept its order");
+    });
+
+    it("refuses a call that does not say whose checklists, or says both, or names no issue of the collection", async () => {
+      const neither = await refused(token, "POST", "/checklists/order", { checklists: [imperforateId] });
+      assert.equal(neither.error.code, "invalid_request");
+      const both = await refused(token, "POST", "/checklists/order", { issue_id: grosik.issueId, spanning: true, checklists: [imperforateId] });
+      assert.equal(both.error.code, "invalid_request");
+      const empty = await refused(token, "POST", "/checklists/order", { issue_id: grosik.issueId, checklists: [] });
+      assert.equal(empty.error.code, "invalid_request");
+      const unknown = await refused(token, "POST", "/checklists/order", { issue_id: "nope", checklists: [imperforateId] });
+      assert.equal(unknown.status, 404);
+      assert.deepEqual(await issueOrder(), ["Shades", "Imperforate", "Grosik"]);
+    });
+  });
+
   describe("the order", () => {
     it("puts the stamps sent first, keeps the rest after them, and reports what it could not place", async () => {
       const ordered = await ok<Ordered>(token, "POST", `/checklists/${spanningId}/order`, {
@@ -381,6 +510,7 @@ describe("checklists through the agent API (#1512)", () => {
         ["POST", `/checklists/${imperforateId}/stamps/remove`],
         ["POST", `/checklists/${imperforateId}/order`],
         ["POST", `/checklists/${imperforateId}/order/follow-issue`],
+        ["POST", "/checklists/order"],
         ["DELETE", `/checklists/${imperforateId}`],
       ];
       for (const [method, path] of calls) {
@@ -392,14 +522,23 @@ describe("checklists through the agent API (#1512)", () => {
       await ok<ListResponse<AgentChecklist>>(readOnlyToken, "GET", "/checklists");
     });
 
-    it("publishes exactly these checklist operations, seven of them writing", () => {
+    it("publishes exactly these checklist operations, eight of them writing", () => {
       const checklist = OPERATIONS.filter((op) => /^\/checklists(\/|$)/.test(op.path)).map(
         (op) => `${op.method} ${op.path} ${op.name}`
       );
       assert.deepEqual(checklist.sort(), [...CHECKLIST_OPERATIONS].sort());
       assert.deepEqual(
         OPERATIONS.filter((op) => /^\/checklists(\/|$)/.test(op.path) && op.writes).map((op) => op.name).sort(),
-        ["add_checklist_stamps", "create_checklist", "delete_checklist", "follow_issue_order", "remove_checklist_stamps", "set_checklist_order", "update_checklist"]
+        [
+          "add_checklist_stamps",
+          "create_checklist",
+          "delete_checklist",
+          "follow_issue_order",
+          "order_checklists",
+          "remove_checklist_stamps",
+          "set_checklist_order",
+          "update_checklist",
+        ]
       );
     });
   });
