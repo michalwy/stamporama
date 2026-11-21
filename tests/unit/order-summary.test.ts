@@ -63,7 +63,7 @@ describe("sortCopiesInSetOrder (#2512)", () => {
 });
 
 describe("areasInLanguage (#2604)", () => {
-  const areas = [
+  const areas: { id: string; name: string; titleNameByLanguage: Record<string, string> }[] = [
     { id: "pl", name: "Polska", titleNameByLanguage: { de: "Polen" } },
     { id: "ii", name: "II RP", titleNameByLanguage: {} },
     { id: "gg", name: "GG", titleNameByLanguage: { de: "  " } },
