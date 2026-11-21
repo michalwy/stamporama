@@ -31,6 +31,12 @@ import {
   postProposalSentRefusal,
   type PostProposalLotFacts,
   type ProposalTotalLot,
+  declineProposalMessage,
+  proposalBuyerPickTicks,
+  proposalConversionOutcomeText,
+  proposalConversionWithdrawn,
+  proposalHasOpenLot,
+  proposalTicksRefusal,
 } from "../../src/lib/proposal-rules";
 
 // A proposal's rules (#2287; ADR-0075): its status, what may join it, and its total.
@@ -364,5 +370,64 @@ describe("a proposal made from a Facebook post (#2602)", () => {
     const proposal = { proposalNo: 4, contactName: "Jan Kowalski" };
     assert.match(postProposalSentRefusal(proposal), /Proposal #4 for Jan Kowalski .* has been sent/);
     assert.equal(postProposalPublishWarning(proposal), "Proposal #4 for Jan Kowalski is still open — publish anyway?");
+  });
+});
+
+describe("the conversion's shared rules (#2627 — the desk's dialog and the phone's form)", () => {
+  it("needs a lot still open", () => {
+    assert.equal(proposalHasOpenLot([{ state: "sold" }, { state: "paused" }]), true);
+    assert.equal(proposalHasOpenLot([{ state: "sold" }, { state: "withdrawn" }]), false);
+    assert.equal(proposalHasOpenLot([]), false);
+  });
+
+  it("starts from the buyer's picks that can still be sold, each at its price", () => {
+    assert.deepEqual(
+      proposalBuyerPickTicks([
+        { offerId: "a", price: "5.00", picked: true, unsellable: null },
+        { offerId: "b", price: null, picked: true, unsellable: null },
+        { offerId: "c", price: "7.00", picked: false, unsellable: null },
+        { offerId: "d", price: "9.00", picked: true, unsellable: "Already sold" },
+      ]),
+      { a: "5.00", b: "" }
+    );
+  });
+
+  it("withdraws every open lot not ticked", () => {
+    const lots = [
+      { offerId: "a", state: "active" as const },
+      { offerId: "b", state: "preparing" as const },
+      { offerId: "c", state: "sold" as const },
+      { offerId: "d", state: "paused" as const },
+    ];
+    assert.equal(proposalConversionWithdrawn(lots, new Set(["a"])), 2);
+    assert.equal(proposalConversionWithdrawn(lots, new Set(["a", "b", "d"])), 0);
+  });
+
+  it("says what happens to the lots not taken", () => {
+    assert.equal(proposalConversionOutcomeText(null, 4), "4 lots withdrawn, and the proposal closes as Sold.");
+    assert.equal(proposalConversionOutcomeText(null, 1), "1 lot withdrawn, and the proposal closes as Sold.");
+    assert.equal(proposalConversionOutcomeText(null, 0), "No lot withdrawn, and the proposal closes as Sold.");
+    assert.equal(
+      proposalConversionOutcomeText({ postNo: 12 }, 4),
+      "The lots not taken stay in post #12, and the proposal closes as Sold."
+    );
+  });
+
+  it("refuses no tick, a price that is not one, and two currencies", () => {
+    assert.match(proposalTicksRefusal([])!, /Tick the lots/);
+    assert.match(proposalTicksRefusal([{ offerNo: 3, price: "abc", currency: "PLN" }])!, /^Offer #3: /);
+    assert.match(
+      proposalTicksRefusal([
+        { offerNo: 3, price: "5", currency: "PLN" },
+        { offerNo: 4, price: "6", currency: "EUR" },
+      ])!,
+      /one currency/
+    );
+    assert.equal(proposalTicksRefusal([{ offerNo: 3, price: "5,50", currency: "PLN" }]), null);
+  });
+
+  it("asks before declining in the desk's words, a post's lots staying in it", () => {
+    assert.match(declineProposalMessage(7, null), /^Proposal #7 is closed as declined, and every lot still open is withdrawn/);
+    assert.match(declineProposalMessage(7, { postNo: 3 }), /Its lots stay in post #3 as they are/);
   });
 });

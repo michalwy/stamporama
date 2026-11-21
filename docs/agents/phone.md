@@ -210,6 +210,28 @@ desktop-only.
 - **Stays at the desk**: making a proposal, adding or removing lots, prices, the document (PDF) — the
   live link shows the buyer everything — and the photos.
 
+## Closing a proposal (#2627)
+
+- **Convert to sale, Reopen and Decline on the proposal's screen** (settled with the collector on
+  2026-11-21), under *The buyer answered* in `phone-proposal-moves.tsx`. **Exactly the desk's moves in
+  each state, never more** (decided in writing the issue): `phoneProposalMoves`
+  (`phone-proposal-rules.ts`) reads them off `proposalMoveRefusal` and `proposalHasOpenLot` — the
+  rule the desk's *Convert to sale…* button was rewired to — rather than listing them. *Mark sent*
+  stays the handover's.
+- **The conversion asks inline, not in a dialog**, as *Sell* does on an offer (#2009): the desk
+  dialog's options from the desk's route (`useProposalSaleOptions`), the ticks starting from the
+  buyer's picks (`proposalBuyerPickTicks`), a price field per ticked lot, the target a new sale or one
+  of the contact's not yet sent (`proposalSaleTargetRefusal` greys the rest), and the write the desk's
+  `convertProposalToSaleAction`. What the dialog decided inline — the starting ticks, the lots
+  withdrawn, the sentence about them, the checks before the server's — moved to `proposal-rules.ts`
+  (`proposalConversionWithdrawn`, `proposalConversionOutcomeText`, `proposalTicksRefusal`) so the two
+  cannot drift. The catalogue/cost figures and the profit line are the desk's: the phone shows the
+  ticked lots, sets and total. *Swap* for a copy listed elsewhere (#2339) stays at the desk.
+- **Afterwards the phone goes to Sales to do** (`phoneSalesPath`), as after *Sell*.
+- **Decline asks first** with the desk's own sentence (`declineProposalMessage`, which the desk's
+  confirmation now uses too), inline. **Reopen** asks nothing, as the desk's button does. Each is
+  `moveProposalAction`; afterwards `router.refresh()` and `invalidateAll`, as the handover's writes.
+
 ## A Facebook group auction (#2010)
 
 - **The desk card's *Bidding*, on the offer screen above *Sell***: `PhoneOfferBidding`
@@ -366,6 +388,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Facebook group auction: record bid, close | #2010 |
 | Facebook posts: list, a post's screen with all its lots | #2626 |
 | Proposals: list, proposal screen, share to the buyer | #2625 |
+| Proposals: convert to a sale, decline, reopen | #2627 |
 
 **Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
 editing and publishing offers; intake, lots and the cost split; everything not in the table.

@@ -5,6 +5,7 @@ import {
   parsePhoneProposalShow,
   phoneLotCountText,
   phoneProposalLotPicture,
+  phoneProposalMoves,
   phoneProposalShareText,
   phoneProposalStatuses,
   phoneShareMarksSent,
@@ -88,5 +89,28 @@ describe("phoneProposalLotPicture", () => {
 
   it("is none when neither exists", () => {
     assert.equal(phoneProposalLotPicture([], null), null);
+  });
+});
+
+describe("phoneProposalMoves (#2627)", () => {
+  const open = [{ state: "active" as const }, { state: "withdrawn" as const }];
+  it("offers Convert, Reopen and Decline on a Sent proposal with a lot still open", () => {
+    assert.deepEqual(phoneProposalMoves("sent", open), { convert: true, reopen: true, decline: true });
+  });
+  it("offers no Reopen while it is being prepared", () => {
+    assert.deepEqual(phoneProposalMoves("preparing", open), { convert: true, reopen: false, decline: true });
+  });
+  it("offers no conversion with no lot still open — only Decline, as at the desk", () => {
+    assert.deepEqual(phoneProposalMoves("sent", [{ state: "sold" }, { state: "withdrawn" }]), {
+      convert: false,
+      reopen: true,
+      decline: true,
+    });
+    assert.deepEqual(phoneProposalMoves("preparing", []), { convert: false, reopen: false, decline: true });
+  });
+  it("offers nothing once the proposal is sold or declined", () => {
+    for (const status of ["sold", "declined"] as const) {
+      assert.deepEqual(phoneProposalMoves(status, open), { convert: false, reopen: false, decline: false });
+    }
   });
 });

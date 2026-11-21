@@ -10,9 +10,15 @@ import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { THUMB_OBJECT_FIT, ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import { formatPriceMargin, marginSign } from "@/lib/offer-price-table";
-import { OPEN_OFFER_STATES } from "@/lib/offer-rules";
-import { proposalLotCurrency, proposalSaleTargetRefusal, proposalSaleTotals } from "@/lib/proposal-rules";
-import { parsePrice } from "@/lib/sale-rules";
+import {
+  proposalBuyerPickTicks,
+  proposalConversionOutcomeText,
+  proposalConversionWithdrawn,
+  proposalLotCurrency,
+  proposalSaleTargetRefusal,
+  proposalSaleTotals,
+  proposalTicksRefusal,
+} from "@/lib/proposal-rules";
 import type { ProposalSaleInput, ProposalSaleLot } from "@/lib/proposals";
 import { SALE_STATUS_META } from "../../../sales/sale-status";
 import { OfferStateChip } from "../../offer-badges";
@@ -126,17 +132,15 @@ export function ConvertProposalDialog({
   const sellable = lots.filter((lot) => lot.unsellable === null);
   // The window opens with the lots the buyer ticked on the live page already ticked (#2601), each at
   // its proposal price — a pick that can no longer be sold stays greyed as any such lot is.
-  const ticked = changed ?? buyerPicks(sellable);
+  const ticked = changed ?? proposalBuyerPickTicks(sellable);
   const setTicked = (update: (prev: Record<string, string>) => Record<string, string>) =>
-    setChanged((prev) => update(prev ?? buyerPicks(sellable)));
+    setChanged((prev) => update(prev ?? proposalBuyerPickTicks(sellable)));
   const tickedLots = sellable.filter((lot) => lot.offerId in ticked);
   const currency = proposalLotCurrency(tickedLots.map((lot) => lot.currency));
   const lotCurrency = currency.ok ? currency.currency : (sellable[0]?.currency ?? "");
   const allTicked = sellable.length > 0 && tickedLots.length === sellable.length;
   // Every open lot not ticked is withdrawn, one with nothing left to sell included.
-  const withdrawn = lots.filter(
-    (lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state) && !(lot.offerId in ticked)
-  ).length;
+  const withdrawn = proposalConversionWithdrawn(lots, new Set(Object.keys(ticked)));
 
   function toggle(lot: ProposalSaleLot) {
     setLocalError(undefined);
@@ -161,19 +165,11 @@ export function ConvertProposalDialog({
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (tickedLots.length === 0) {
-      setLocalError("Tick the lots the buyer took. If they took none, decline the proposal instead.");
-      return;
-    }
-    for (const lot of tickedLots) {
-      const price = parsePrice(ticked[lot.offerId] ?? "");
-      if (!price.ok) {
-        setLocalError(`Offer #${lot.offerNo}: ${price.message}`);
-        return;
-      }
-    }
-    if (!currency.ok) {
-      setLocalError(currency.message);
+    const refusal = proposalTicksRefusal(
+      tickedLots.map((lot) => ({ offerNo: lot.offerNo, price: ticked[lot.offerId] ?? "", currency: lot.currency }))
+    );
+    if (refusal) {
+      setLocalError(refusal);
       return;
     }
     onSubmit({
@@ -383,9 +379,7 @@ export function ConvertProposalDialog({
           </p>
           <p style={{ ...MUTED, margin: 0 }}>
             {/* A proposal made from a post withdraws nothing (#2602): the rest stay in the post. */}
-            {options?.post
-              ? `The lots not taken stay in post #${options.post.postNo}, and the proposal closes as Sold.`
-              : `${withdrawn > 0 ? `${counted(withdrawn, "lot", "lots")} withdrawn` : "No lot withdrawn"}, and the proposal closes as Sold.`}
+            {proposalConversionOutcomeText(options?.post ?? null, withdrawn)}
           </p>
         </div>
         <DialogActions
@@ -397,11 +391,6 @@ export function ConvertProposalDialog({
       </form>
     </DialogShell>
   );
-}
-
-/** The buyer's picks as the window's ticks, each at its proposal price. */
-function buyerPicks(sellable: readonly ProposalSaleLot[]): Record<string, string> {
-  return Object.fromEntries(sellable.filter((lot) => lot.picked).map((lot) => [lot.offerId, lot.price ?? ""]));
 }
 
 /** One lot: its tick, its photo, its number, its offer — a link, opened beside the window so the ticks

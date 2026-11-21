@@ -27,10 +27,12 @@ import {
   proposalTotalText,
 } from "@/app/c/[collectionSlug]/offers/proposals/proposal-parts";
 import { useHydrated } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
+import { PhoneProposalMoves } from "./phone-proposal-moves";
 
 /**
  * A proposal's phone screen body (#2625): who it is for, where it stands, its lots — and handing it to
- * the buyer, who is reached through a phone app, mostly Messenger.
+ * the buyer, who is reached through a phone app, mostly Messenger. Once the buyer has answered, the
+ * desk's moves close it — convert to a sale, reopen, decline (#2627, `PhoneProposalMoves`).
  *
  * **Share** opens the phone's own share menu with the message and the live link in one text, so the
  * collector picks the app; a share that went through marks a Preparing proposal Sent — the one way the
@@ -82,6 +84,8 @@ export function PhoneProposalPanel({
       {proposal.message && (
         <PhoneProposalHandover collectionId={collectionId} proposal={proposal} message={proposal.message} />
       )}
+
+      <PhoneProposalMoves collectionId={collectionId} collectionSlug={collectionSlug} proposal={proposal} />
 
       <section style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
         <h3 style={HEADING}>Lots</h3>
