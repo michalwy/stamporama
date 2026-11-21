@@ -896,6 +896,13 @@ laid out the same way.
      list shows, the remembered ones among them. Expand all itself is not remembered: the picker
      reopens on the issues you had opened by hand.
 
+     **Sort**, in the same toolbar, orders the issues the way the Issues list can: by **Year**,
+     **Name** or **Catalog number**, each either way round. *Catalog number* reads the area's
+     primary catalogue number alone, whatever the year, so when you work from a catalogue the
+     next number is the next row — Fi 97–101 from 1920 comes before Fi 107–13 from 1919. The
+     picker remembers its sort for every place it opens, apart from the Issues list's: changing
+     one leaves the other as it was. Until you change it, the picker lists by year, oldest first.
+
      The issue list loads **as you scroll**, like the Issues screen, and the area, year and
      search filters all narrow it before it is fetched — so the picker opens just as quickly on
      a collection of thousands of issues as on a small one. An issue's stamps are read when you
