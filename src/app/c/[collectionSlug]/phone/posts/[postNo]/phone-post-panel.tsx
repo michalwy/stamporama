@@ -15,13 +15,15 @@ import { PhoneStampThumb } from "../../phone-stamp-thumb";
 import { PhonePostStageChip } from "../phone-post-stage-chip";
 import { PhonePostPublishing } from "./phone-post-publishing";
 import { CopyCaption } from "./phone-post-caption";
+import { PhonePostLotBid } from "./phone-post-lot-bid";
 
 /**
  * The post's phone screen's body (#2626): what the post is — its title, group, stage and, while it is
  * up, when its auctions close — the proposal made from it, and every lot in lot order. A tap on a lot
- * opens its phone offer screen, where a bid is recorded (#2010) and the lot sold (#2009) or withdrawn
- * (#2008). A post ready to go up is published from here, and one waiting for the group's approval is
- * approved or rejected (#2629, `PhonePostPublishing`); a captioned post's lots then carry *Copy caption*.
+ * opens its phone offer screen, where the lot is sold (#2009) or withdrawn (#2008); a lot still bidding
+ * has *Record bid* under its row (#2630, `PhonePostLotBid`), the bid its own screen records (#2010). A
+ * post ready to go up is published from here, and one waiting for the group's approval is approved or
+ * rejected (#2629, `PhonePostPublishing`); a captioned post's lots then carry *Copy caption*.
  *
  * A client module for the closing time, which is the collector's own zone and drawn once mounted (#490),
  * and for the photo address the lot's thumbnail is drawn from.
@@ -77,18 +79,14 @@ export function PhonePostPanel({
           {post.lots.map((lot) => {
             const kitLot = post.kit.lots.find((l) => l.offerId === lot.offerId);
             const row = (
-              <PhonePostLotRow
-                key={lot.offerId}
-                collectionId={collectionId}
-                href={phoneOfferPath(collectionSlug, lot.offerId)}
-                lot={lot}
-              />
+              <PhonePostLotRow collectionId={collectionId} href={phoneOfferPath(collectionSlug, lot.offerId)} lot={lot} />
             );
-            if (!captioned || !kitLot || isFacebookLotLeftOut(kitLot)) return row;
+            const caption = captioned && kitLot && !isFacebookLotLeftOut(kitLot);
             return (
               <div key={lot.offerId} style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                 {row}
-                <CopyCaption kit={post.kit} offerId={lot.offerId} lotNo={lot.lotNo} />
+                {lot.bidding && <PhonePostLotBid collectionId={collectionId} lot={lot} bidding={lot.bidding} />}
+                {caption && <CopyCaption kit={post.kit} offerId={lot.offerId} lotNo={lot.lotNo} />}
               </div>
             );
           })}

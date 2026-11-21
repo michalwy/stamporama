@@ -5,6 +5,7 @@
 // post screen reads it and hands it here.
 
 import type { FacebookKitLot } from "./facebook-auctions";
+import { facebookBidding, type FacebookBidding } from "./facebook-bidding-rules";
 import type { FacebookPostPhotos } from "./facebook-lot-photos";
 import {
   FACEBOOK_POST_STAGE_LABEL,
@@ -56,6 +57,10 @@ export interface PhonePostLot {
   /** The desk's post screen's price (`facebookLotPrice`): an auction's recorded bid once there is one,
    *  else its starting price; a quick buy's asking price. `amount` null for an auction with no start. */
   price: { label: "Price" | "Bid" | "Start"; amount: string | null; currency: string };
+  /** The lot's bidding while it is followed (#2630) — the offer's phone screen's and the desk card's
+   *  rule, `facebookBidding`, `closed` as of the read — with when its bid was last recorded (#1545).
+   *  Null on a lot nobody bids on: a quick buy, or an auction not up, sold or withdrawn. */
+  bidding: (FacebookBidding & { priceCheckedAt: string | null }) | null;
 }
 
 /**
@@ -71,8 +76,19 @@ export function phonePostLotPhotoId(photos: FacebookPostPhotos, offerId: string)
   return photos.lots.find((l) => l.offerId === offerId)?.images[0]?.photoId ?? null;
 }
 
-/** The post's lots in lot order, as its phone screen draws them. */
-export function phonePostLots(lots: readonly FacebookKitLot[], photos: FacebookPostPhotos): PhonePostLot[] {
+/** A lot's bidding as the post's phone screen follows it (#2630): the one rule the offer's phone
+ *  screen and the desk follow it by — every lot of a post is in a Facebook group — as of `now`. */
+export function phonePostLotBidding(lot: FacebookKitLot, now: Date): PhonePostLot["bidding"] {
+  const bidding = facebookBidding(lot, now);
+  return bidding && { ...bidding, priceCheckedAt: lot.priceCheckedAt };
+}
+
+/** The post's lots in lot order, as its phone screen draws them, their bidding as of `now`. */
+export function phonePostLots(
+  lots: readonly FacebookKitLot[],
+  photos: FacebookPostPhotos,
+  now: Date
+): PhonePostLot[] {
   return lots.map((lot, index) => ({
     offerId: lot.offerId,
     offerNo: lot.offerNo,
@@ -81,5 +97,6 @@ export function phonePostLots(lots: readonly FacebookKitLot[], photos: FacebookP
     state: lot.state,
     photoId: phonePostLotPhotoId(photos, lot.offerId),
     price: { ...facebookLotPrice(lot), currency: lot.currency },
+    bidding: phonePostLotBidding(lot, now),
   }));
 }

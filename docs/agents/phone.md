@@ -281,7 +281,7 @@ desktop-only.
   bid is recorded, then *Bid*; a quick buy's *Price*. A post of one numbers its lot 1.
 - **A tap on a lot opens its phone offer screen** (`phoneOfferPath`), where the bid (#2010), *Sell*
   (#2009) and *Withdraw* (#2008) already are. The post's own moves are added here: publishing
-  (#2629, below), the rest by #2630–#2632. A proposal made from the post links to `phoneProposalPath` —
+  (#2629), bids lot by lot (#2630), both below; the rest by #2631–#2632. A proposal made from the post links to `phoneProposalPath` —
   #2625's screen.
 
 ## Publishing a Facebook post (#2629)
@@ -318,6 +318,21 @@ desktop-only.
   desk's words. The toast is `facebookPostPublishedMessage`, shared with the desk. While a proposal
   made from the post is open, *Published* asks first with `postProposalPublishConfirm` (#2602), the
   desk's sentence. Inline on the screen, not the desk's dialog, as the phone's other moves.
+
+## Bids on the post's screen (#2630)
+
+- **Bids are recorded lot by lot on the post's screen** (settled with the collector on 2026-11-21),
+  since during an auction they come in on several lots of one post at once: a lot still bidding has
+  *Record bid* under its row (`PhonePostLotBid`, `phone/posts/[postNo]/phone-post-lot-bid.tsx`), with
+  when its bid was last recorded. **Which lots is the offer screen's rule**, `facebookBidding`, applied
+  per kit lot by `phonePostLotBidding` (`phone-post-view.ts`, pure) and decided in `getPhonePost` at
+  the read, as `getPhoneOffer` decides it — so a sold or withdrawn lot, a quick buy and a lot not yet
+  up have no field, and a closed lot's button reads *Record winning bid*.
+- **The write is the offer screen's**, `useRecordBid` (`phone/use-record-bid.ts`), now shared by
+  `PhoneOfferBidding` and each row: `patchOfferAction(…, "price")`, the desk card's own (#1545), so the
+  bid is the lot's price dated by `priceCheckedAt` and the desk cannot tell where it was typed. **Each
+  row saves on its own** (decided in writing the issue): one hook per lot, so a bid typed in one row
+  is kept while another row's is recorded and the screen re-reads.
 
 ## Start a purchase (#2006)
 
@@ -436,6 +451,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Proposals: list, proposal screen, share to the buyer | #2625 |
 | Proposals: convert to a sale, decline, reopen | #2627 |
 | Publishing a Facebook post: copy text and captions, share or save photos, paste the link, approve | #2629 |
+| A Facebook post's bids, lot by lot on the post's screen | #2630 |
 
 **Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
 editing and publishing offers — bar a Facebook post's publishing (#2629); intake, lots and the cost split; everything not in the table.

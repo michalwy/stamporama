@@ -1,10 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { FacebookKitLot } from "../../src/lib/facebook-auctions";
+import type { FacebookPostPhotos } from "../../src/lib/facebook-lot-photos";
+import { facebookBidding, recordBidLabel } from "../../src/lib/facebook-bidding-rules";
 import { facebookPostAuctionsEnd } from "../../src/lib/facebook-post-list-figures";
 import {
   parsePhonePostsShow,
   PHONE_POSTS_SHOW_OPTIONS,
+  phonePostLotBidding,
   phonePostLotPhotoId,
   phonePostLots,
   phonePostsFilters,
@@ -13,6 +16,8 @@ import { phoneOfferPath, phonePostPath, phonePostsPath, phoneProposalPath } from
 
 // A Facebook post on the phone (#2626): the list's narrowing, each lot's number, picture and price,
 // and when a post that is up closes. The read is `tests/integration/phone-posts.test.ts`.
+
+const NOW = new Date("2026-11-21T12:00:00Z");
 
 function kitLot(over: Partial<FacebookKitLot>): FacebookKitLot {
   return {
@@ -81,7 +86,8 @@ describe("a lot on the post's phone screen (#2626)", () => {
         kitLot({ offerId: "b", lotNo: 2, price: "12.50" }),
         kitLot({ offerId: "c", lotNo: 3, listingType: "fixed", price: "8.00", startingPrice: null }),
       ],
-      { layout: "text", lots: [] }
+      { layout: "text", lots: [] },
+      NOW
     );
     assert.deepEqual(start.price, { label: "Start", amount: "3.00", currency: "PLN" });
     assert.deepEqual(bid.price, { label: "Bid", amount: "12.50", currency: "PLN" });
@@ -89,7 +95,7 @@ describe("a lot on the post's phone screen (#2626)", () => {
   });
 
   it("numbers a post of one lot by its place, its lot carrying none", () => {
-    assert.deepEqual(phonePostLots([kitLot({ lotNo: null })], { layout: "text", lots: [] }).map((l) => l.lotNo), [1]);
+    assert.deepEqual(phonePostLots([kitLot({ lotNo: null })], { layout: "text", lots: [] }, NOW).map((l) => l.lotNo), [1]);
   });
 
   it("shows a text post's lot by the first of its upload set", () => {
@@ -122,6 +128,54 @@ describe("a lot on the post's phone screen (#2626)", () => {
     };
     assert.equal(phonePostLotPhotoId(photos, "o1"), "p1");
     assert.equal(phonePostLotPhotoId(photos, "o2"), null);
+  });
+});
+
+describe("recording a lot's bid on the post's phone screen (#2630)", () => {
+  const TEXT: FacebookPostPhotos = { layout: "text", lots: [] };
+
+  it("follows an auction up in the group, active or paused, with when its bid was recorded", () => {
+    const [noBid, bid, paused] = phonePostLots(
+      [
+        kitLot({ offerId: "a", endsAt: "2026-11-21T18:00:00Z" }),
+        kitLot({ offerId: "b", lotNo: 2, price: "12.50", priceCheckedAt: "2026-11-21T11:30:00Z" }),
+        kitLot({ offerId: "c", lotNo: 3, state: "paused" }),
+      ],
+      TEXT,
+      NOW
+    );
+    assert.deepEqual(noBid.bidding, { closed: false, hasBid: false, priceCheckedAt: null });
+    assert.deepEqual(bid.bidding, { closed: false, hasBid: true, priceCheckedAt: "2026-11-21T11:30:00Z" });
+    assert.deepEqual(paused.bidding, { closed: false, hasBid: false, priceCheckedAt: null });
+  });
+
+  it("still takes the winning bid once the lot has closed, as the offer's screen does", () => {
+    const [closed] = phonePostLots([kitLot({ endsAt: "2026-11-21T11:59:00Z", price: "20.00" })], TEXT, NOW);
+    assert.deepEqual(closed.bidding, { closed: true, hasBid: true, priceCheckedAt: null });
+    assert.equal(recordBidLabel(closed.bidding?.closed ?? false), "Record winning bid");
+  });
+
+  it("gives no field to a sold or withdrawn lot, a quick buy, or a lot not yet up", () => {
+    const lots = phonePostLots(
+      [
+        kitLot({ offerId: "sold", state: "sold" }),
+        kitLot({ offerId: "withdrawn", state: "withdrawn" }),
+        kitLot({ offerId: "quick", listingType: "fixed", price: "8.00" }),
+        kitLot({ offerId: "pending", state: "pending" }),
+        kitLot({ offerId: "ready", state: "ready" }),
+      ],
+      TEXT,
+      NOW
+    );
+    assert.deepEqual(
+      lots.map((l) => l.bidding),
+      [null, null, null, null, null]
+    );
+  });
+
+  it("is the offer's own rule, lot by lot", () => {
+    const lot = kitLot({ endsAt: "2026-11-21T13:00:00Z", price: "4.00", priceCheckedAt: "2026-11-21T10:00:00Z" });
+    assert.deepEqual(phonePostLotBidding(lot, NOW), { ...facebookBidding(lot, NOW), priceCheckedAt: lot.priceCheckedAt });
   });
 });
 
