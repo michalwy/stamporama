@@ -64,6 +64,8 @@ import { LotGroupSummaryBar } from "../../lots/lot-group-summary-bar";
 import { useFacebookPostStillForSale } from "./post-ui-state";
 import { PostPreviewDialog } from "./post-preview-dialog";
 import { PostPriceTotalsBar } from "./post-price-totals-bar";
+import { NewProposalDialog } from "../../proposals/proposal-parts";
+import { isProposalOpen, postProposalPublishWarning, PROPOSAL_STATUS_LABEL } from "@/lib/proposal-rules";
 import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -201,7 +203,9 @@ type Dialog =
   | { kind: "newLot"; source: NewLotSource }
   | { kind: "sell"; lots: FacebookKitLot[] }
   | { kind: "deletePost" }
-  | { kind: "preview" };
+  | { kind: "preview" }
+  | { kind: "proposal" }
+  | { kind: "publishWarning" };
 
 export function FacebookPostPanel({
   collectionId,
@@ -263,7 +267,11 @@ export function FacebookPostPanel({
   const narrowable = serverLots.length > 1 && serverLots.some((l) => isFacebookLotClosed(l.state));
   const narrowed = narrowable && stillForSale;
   // Dragged only with every lot in view: an order missing the hidden lots would be refused as stale.
-  const reorderable = serverLots.length > 1 && !hasFacebookPostGoneUp(serverLots) && !narrowed;
+  // The proposal made from the post (#2602): while it is open, publishing asks first; once it is sent,
+  // the lots are fixed with it until it is reopened.
+  const openProposal = screen?.proposal && isProposalOpen(screen.proposal.status) ? screen.proposal : null;
+  const lotsFixedByProposal = openProposal?.status === "sent";
+  const reorderable = serverLots.length > 1 && !hasFacebookPostGoneUp(serverLots) && !narrowed && !lotsFixedByProposal;
   // The tools a post's lots share with a proposal's (#2313): photo settings, texts and titles, pricing
   // and readying, and the order — offered while the post is not up.
   const tools = useLotGroupTools({
@@ -680,6 +688,10 @@ export function FacebookPostPanel({
               ...(canPreviewFacebookPost(lots) || screen.hasPreviewLink
                 ? [{ key: "preview", label: "Preview for a buyer…", icon: "share", onSelect: () => setDialog({ kind: "preview" }) } as RowAction]
                 : []),
+              // Before the post is up, while no proposal made from it is open (#2602).
+              ...(notUp && !openProposal && lots.length > 0
+                ? [{ key: "proposal", label: "Make a proposal…", icon: "contacts", onSelect: () => setDialog({ kind: "proposal" }) } as RowAction]
+                : []),
               // In any stage, as long as no lot has sold (#2060) — the dialog says so otherwise.
               { key: "delete", label: "Delete post…", icon: "delete", danger: true, onSelect: () => setDialog({ kind: "deletePost" }) },
             ]}
@@ -708,7 +720,22 @@ export function FacebookPostPanel({
           <Link href={`/c/${collectionSlug}/offers?post=${postNo}`} style={LINK}>
             Show these lots in Offers
           </Link>
+          {screen.proposal && (
+            <>
+              {" "}
+              ·{" "}
+              <Link href={`/c/${collectionSlug}/offers/proposals/${screen.proposal.proposalNo}`} style={LINK}>
+                Proposal #{screen.proposal.proposalNo} for {screen.proposal.contactName}
+              </Link>{" "}
+              ({PROPOSAL_STATUS_LABEL[screen.proposal.status].toLowerCase()})
+            </>
+          )}
         </p>
+        {lotsFixedByProposal && (
+          <p style={{ ...MUTED, margin: "0.25rem 0 0" }}>
+            The proposal has been sent, so the lots stay as the buyer saw them until it is reopened.
+          </p>
+        )}
       </header>
 
       {/* The moves the post makes as one (#1778, #1779). */}
@@ -721,7 +748,11 @@ export function FacebookPostPanel({
               <DialogSecondaryButton
                 type="button"
                 disabled={isPending || publishHeld !== null}
-                onClick={() => setDialog({ kind: "publish", target: "active", approving: false })}
+                onClick={() =>
+                  setDialog(
+                    openProposal ? { kind: "publishWarning" } : { kind: "publish", target: "active", approving: false }
+                  )
+                }
               >
                 Publish…
               </DialogSecondaryButton>
@@ -976,6 +1007,28 @@ export function FacebookPostPanel({
           error={error}
           onClose={close}
           onConfirm={publish}
+        />
+      )}
+
+      {dialog.kind === "publishWarning" && openProposal && (
+        <ConfirmDialog
+          title={`Publish post #${postNo}`}
+          message={`${postProposalPublishWarning(openProposal)} The proposal stays open: the buyer can still take whatever is unsold, and a lot sold here shows as no longer available on their page.`}
+          actionLabel="Publish anyway…"
+          pendingLabel="Publishing…"
+          variant="primary"
+          isPending={false}
+          onClose={close}
+          onConfirm={() => setDialog({ kind: "publish", target: "active", approving: false })}
+        />
+      )}
+
+      {dialog.kind === "proposal" && (
+        <NewProposalDialog
+          collectionId={collectionId}
+          collectionSlug={collectionSlug}
+          post={{ postId, postNo }}
+          onClose={close}
         />
       )}
 

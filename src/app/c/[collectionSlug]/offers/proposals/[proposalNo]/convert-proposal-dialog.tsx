@@ -279,6 +279,7 @@ export function ConvertProposalDialog({
                       />
                       <span>
                         A new sale on {options.platformName}
+                        {options.post && ` in ${options.post.groupName}`}
                         <span style={{ ...MUTED, display: "block" }}>to {contactName}, dated today</span>
                       </span>
                     </label>
@@ -381,8 +382,10 @@ export function ConvertProposalDialog({
             )}
           </p>
           <p style={{ ...MUTED, margin: 0 }}>
-            {withdrawn > 0 ? `${counted(withdrawn, "lot", "lots")} withdrawn` : "No lot withdrawn"}, and the
-            proposal closes as Sold.
+            {/* A proposal made from a post withdraws nothing (#2602): the rest stay in the post. */}
+            {options?.post
+              ? `The lots not taken stay in post #${options.post.postNo}, and the proposal closes as Sold.`
+              : `${withdrawn > 0 ? `${counted(withdrawn, "lot", "lots")} withdrawn` : "No lot withdrawn"}, and the proposal closes as Sold.`}
           </p>
         </div>
         <DialogActions

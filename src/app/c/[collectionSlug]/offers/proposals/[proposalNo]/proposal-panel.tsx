@@ -246,7 +246,8 @@ export function ProposalPanel({
       ...(editable && lot.state === "ready"
         ? [{ key: "back-to-preparing", label: "Back to preparing", icon: "revert", onSelect: () => backToPreparing(lot) } as RowAction]
         : []),
-      ...(editable
+      // A proposal made from a post (#2602) has the post's lots: they are taken out on the post.
+      ...(editable && !screen!.post
         ? [{ key: "remove", label: "Take this lot out of the proposal", icon: "remove", onSelect: () => removeLot(lot) } as RowAction]
         : []),
     ];
@@ -285,9 +286,18 @@ export function ProposalPanel({
                 sold in sale #{screen.sale.saleNo} on {screen.sale.platformName}
               </Link>
             )}
-            <Tooltip content="The platform a proposal's lots are offered on — selling straight to one person">
-              <span style={META}>on {screen.platform.name}</span>
-            </Tooltip>
+            {screen.post ? (
+              <Tooltip content="Its lots are the post's own: a lot the buyer takes is sold in the post, the rest stay in it">
+                <Link href={`/c/${collectionSlug}/offers/posts/${screen.post.postNo}`} style={{ ...LINK, fontSize: "0.8125rem" }}>
+                  made from post #{screen.post.postNo}
+                  {screen.post.title ? ` · ${screen.post.title}` : ""} in {screen.post.groupName}
+                </Link>
+              </Tooltip>
+            ) : (
+              <Tooltip content="The platform a proposal's lots are offered on — selling straight to one person">
+                <span style={META}>on {screen.platform.name}</span>
+              </Tooltip>
+            )}
           </div>
         </div>
         <span style={{ flex: 1 }} />
@@ -315,7 +325,9 @@ export function ProposalPanel({
             <Tooltip
               content={
                 hasOpenLot
-                  ? "Sell the lots the buyer took — the rest are withdrawn"
+                  ? screen.post
+                    ? "Sell the lots the buyer took — the rest stay in the post"
+                    : "Sell the lots the buyer took — the rest are withdrawn"
                   : "No lot is still open — add one, or decline the proposal"
               }
             >
@@ -381,14 +393,19 @@ export function ProposalPanel({
             {editable && (
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.5rem" }}>
                 {tools.headingButtons}
-                <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog("add")}>
-                  Add offers…
-                </DialogSecondaryButton>
-                <Tooltip content={`Pick copies to make new ${screen.platform.name} offers of, as the next lots`}>
-                  <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog("new")}>
-                    New lots…
-                  </DialogSecondaryButton>
-                </Tooltip>
+                {/* A proposal made from a post (#2602) takes the post's lots only, added on the post. */}
+                {!screen.post && (
+                  <>
+                    <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog("add")}>
+                      Add offers…
+                    </DialogSecondaryButton>
+                    <Tooltip content={`Pick copies to make new ${screen.platform.name} offers of, as the next lots`}>
+                      <DialogSecondaryButton type="button" disabled={isPending} onClick={() => setDialog("new")}>
+                        New lots…
+                      </DialogSecondaryButton>
+                    </Tooltip>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -408,7 +425,15 @@ export function ProposalPanel({
           {tools.textWarning}
           {tools.lotBar}
         </div>
-        {screen.lots.length === 0 ? (
+        {screen.lots.length === 0 && screen.post ? (
+          <p style={{ margin: 0, padding: "2rem", ...META, fontSize: "0.9375rem" }}>
+            No lots — add them on{" "}
+            <Link href={`/c/${collectionSlug}/offers/posts/${screen.post.postNo}`} style={LINK}>
+              post #{screen.post.postNo}
+            </Link>
+            , and they join this proposal.
+          </p>
+        ) : screen.lots.length === 0 ? (
           <p style={{ margin: 0, padding: "2rem", ...META, fontSize: "0.9375rem" }}>
             No lots yet. Make them from your copies with New lots…, add {screen.platform.name} offers already
             made with Add offers…, or tick copies on the{" "}
@@ -560,7 +585,11 @@ export function ProposalPanel({
       {dialog === "decline" && (
         <ConfirmDialog
           title="Decline the proposal?"
-          message={`Proposal #${screen.proposalNo} is closed as declined, and every lot still open is withdrawn. The copies stay in your inventory. This cannot be undone.`}
+          message={
+            screen.post
+              ? `Proposal #${screen.proposalNo} is closed as declined. Its lots stay in post #${screen.post.postNo} as they are. This cannot be undone.`
+              : `Proposal #${screen.proposalNo} is closed as declined, and every lot still open is withdrawn. The copies stay in your inventory. This cannot be undone.`
+          }
           actionLabel="Decline"
           pendingLabel="Declining…"
           isPending={isPending}

@@ -1232,3 +1232,4 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   pending, up) or the post has a link (`FacebookPostScreen.hasPreviewLink`), so a link can be withdrawn
   in any stage. The page's words are `facebookPostPreviewLabels`, in the same languages as the
   specification's (a unit test pins the two lists equal).
+- **A post not yet up can be made into a proposal for one buyer, sharing its lots** (#2602; ADR-0075 §11) — the proposal's lots are the post's offers, so what the buyer takes is sold in the post. The mechanism (`syncPostProposalLots`, called from every write that changes a post's lots) is in [`offers.md`](offers.md).

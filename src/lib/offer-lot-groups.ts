@@ -30,7 +30,8 @@ import {
   type OfferBlockReason,
 } from "./offers";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
-import { proposalLotsRefusal, proposalStatusOf } from "./proposal-rules";
+import { postProposalSentRefusal, proposalLotsRefusal, proposalStatusOf } from "./proposal-rules";
+import { readOpenPostProposal, syncPostProposalLots } from "./post-proposal-lots";
 
 // The tools a group of lots is worked on with from its screen (#2313) — a Facebook post's lots, or a
 // proposal's: every lot's photo settings in one dialog (#2032), their photos made (#2323), their texts
@@ -80,6 +81,9 @@ export async function readLotGroup(ownerId: string, group: LotGroup, postUp: str
     });
     // A lot sold before the post went up (#2560) leaves it not up: the tools still work on the rest.
     if (hasFacebookPostGoneUp(lots)) throw new OfferActionBlockedError("facebook-group", postUp);
+    // A proposal made from the post and sent holds the same lots fixed as the buyer saw them (#2602).
+    const proposal = await readOpenPostProposal(prisma, group.id);
+    if (proposal?.status === "sent") throw new OfferActionBlockedError("facebook-group", postProposalSentRefusal(proposal));
     return {
       group,
       collectionId: post.collectionId,
@@ -89,7 +93,13 @@ export async function readLotGroup(ownerId: string, group: LotGroup, postUp: str
   }
   const proposal = await prisma.proposal.findUnique({
     where: { id: group.id },
-    select: { collectionId: true, status: true, collection: { select: { ownerId: true } } },
+    select: {
+      collectionId: true,
+      status: true,
+      collection: { select: { ownerId: true } },
+      // A proposal made from a post (#2602) has the post's lots, on the post's group's platform.
+      facebookPost: { select: { group: { select: { platformId: true } } } },
+    },
   });
   if (!proposal || proposal.collection.ownerId !== ownerId) throw new Error("Proposal not found.");
   const refusal = proposalLotsRefusal(proposalStatusOf(proposal.status));
@@ -108,7 +118,7 @@ export async function readLotGroup(ownerId: string, group: LotGroup, postUp: str
   return {
     group,
     collectionId: proposal.collectionId,
-    platformId: direct?.id ?? null,
+    platformId: proposal.facebookPost?.group.platformId ?? direct?.id ?? null,
     lots: lots.map((l) => ({ ...l, state: l.state as OfferState })),
   };
 }
@@ -381,7 +391,9 @@ export async function readLotGroupTitles(
  * price. The lot numbers are the order, so whatever is numbered by them follows at once. An order
  * naming a lot the group no longer holds, or missing one, is refused as stale.
  */
-export async function reorderLotGroup(ownerId: string, group: LotGroup, offerIds: readonly string[]): Promise<void> {
+export async function reorderLotGroup(ownerId: string, given: LotGroup, offerIds: readonly string[]): Promise<void> {
+  // A proposal made from a post (#2602) numbers its lots as the post does, so its order is the post's.
+  const group = await postOfProposal(ownerId, given);
   const { lots } = await readLotGroup(ownerId, group, "The post is up, so its lots stay in the order they were posted.");
   const refusal = facebookLotOrderRefusal(
     lots.map((l) => l.id),
@@ -398,7 +410,17 @@ export async function reorderLotGroup(ownerId: string, group: LotGroup, offerIds
     for (const [index, id] of offerIds.entries()) {
       await tx.offer.update({ where: { id }, data: number(index + 1) });
     }
+    if (group.kind === "post") await syncPostProposalLots(tx, group.id);
   });
+}
+
+/** The post a proposal was made from as the group its lots are ordered in (#2602), once the proposal is
+ *  known to be the owner's and still being prepared; any other group as it is. */
+async function postOfProposal(ownerId: string, group: LotGroup): Promise<LotGroup> {
+  if (group.kind !== "proposal") return group;
+  await readLotGroup(ownerId, group, "");
+  const row = await prisma.proposal.findUniqueOrThrow({ where: { id: group.id }, select: { facebookPostId: true } });
+  return row.facebookPostId ? { kind: "post", id: row.facebookPostId } : group;
 }
 
 // ── What a lot's row shows ──────────────────────────────────────────────────────────────────────

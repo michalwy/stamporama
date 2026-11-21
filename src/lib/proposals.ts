@@ -30,7 +30,10 @@ import { parsePrice } from "./sale-rules";
 import { isSaleSent, UNSENT_SALE_STATUSES, type SaleStatus } from "./sale-status";
 import { markSaleWrittenByApi, recordProposalSaleLines, soldItemIds, type SaleLineDraft } from "./sales";
 import { saleLineAddedAction } from "./sale-review";
+import { hasFacebookPostGoneUp } from "./facebook-post-rules";
+import { readOpenPostProposal, syncPostProposalLots } from "./post-proposal-lots";
 import {
+  postProposalRefusal,
   proposalConversionRefusal,
   proposalRenumbersLots,
   proposalTakesLots,
@@ -70,10 +73,10 @@ async function assertCollectionOwner(ownerId: string, collectionId: string): Pro
 async function assertProposalOwner(
   ownerId: string,
   proposalId: string
-): Promise<{ collectionId: string; status: ProposalStatus; everSent: boolean }> {
+): Promise<{ collectionId: string; status: ProposalStatus; everSent: boolean; postId: string | null }> {
   const proposal = await prisma.proposal.findUnique({
     where: { id: proposalId },
-    select: { collectionId: true, status: true, sentAt: true },
+    select: { collectionId: true, status: true, sentAt: true, facebookPostId: true },
   });
   if (!proposal) throw new Error("Proposal not found.");
   await assertCollectionOwner(ownerId, proposal.collectionId);
@@ -83,7 +86,21 @@ async function assertProposalOwner(
     // Reopening keeps the time it was last sent (#2307), so a proposal being prepared again knows the
     // buyer has seen it.
     everSent: proposal.sentAt !== null,
+    // Made from a Facebook post (#2602): its lots are the post's, joining and leaving with it.
+    postId: proposal.facebookPostId,
   };
+}
+
+/** The sentence a proposal made from a post answers a lot added or taken out on its own screen with
+ *  (#2602): its lots are the post's. */
+function postLotsRefusal(postNo: number | null): string {
+  const post = postNo === null ? "the post" : `post #${postNo}`;
+  return `This proposal was made from ${post} — its lots are the post's, so add or take them out on the post.`;
+}
+
+async function postNoOf(postId: string): Promise<number | null> {
+  const post = await prisma.facebookPost.findUnique({ where: { id: postId }, select: { postNo: true } });
+  return post?.postNo ?? null;
 }
 
 /**
@@ -121,6 +138,53 @@ export async function createProposal(
       data: { collectionId, contactId, proposalNo },
       select: { id: true },
     });
+    return { proposalId: created.id, proposalNo };
+  });
+}
+
+/**
+ * *Make a proposal…* on a Facebook post not yet up (#2602): a Preparing proposal for `contactId` whose
+ * lots are the post's own offers — they stay on Facebook in the post's group, keep the post's numbers,
+ * and from now on join and leave with the post (`syncPostProposalLots`). Refused once the post is up,
+ * and while a proposal made from it is still open: a lot is in one proposal at a time.
+ */
+export async function createProposalFromPost(
+  ownerId: string,
+  postId: string,
+  contactId: string
+): Promise<{ proposalId: string; proposalNo: number }> {
+  const post = await prisma.facebookPost.findUnique({
+    where: { id: postId },
+    select: {
+      collectionId: true,
+      postNo: true,
+      lots: { select: { state: true, facebookPostSnapshot: true } },
+    },
+  });
+  if (!post) throw new Error("Post not found.");
+  await assertCollectionOwner(ownerId, post.collectionId);
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, collectionId: post.collectionId },
+    select: { id: true },
+  });
+  if (!contact) throw new Error("That contact is not in this collection.");
+  // Made now, as for any proposal: the message the buyer is sent is Direct's template.
+  await getDirectPlatform(post.collectionId);
+  return prisma.$transaction(async (tx) => {
+    // Asked inside the write, so a proposal made from the post meanwhile still refuses.
+    const refusal = postProposalRefusal({
+      postNo: post.postNo,
+      up: hasFacebookPostGoneUp(post.lots),
+      lotCount: post.lots.length,
+      openProposal: await readOpenPostProposal(tx, postId),
+    });
+    if (refusal) throw new OfferActionBlockedError("not-eligible", refusal);
+    const proposalNo = await allocateEntityNumber(tx, post.collectionId, "proposal");
+    const created = await tx.proposal.create({
+      data: { collectionId: post.collectionId, contactId, proposalNo, facebookPostId: postId },
+      select: { id: true },
+    });
+    await syncPostProposalLots(tx, postId);
     return { proposalId: created.id, proposalNo };
   });
 }
@@ -310,7 +374,8 @@ export interface ProposalTakingLots {
 export async function listPreparingProposals(ownerId: string, collectionId: string): Promise<ProposalTakingLots[]> {
   await assertCollectionOwner(ownerId, collectionId);
   const rows = await prisma.proposal.findMany({
-    where: { collectionId, status: "preparing" },
+    // A proposal made from a post (#2602) takes the post's lots only, so new offers are never put in it.
+    where: { collectionId, status: "preparing", facebookPostId: null },
     orderBy: { proposalNo: "desc" },
     select: { id: true, proposalNo: true, status: true, contact: { select: { name: true } } },
   });
@@ -358,8 +423,10 @@ export interface ProposalScreen {
   createdOn: string;
   sentOn: string | null;
   closedOn: string | null;
-  /** The Direct platform the lots are offered on. */
+  /** The Direct platform the lots are offered on — the one whose message template the buyer is sent. */
   platform: { id: string; name: string; enabled: boolean };
+  /** The Facebook post it was made from (#2602) — its lots are the post's own, on Facebook — or null. */
+  post: { postId: string; postNo: number; title: string | null; groupName: string } | null;
   /** The sale its accepted lots went into (#2289), once sold — null before, and if that sale was
    *  deleted since. */
   sale: { saleId: string; saleNo: number; platformName: string } | null;
@@ -440,6 +507,9 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
       buyerPicksChangedAt: true,
       contact: { select: { id: true, name: true } },
       sale: { select: { id: true, saleNo: true, platform: { select: { name: true } } } },
+      facebookPost: {
+        select: { id: true, postNo: true, title: true, group: { select: { name: true, platformId: true } } },
+      },
       lots: {
         orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
         select: SCREEN_LOT_SELECT,
@@ -458,7 +528,8 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
     readScreenLots(row.collectionId, row.lots, editable),
     readLotSales(ids),
     editable ? offersTextStatus(ownerId, row.collectionId, ids).then((m) => Object.fromEntries(m)) : null,
-    editable ? readLotGroupTitles(row.collectionId, platform.id, ids) : null,
+    // A post's lots fall back to its group's platform's title template, not Direct's (#2602).
+    editable ? readLotGroupTitles(row.collectionId, row.facebookPost?.group.platformId ?? platform.id, ids) : null,
   ]);
   return {
     proposalId: row.id,
@@ -470,6 +541,12 @@ export async function getProposalScreen(ownerId: string, proposalId: string): Pr
     sentOn: row.sentAt?.toISOString().slice(0, 10) ?? null,
     closedOn: row.closedAt?.toISOString().slice(0, 10) ?? null,
     platform,
+    post: row.facebookPost && {
+      postId: row.facebookPost.id,
+      postNo: row.facebookPost.postNo,
+      title: row.facebookPost.title,
+      groupName: row.facebookPost.group.name,
+    },
     sale: row.sale && { saleId: row.sale.id, saleNo: row.sale.saleNo, platformName: row.sale.platform.name },
     lots,
     total,
@@ -584,7 +661,9 @@ export interface ProposalLotCandidate {
 }
 
 export async function listProposalLotCandidates(ownerId: string, proposalId: string): Promise<ProposalLotCandidate[]> {
-  const { collectionId } = await assertProposalOwner(ownerId, proposalId);
+  const { collectionId, postId } = await assertProposalOwner(ownerId, proposalId);
+  // A proposal made from a post takes the post's lots only (#2602).
+  if (postId) return [];
   const direct = await getDirectPlatform(collectionId);
   const rows = await prisma.offer.findMany({
     where: { collectionId, platformId: direct.id, proposalId: null, state: { in: [...OPEN_OFFER_STATES] } },
@@ -624,11 +703,12 @@ export async function writeProposalLots(
 ): Promise<void> {
   const proposal = await tx.proposal.findFirst({
     where: { id: proposalId, collectionId },
-    select: { status: true },
+    select: { status: true, facebookPost: { select: { postNo: true } } },
   });
   if (!proposal) throw new OfferActionBlockedError("not-eligible", "That proposal is not in this collection.");
   const closed = proposalLotsRefusal(proposalStatusOf(proposal.status));
   if (closed) throw new OfferActionBlockedError("not-eligible", closed);
+  if (proposal.facebookPost) throw new OfferActionBlockedError("not-eligible", postLotsRefusal(proposal.facebookPost.postNo));
   if (offerIds.length === 0) return;
   const direct = await tx.platform.findFirst({
     where: { collectionId, platformModule: DIRECT_PLATFORM_MODULE },
@@ -695,9 +775,10 @@ export async function addProposalLots(ownerId: string, proposalId: string, offer
  *  after it move up a number until the buyer has been sent them (#2288); a proposal reopened after it
  *  was sent (#2307) keeps the numbers. */
 export async function removeProposalLot(ownerId: string, proposalId: string, offerId: string): Promise<void> {
-  const { collectionId, status, everSent } = await assertProposalOwner(ownerId, proposalId);
+  const { collectionId, status, everSent, postId } = await assertProposalOwner(ownerId, proposalId);
   const closed = proposalLotsRefusal(status);
   if (closed) throw new OfferActionBlockedError("not-eligible", closed);
+  if (postId) throw new OfferActionBlockedError("not-eligible", postLotsRefusal(await postNoOf(postId)));
   await prisma.$transaction(async (tx) => {
     const { count } = await tx.offer.updateMany({
       where: { id: offerId, collectionId, proposalId },
@@ -808,7 +889,7 @@ export async function createProposalLot(
  * that cannot be withdrawn refuses the decline with the proposal still open.
  */
 export async function moveProposal(ownerId: string, proposalId: string, move: ProposalMove): Promise<void> {
-  const { status } = await assertProposalOwner(ownerId, proposalId);
+  const { status, postId } = await assertProposalOwner(ownerId, proposalId);
   const lots = await prisma.offer.findMany({
     where: { proposalId },
     orderBy: [{ proposalLotNo: "asc" }, { offerNo: "asc" }],
@@ -816,7 +897,8 @@ export async function moveProposal(ownerId: string, proposalId: string, move: Pr
   });
   const refusal = proposalMoveRefusal(status, move, lots.length);
   if (refusal) throw new OfferActionBlockedError("bad-transition", refusal);
-  if (move === "decline") {
+  // Declining a proposal made from a post withdraws nothing (#2602): its lots stay in the post.
+  if (move === "decline" && !postId) {
     for (const lot of lots) {
       if ((OPEN_OFFER_STATES as readonly string[]).includes(lot.state)) {
         await setOfferState(ownerId, lot.id, "withdrawn");
@@ -888,8 +970,30 @@ export interface ProposalSaleOptions {
   lots: ProposalSaleLot[];
   /** The contact's sales not yet sent, newest first. */
   sales: ProposalSaleCandidate[];
-  /** The Direct platform a new sale is on. */
+  /** The platform a new sale is on: Direct, or for a proposal made from a post (#2602) the post's. */
   platformName: string;
+  /** For a proposal made from a post (#2602): the post's group a new sale is made in, and that the lots
+   *  not taken stay in the post rather than being withdrawn. Null for any other proposal. */
+  post: { postNo: number; groupName: string } | null;
+}
+
+/** The platform a proposal's new sale is on (#2289): Direct, or the post's for one made from a post
+ *  (#2602) — a sale on Facebook in the post's group. */
+async function newSalePlatform(
+  collectionId: string,
+  postId: string | null
+): Promise<{ id: string; name: string; post: { postNo: number; groupName: string } | null }> {
+  if (postId) {
+    const post = await prisma.facebookPost.findUnique({
+      where: { id: postId },
+      select: { postNo: true, group: { select: { name: true, platform: { select: { id: true, name: true } } } } },
+    });
+    if (post) {
+      return { ...post.group.platform, post: { postNo: post.postNo, groupName: post.group.name } };
+    }
+  }
+  const direct = await getDirectPlatform(collectionId);
+  return { id: direct.id, name: direct.name, post: null };
 }
 
 /** The sets of `offerIds` whose copies have not left yet, by offer — what each lot can still sell. */
@@ -913,7 +1017,7 @@ async function setsToSell(offerIds: readonly string[]): Promise<Map<string, { of
 
 /** What *Convert to sale…* offers: the lots still open, and the contact's sales still open. */
 export async function getProposalSaleOptions(ownerId: string, proposalId: string): Promise<ProposalSaleOptions> {
-  const { collectionId } = await assertProposalOwner(ownerId, proposalId);
+  const { collectionId, postId } = await assertProposalOwner(ownerId, proposalId);
   const proposal = await prisma.proposal.findUniqueOrThrow({
     where: { id: proposalId },
     select: {
@@ -958,7 +1062,7 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
       _count: { select: { lines: true } },
     },
   });
-  const direct = await getDirectPlatform(collectionId);
+  const salePlatform = await newSalePlatform(collectionId, postId);
   return {
     lots: proposal.lots.map((lot, i) => {
       const f = figures[i]!;
@@ -1002,7 +1106,8 @@ export async function getProposalSaleOptions(ownerId: string, proposalId: string
       currency: sale.currency,
       lineCount: sale._count.lines,
     })),
-    platformName: direct.name,
+    platformName: salePlatform.name,
+    post: salePlatform.post,
   };
 }
 
@@ -1066,7 +1171,7 @@ async function sellProposalLots(
   input: ProposalSaleInput,
   mark: ProposalSaleMark | null
 ): Promise<ProposalSaleResult> {
-  const { collectionId, status } = await assertProposalOwner(ownerId, proposalId);
+  const { collectionId, status, postId } = await assertProposalOwner(ownerId, proposalId);
   const ticked = new Map(input.lots.map((lot) => [lot.offerId, lot.price]));
   const refusal = proposalConversionRefusal(status, ticked.size);
   if (refusal) throw new OfferActionBlockedError("bad-transition", refusal);
@@ -1117,8 +1222,10 @@ async function sellProposalLots(
     await prisma.contact.update({ where: { id: proposal.contactId }, data: { buyer: true } });
   }
 
-  const direct = await getDirectPlatform(collectionId);
-  const notTaken = proposal.lots.filter((lot) => !ticked.has(lot.id)).map((lot) => lot.id);
+  const salePlatform = await newSalePlatform(collectionId, postId);
+  // A proposal made from a post (#2602) withdraws nothing: the lots the buyer did not take stay in the
+  // post as they were, ready to go up with it.
+  const notTaken = postId ? [] : proposal.lots.filter((lot) => !ticked.has(lot.id)).map((lot) => lot.id);
   const { saleId, created } = await recordProposalSaleLines(
     ownerId,
     collectionId,
@@ -1126,7 +1233,7 @@ async function sellProposalLots(
       ? { saleId: input.target.saleId }
       : {
           header: {
-            platformId: direct.id,
+            platformId: salePlatform.id,
             buyerId: proposal.contactId,
             externalRef: null,
             transactionUrl: null,

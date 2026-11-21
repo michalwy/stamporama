@@ -928,6 +928,9 @@ withdrawn from a post still up is marked **No longer available**. If you take th
 again once it is Ready. Once the post is withdrawn or deleted, it says only that the offer is no longer
 current.
 
+To give one buyer first refusal on the post, with the lots they take sold in it, make it into a
+proposal instead — see [A proposal made from a Facebook post](offers.md#a-proposal-made-from-a-facebook-post).
+
 Nothing else from your collection is on it: no copy numbers, references, locations, catalogue values,
 buyers or other offers, and no way into the app. The page's own words — *Lot*, *Price*, *Sold*, the
 notices — are in the post's language, in the languages a specification has them in, and English

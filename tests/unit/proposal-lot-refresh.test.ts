@@ -42,6 +42,7 @@ function screen(over: Partial<ProposalScreen> = {}): ProposalScreen {
     sentOn: null,
     closedOn: null,
     platform: { id: "d1", name: "Direct", enabled: true },
+    post: null,
     sale: null,
     lots: [lot("a", { lotNo: 1 }), lot("b", { lotNo: 2 })],
     total: "0.00",

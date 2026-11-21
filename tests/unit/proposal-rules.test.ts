@@ -24,6 +24,12 @@ import {
   proposalSaleLotRefusal,
   proposalSaleTargetRefusal,
   proposalSaleTotals,
+  isPostProposalLotPlanEmpty,
+  postProposalLotPlan,
+  postProposalPublishWarning,
+  postProposalRefusal,
+  postProposalSentRefusal,
+  type PostProposalLotFacts,
   type ProposalTotalLot,
 } from "../../src/lib/proposal-rules";
 
@@ -287,5 +293,76 @@ describe("the buyer's picks (#2601)", () => {
   it("are counted as the buyer picked them", () => {
     assert.equal(buyerPickedText(1), "Buyer picked 1 lot");
     assert.equal(buyerPickedText(3), "Buyer picked 3 lots");
+  });
+});
+
+describe("a proposal made from a Facebook post (#2602)", () => {
+  const lot = (offerId: string, facebookLotNo: number, over: Partial<PostProposalLotFacts> = {}): PostProposalLotFacts => ({
+    offerId,
+    facebookLotNo,
+    proposalId: null,
+    proposalOpen: false,
+    proposalLotNo: null,
+    state: "ready",
+    ...over,
+  });
+
+  it("takes every lot of the post in no proposal, under the post's numbers", () => {
+    const plan = postProposalLotPlan("p", [lot("a", 1), lot("b", 2), lot("c", 3, { state: "sold" })], []);
+    assert.deepEqual(plan, {
+      join: ["a", "b", "c"],
+      leave: [],
+      renumber: [
+        { offerId: "a", lotNo: 1 },
+        { offerId: "b", lotNo: 2 },
+        { offerId: "c", lotNo: 3 },
+      ],
+    });
+  });
+
+  it("changes nothing while the proposal already holds the post's lots as numbered", () => {
+    const member = (id: string, n: number) => lot(id, n, { proposalId: "p", proposalOpen: true, proposalLotNo: n });
+    const plan = postProposalLotPlan("p", [member("a", 1), member("b", 2)], ["a", "b"]);
+    assert.ok(isPostProposalLotPlanEmpty(plan));
+  });
+
+  it("lets a lot gone from the post leave, and renumbers the rest as the post does", () => {
+    const plan = postProposalLotPlan(
+      "p",
+      [lot("b", 1, { proposalId: "p", proposalOpen: true, proposalLotNo: 2 })],
+      ["a", "b"]
+    );
+    assert.deepEqual(plan, { join: [], leave: ["a"], renumber: [{ offerId: "b", lotNo: 1 }] });
+  });
+
+  it("takes a still-offered lot of a closed proposal, but leaves one sold or withdrawn through it", () => {
+    const plan = postProposalLotPlan(
+      "p",
+      [
+        lot("open", 1, { proposalId: "old", proposalOpen: false, proposalLotNo: 1 }),
+        lot("sold", 2, { proposalId: "old", proposalOpen: false, proposalLotNo: 2, state: "sold" }),
+        lot("other", 3, { proposalId: "else", proposalOpen: true, proposalLotNo: 1 }),
+      ],
+      []
+    );
+    assert.deepEqual(plan.join, ["open"]);
+    assert.deepEqual(plan.renumber, [{ offerId: "open", lotNo: 1 }]);
+  });
+
+  it("is made only before the post is up, one open at a time, of a post with lots", () => {
+    const facts = { postNo: 7, up: false, lotCount: 3, openProposal: null };
+    assert.equal(postProposalRefusal(facts), null);
+    assert.match(postProposalRefusal({ ...facts, up: true })!, /Post #7 is up/);
+    assert.match(postProposalRefusal({ ...facts, lotCount: 0 })!, /no lots/);
+    assert.match(
+      postProposalRefusal({ ...facts, openProposal: { proposalNo: 4, contactName: "Jan Kowalski" } })!,
+      /Proposal #4 for Jan Kowalski is still open/
+    );
+  });
+
+  it("names the proposal when the post's lots are fixed with it, and when publishing asks first", () => {
+    const proposal = { proposalNo: 4, contactName: "Jan Kowalski" };
+    assert.match(postProposalSentRefusal(proposal), /Proposal #4 for Jan Kowalski .* has been sent/);
+    assert.equal(postProposalPublishWarning(proposal), "Proposal #4 for Jan Kowalski is still open — publish anyway?");
   });
 });

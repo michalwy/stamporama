@@ -86,11 +86,13 @@ export function proposalTotalText(total: string, currency: string, unpriced: num
  * *New proposal* (#2287): from the list of proposals the contact is picked here, from a contact's page
  * it is that contact and the dialog only confirms. Opens the new proposal's screen, where its lots are
  * added — or, from *New offer*'s Proposal field (#2304), hands the proposal back to be chosen there.
+ * From a Facebook post not yet up (#2602) it makes the proposal of the post's own lots instead.
  */
 export function NewProposalDialog({
   collectionId,
   collectionSlug,
   contact,
+  post,
   zIndexBase,
   onMade,
   onClose,
@@ -99,6 +101,8 @@ export function NewProposalDialog({
   collectionSlug: string;
   /** The contact it is for, when it is made from the contact's page. */
   contact?: { id: string; name: string };
+  /** The post it is made from (#2602): its lots are the post's own. */
+  post?: { postId: string; postNo: number };
   /** Above the dialog it was opened from, where that is not a page. */
   zIndexBase?: number;
   /** Given, the new proposal is handed here rather than opened. */
@@ -121,8 +125,10 @@ export function NewProposalDialog({
     }
     setError(undefined);
     startTransition(async () => {
-      const { createProposalAction } = await import("@/app/actions/proposals");
-      const result = await createProposalAction(collectionId, contactId);
+      const { createProposalAction, createProposalFromPostAction } = await import("@/app/actions/proposals");
+      const result = post
+        ? await createProposalFromPostAction(post.postId, contactId)
+        : await createProposalAction(collectionId, contactId);
       if (result.status === "error") {
         setError(result.message);
         return;
@@ -133,7 +139,7 @@ export function NewProposalDialog({
   }
 
   return (
-    <DialogShell title="New proposal" onClose={close} zIndexBase={zIndexBase}>
+    <DialogShell title={post ? `Make a proposal of post #${post.postNo}` : "New proposal"} onClose={close} zIndexBase={zIndexBase}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -141,6 +147,12 @@ export function NewProposalDialog({
         }}
       >
         <DialogBody>
+          {post && (
+            <p style={{ margin: "0 0 0.75rem", fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.6 }}>
+              The proposal shares the post&apos;s lots and their numbers: a lot the buyer takes is sold in the post, and
+              the rest stay in it.
+            </p>
+          )}
           {contact ? (
             <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--color-text-primary)", lineHeight: 1.6 }}>
               A proposal for <strong>{contact.name}</strong>: the lots you choose for them, priced on the Direct
