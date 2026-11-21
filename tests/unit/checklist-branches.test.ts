@@ -83,6 +83,41 @@ describe("checklistBranches (#1520)", () => {
   it("counts the stamps on no checklist at any depth", () => {
     assert.equal(countOffChecklist(TREE), 2);
   });
+
+  describe("a listed stamp's variants (#2655)", () => {
+    const IMPERF = "cl-imperf";
+    /** *Imperforate (A)* lists `20A`, `21A` and `22A`; `20A` has two variants on no checklist. */
+    const IMPERF_TREE: Node[] = [
+      node("20", [], [node("20A", [IMPERF], [node("20Aa", []), node("20Ab", [])])]),
+      node("21A", [IMPERF]),
+      node("22A", [IMPERF]),
+    ];
+
+    it("draws them dimmed under the listed stamp in its branch", () => {
+      const [imperf] = checklistBranches(IMPERF_TREE, [{ id: IMPERF }, { id: VERTICAL }], null);
+      assert.deepEqual(ids(imperf.tree), ["20", "20A", "20Aa", "20Ab", "21A", "22A"]);
+      assert.deepEqual([...imperf.contextIds].sort(), ["20", "20Aa", "20Ab"]);
+    });
+
+    it("does not repeat them under Not on a checklist, which is gone when nothing is left", () => {
+      const tree: Node[] = [node("20A", [IMPERF], [node("20Aa", []), node("20Ab", [])])];
+      const branches = checklistBranches(tree, [{ id: IMPERF }, { id: VERTICAL }], null);
+      assert.deepEqual(
+        branches.map((b) => b.checklistId),
+        [IMPERF, VERTICAL]
+      );
+      assert.equal(countOffChecklist(tree), 0);
+    });
+
+    it("keeps an unlisted ancestor's own off-checklist stamps under Not on a checklist", () => {
+      // `20` is on nothing and has no listed ancestor, so it stays there; `20A`'s variants do not.
+      const branches = checklistBranches(IMPERF_TREE, [{ id: IMPERF }, { id: VERTICAL }], null);
+      const none = branches[branches.length - 1];
+      assert.equal(none.checklistId, null);
+      assert.deepEqual(ids(none.tree), ["20"]);
+      assert.equal(countOffChecklist(IMPERF_TREE), 1);
+    });
+  });
 });
 
 describe("withIssueAncestors (#1520)", () => {

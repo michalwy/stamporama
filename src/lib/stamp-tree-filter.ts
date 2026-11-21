@@ -24,7 +24,9 @@ export interface ChecklistTreeNode<T extends ChecklistTreeNode<T>> {
 /** A narrowed tree, plus which nodes survived only as context. */
 export interface FilteredStampTree<T> {
   tree: T[];
-  /** Stamps kept only because a descendant matched — drawn as context, never as members of the set. */
+  /** Stamps drawn as context, never as members of the set: kept only because a descendant matched,
+   *  or — under a checklist narrowing — a variant of a listed stamp that the checklist does not list
+   *  (#2655). */
   contextIds: Set<string>;
 }
 
@@ -60,15 +62,13 @@ export function filterStampTree<T extends StampTreeLike<T>>(
 /**
  * Narrow a stamp tree to the stamps on `selectedChecklistIds`. An empty selection is the absence of
  * a filter, not an empty set, and returns the tree untouched — the same reading `MultiSelectFilter`
- * gives an empty selection (#425).
+ * gives an empty selection (#425). The rule is {@link filterStampTreeBy}'s with no stamp matches.
  */
 export function filterStampTreeByChecklists<T extends ChecklistTreeNode<T>>(
   tree: T[],
   selectedChecklistIds: string[]
 ): FilteredStampTree<T> {
-  if (selectedChecklistIds.length === 0) return { tree, contextIds: new Set() };
-  const selected = new Set(selectedChecklistIds);
-  return filterStampTree(tree, (n) => n.node.checklistIds.some((id) => selected.has(id)));
+  return filterStampTreeBy(tree, selectedChecklistIds, null);
 }
 
 /**
@@ -77,16 +77,22 @@ export function filterStampTreeByChecklists<T extends ChecklistTreeNode<T>>(
  *
  * Composing the two calls would be wrong — the first pass's *context* ancestors would go into the
  * second pass as ordinary survivors and could keep a branch the filter never matched. So the
- * predicate is combined and the tree walked once, which also leaves one `contextIds` set that
- * really does mean "kept only for a descendant".
+ * predicate is combined and the tree walked once, which also leaves one `contextIds` set.
+ *
+ * A checklist narrowing keeps a listed stamp's **whole variant tree** below it (#2655), each variant
+ * the selection does not list drawn as context: the collector identifying a stamp finds it on its
+ * checklist and needs to see there whether it has variants at all, rather than hunting for them
+ * among the stamps on no checklist. "Not listed" means not on the *selected* checklists — a variant
+ * on another checklist of the issue is context here too.
  *
  * A null `matchedStampIds` is the absence of a filter and narrows nothing, exactly as an empty
  * checklist selection does; {@link matchedStampsInIssue} returns null for that case on purpose.
  *
- * The match narrowing **hides**, it does not fade (#631). #186 settled the same question the other
- * way for the picker, where a tree is a chooser and a stamp you were about to pick going missing is
- * worse than one drawn faintly. On the Issues list it is a catalogue being read: an Infla tree runs
- * to dozens of variants, and a page of grey around three matches is a page nobody can scan.
+ * The match narrowing **hides**, it does not fade (#631), and it hides a listed stamp's variants as
+ * it hides anything else. #186 settled the same question the other way for the picker, where a tree
+ * is a chooser and a stamp you were about to pick going missing is worse than one drawn faintly. On
+ * the Issues list it is a catalogue being read: an Infla tree runs to dozens of variants, and a page
+ * of grey around three matches is a page nobody can scan.
  */
 export function filterStampTreeBy<T extends ChecklistTreeNode<T>>(
   tree: T[],
@@ -97,10 +103,25 @@ export function filterStampTreeBy<T extends ChecklistTreeNode<T>>(
     return { tree, contextIds: new Set() };
   }
   const selected = new Set(selectedChecklistIds);
-  return filterStampTree(
-    tree,
-    (n) =>
-      (selected.size === 0 || n.node.checklistIds.some((id) => selected.has(id))) &&
-      (!matchedStampIds || matchedStampIds.has(n.node.stampId))
-  );
+  const contextIds = new Set<string>();
+  const listed = (n: T) =>
+    selected.size === 0 || n.node.checklistIds.some((id) => selected.has(id));
+  const matched = (n: T) => !matchedStampIds || matchedStampIds.has(n.node.stampId);
+
+  function visit(node: T, underListed: boolean): T | null {
+    const own = listed(node);
+    const children = node.children
+      .map((c) => visit(c, underListed || own))
+      .filter((c): c is T => c !== null);
+    const shown = (own || underListed) && matched(node);
+    if (!shown && children.length === 0) return null;
+    if (!(own && matched(node))) contextIds.add(node.node.stampId);
+    // Rebuilt rather than mutated: the caller's tree is shared with the unfiltered render.
+    return { ...node, children };
+  }
+
+  return {
+    tree: tree.map((n) => visit(n, false)).filter((n): n is T => n !== null),
+    contextIds,
+  };
 }

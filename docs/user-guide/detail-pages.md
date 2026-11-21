@@ -292,7 +292,7 @@ Offers. Details, Checklists and Stamps are always there.
   a strip of thumbnails away from the tree would leave you matching pictures to catalog numbers by
   eye, which is the work the tree is already doing for you. When the issue carries more than one
   checklist — or you have picked its only one on the Checklists card — the card header holds a
-  **Checklist** filter that narrows the tree to the set you pick — a parent whose variant matched stays as dimmed context, so a variant never loses the
+  **Checklist** filter that narrows the tree to the set you pick — a stamp on it keeps its variants below it, dimmed where the set does not list them, and a parent whose variant matched stays as dimmed context, so a variant never loses the
   number it is read under.
 
   This is also where the issue's stamps are **added, corrected and removed**, without going back to

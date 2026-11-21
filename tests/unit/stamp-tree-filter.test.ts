@@ -33,9 +33,24 @@ describe("filterStampTreeByChecklists", () => {
     assert.equal(result.contextIds.size, 0);
   });
 
-  it("keeps only the stamps on the selected checklist", () => {
-    const { tree } = filterStampTreeByChecklists(TREE, [BASIC]);
-    assert.deepEqual(ids(tree).sort(), ["73", "74"]);
+  it("keeps only the stamps on the selected checklist, and their variants as context", () => {
+    const { tree, contextIds } = filterStampTreeByChecklists(TREE, [BASIC]);
+    // `74a` is on no checklist but hangs under the listed `74`, so it is drawn there, dimmed (#2655).
+    assert.deepEqual(ids(tree).sort(), ["73", "74", "74a"]);
+    assert.deepEqual([...contextIds], ["74a"]);
+  });
+
+  it("keeps a listed stamp's whole variant tree, at any depth", () => {
+    const tree = [node("20A", [IMPERF], [node("20Aa", [], [node("20Aa1", [])]), node("20Ab", [])])];
+    const result = filterStampTreeByChecklists(tree, [IMPERF]);
+    assert.deepEqual(ids(result.tree), ["20A", "20Aa", "20Aa1", "20Ab"]);
+    assert.deepEqual([...result.contextIds].sort(), ["20Aa", "20Aa1", "20Ab"]);
+  });
+
+  it("dims a variant listed on another checklist, and draws one on this checklist as usual", () => {
+    const tree = [node("20A", [IMPERF], [node("20Aa", [BASIC]), node("20Ab", [IMPERF])])];
+    const { contextIds } = filterStampTreeByChecklists(tree, [IMPERF]);
+    assert.deepEqual([...contextIds], ["20Aa"]);
   });
 
   it("keeps an ancestor of a match, and reports it as context", () => {
@@ -47,12 +62,12 @@ describe("filterStampTreeByChecklists", () => {
 
   it("does not report a matching node as context", () => {
     const { contextIds } = filterStampTreeByChecklists(TREE, [BASIC]);
-    assert.equal(contextIds.size, 0);
+    assert.ok(!contextIds.has("73") && !contextIds.has("74"));
   });
 
   it("unions several selected checklists", () => {
     const { tree } = filterStampTreeByChecklists(TREE, [BASIC, IMPERF]);
-    assert.deepEqual(ids(tree).sort(), ["309", "309AP", "73", "74"]);
+    assert.deepEqual(ids(tree).sort(), ["309", "309AP", "73", "74", "74a"]);
   });
 
   it("drops a branch where nothing matches", () => {
@@ -97,6 +112,20 @@ describe("filterStampTreeBy", () => {
     // first pass hands the second an ancestor it kept only as context.
     const { tree } = filterStampTreeBy(TREE, [BASIC], new Set(["74", "309AP"]));
     assert.deepEqual(ids(tree), ["74"]);
+  });
+
+  it("hides a listed stamp's variant the filter did not match, and dims one it did", () => {
+    const tree = [node("20A", [IMPERF], [node("20Aa", []), node("20Ab", [])])];
+    const result = filterStampTreeBy(tree, [IMPERF], new Set(["20A", "20Ab"]));
+    assert.deepEqual(ids(result.tree), ["20A", "20Ab"]);
+    assert.deepEqual([...result.contextIds], ["20Ab"]);
+  });
+
+  it("keeps a listed stamp the filter missed as context over a matched variant of it", () => {
+    const tree = [node("20A", [IMPERF], [node("20Aa", [])])];
+    const result = filterStampTreeBy(tree, [IMPERF], new Set(["20Aa"]));
+    assert.deepEqual(ids(result.tree), ["20A", "20Aa"]);
+    assert.deepEqual([...result.contextIds].sort(), ["20A", "20Aa"]);
   });
 
   it("leaves the caller's tree untouched", () => {

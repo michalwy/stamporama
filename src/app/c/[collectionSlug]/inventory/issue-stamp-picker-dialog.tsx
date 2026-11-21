@@ -25,7 +25,8 @@ export interface IssuePickerContext {
   year: number | null;
   collectionAreaId: string;
   /** Offer only this checklist's stamps — adding a copy from a checklist's branch (#1520). The
-   *  branch's own narrowing, so an unlisted base a listed variant hangs under is still drawn. */
+   *  branch's own narrowing, so an unlisted base a listed variant hangs under is still drawn, and
+   *  so are a listed stamp's variants (#2655). */
   checklist?: { id: string; name: string };
 }
 
