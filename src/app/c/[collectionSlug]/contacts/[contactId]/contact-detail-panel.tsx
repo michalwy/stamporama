@@ -25,6 +25,7 @@ import {
 } from "@/lib/contact-page-rules";
 import { costPercent, formatCostPercent, type CostToCatalog } from "@/lib/cost-to-catalog";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
+import { languageLabel } from "@/lib/languages";
 import { freeExtraTermsSummary } from "@/lib/free-extra-rules";
 import { AUCTION_SALE_STATUS_LABEL, type AuctionLotOutcome } from "@/lib/auction-rules";
 import { TAG_FILTER_PARAM, TAG_MODE_PARAM } from "@/lib/tag-filter";
@@ -278,6 +279,7 @@ export function ContactDetailPanel({ collectionId, collectionSlug, contactId }: 
       {editing && (
         <ContactFormDialog
           mode="edit"
+          collectionId={collectionId}
           contact={contact}
           isPending={isPending}
           error={error}
@@ -374,6 +376,8 @@ function ContactCard({ data }: { data: ContactPage }) {
           )}
         </Field>
         <Field label="Market">{market}</Field>
+        {/* What a proposal and every other material for this buyer opens in (#2603). */}
+        <Field label="Language">{c.language ? languageLabel(c.language) : null}</Field>
         {/* Its own free-extras terms (#2416), improving on a platform's on a sale to it. */}
         <Field label="Free extras">{freeExtraTermsSummary(c, data.baseCurrency)}</Field>
       </FieldGrid>

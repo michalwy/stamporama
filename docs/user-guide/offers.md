@@ -3594,10 +3594,11 @@ typed, where the summary follows saved ones.
 While the proposal is open, the card above its lots holds everything for the buyer:
 
 - **Message** — the text to send in a chat, with the lots numbered, their prices and the total, and a
-  copy button. It is written from the **proposal message** template on
-  **Settings → Selling → Direct** (see [Platforms](platforms.md)), in your own words around
-  placeholders such as `{buyer}`, `{lots}` and `{total}`. Without a template there is no message —
-  nothing is made up for you.
+  copy button. It is written from the **proposal message** template for the proposal's language on
+  **Settings → Selling → Direct** (see [Platforms](platforms.md#proposal-message)), in your own words
+  around placeholders such as `{buyer}`, `{lots}` and `{total}`. Without a template in that language
+  there is no message — the card says which language's template to write, and nothing is made up for
+  you or taken from another language.
 - **Photos** — **Download all** gives every lot's photos in one ZIP, each file named for its lot
   (`lot-02-…`). Each lot's row also shows its photos, to enlarge, **copy** (to paste straight into a
   chat) or download one by one. They are the lot's offer photos, by its offer photo settings —
@@ -3615,6 +3616,24 @@ While the proposal is open, the card above its lots holds everything for the buy
 **None of them marks the proposal Sent.** Copying the message or a photo, downloading photos, opening
 the document and making its link all leave it as it is, so you can check anything before it goes —
 press **Mark sent** once it has gone to the buyer.
+
+### The language
+
+The message, the document and the link are in **one language**, chosen with **Language** at the top
+of the card. It opens in the [contact's language](contacts.md#language), else in the Direct platform's
+listing language, else in your collection's. It offers the languages your collection already uses.
+
+- **Choosing another saves it on the contact**, so the next proposal for that buyer opens in it. It
+  also changes the **link the buyer already holds**: the page follows the language as it follows the
+  prices.
+- **Each lot's title** is written in that language from its title template — the stamp, series, area,
+  condition, fault and certificate names translated where your collection has a translation, and in
+  its own wording where it has none, as an offer's specification is. A title you wrote by hand is shown
+  as you wrote it. The lot's own title, on its offer and on the proposal's screen, does not change.
+- **The page's own words** — its headings and notices — exist in the languages an offer's
+  specification has them in. For any other language they are in English, and the card says *Page
+  words in English* beside the selector.
+- The lots' **photos** keep the labels they were made with; they are not remade for the language.
 
 ### The buyer's picks
 

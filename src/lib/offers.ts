@@ -186,6 +186,7 @@ import {
   type ListingTemplateContext,
 } from "./offer-title-template";
 import { offerScreenUrl } from "./app-url";
+import { normalizeLanguage } from "./languages";
 import { TITLE_COPY_SELECT, makeTitleCopyMapper, type TitleCopyRow } from "./title-copy";
 import {
   normalizePhotoSides,
@@ -1069,6 +1070,78 @@ function uniqueGaps(gaps: readonly TitleFallback[]): TitleFallback[] {
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * The titles of `offerIds` as their title template renders them in `language` (#2603), without writing
+ * anything — what a proposal shows its buyer in the buyer's language while each lot keeps its own
+ * stored title. Only a title that **follows** its template is rendered: one written by hand
+ * (`nameEdited`) is the collector's words and is returned as written, and so is one never generated
+ * (null) or one whose template ({@link effectiveTemplate} — the offer's own, else its platform's) is
+ * gone — and so is one whose platform already lists in `language`, the words it holds being the
+ * template's in that language. `language` null is the collection's own default language. One copy
+ * read for all of them. Keyed by offer id; an offer not in the collection is absent.
+ */
+export async function offerTitlesInLanguage(
+  ownerId: string,
+  collectionId: string,
+  offerIds: readonly string[],
+  language: string | null
+): Promise<Map<string, string | null>> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const out = new Map<string, string | null>();
+  if (offerIds.length === 0) return out;
+  const { defaultLanguage } = await prisma.collection.findUniqueOrThrow({
+    where: { id: collectionId },
+    select: { defaultLanguage: true },
+  });
+  const home = normalizeLanguage(defaultLanguage);
+  const target = normalizeLanguage(language) ?? home;
+  const offers = await prisma.offer.findMany({
+    where: { id: { in: [...offerIds] }, collectionId },
+    select: {
+      id: true,
+      platformId: true,
+      name: true,
+      nameEdited: true,
+      nameTemplate: true,
+      descriptionTemplate: true,
+      sets: { select: { title: true, items: { select: SET_ITEM_ORDER_SELECT } }, orderBy: OFFER_SETS_ORDER_BY },
+    },
+  });
+  const platforms = new Map<string, PlatformTemplates>();
+  for (const platformId of new Set(offers.map((o) => o.platformId))) {
+    platforms.set(platformId, await assertPlatform(collectionId, platformId));
+  }
+  const rendered = offers.flatMap((offer) => {
+    const listedIn = normalizeLanguage(platforms.get(offer.platformId)!.titleLanguage) ?? home;
+    if (offer.nameEdited || offer.name === null || listedIn === target) {
+      out.set(offer.id, offer.name);
+      return [];
+    }
+    const template = effectiveTemplate("name", offer, platforms.get(offer.platformId)!);
+    if (!template?.trim()) {
+      out.set(offer.id, offer.name);
+      return [];
+    }
+    const composition = offer.sets.map((set) => ({ title: set.title, itemIds: orderedItemIds(set.items) }));
+    return [{ offer, template, composition }];
+  });
+  if (rendered.length === 0) return out;
+  const itemIds = [...new Set(rendered.flatMap((r) => r.composition.flatMap((set) => set.itemIds)))];
+  const byId = await titleCopiesById(ownerId, collectionId, itemIds, target === home ? null : target);
+  for (const { offer, template, composition } of rendered) {
+    const sets: TemplateSet[] = composition.map((set) => ({
+      title: set.title,
+      copies: set.itemIds.flatMap((id) => {
+        const copy = byId.get(id);
+        return copy ? [copy] : [];
+      }),
+    }));
+    // An offer whose copies render to nothing keeps its words rather than losing its title.
+    out.set(offer.id, renderOfferTitle(template, sets) ?? offer.name);
+  }
+  return out;
 }
 
 /** The two of an offer's texts a buyer reads, and so the two a Facebook post prints (#1889). */

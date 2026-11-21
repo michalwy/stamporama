@@ -20,6 +20,7 @@ import {
 import { parsePlatformPhotoLimits } from "@/lib/offer-photo-config";
 import { parsePlatformTextLimits } from "@/lib/listing-text-limits";
 import { normalizeDecimalInput } from "@/lib/decimal-input";
+import { PROPOSAL_MESSAGE_FIELD_PREFIX } from "@/lib/proposal-message-rules";
 
 // The platforms' own actions (#1955; ADR-0071): Settings → Platforms for the generic ones, and each
 // module page's Platform tab for its module platform. One form shape for both — the settings the
@@ -43,6 +44,19 @@ function str(formData: FormData, key: string): string {
 
 function bool(formData: FormData, key: string): boolean {
   return formData.get(key) === "true";
+}
+
+/** The proposal message templates (#2603), one field per language (`proposalMessageTemplate:de`) —
+ *  the whole set the form shows, or undefined when it shows none, which leaves the saved ones alone. */
+function proposalMessageTemplatesOf(formData: FormData): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  let any = false;
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith(PROPOSAL_MESSAGE_FIELD_PREFIX) || typeof value !== "string") continue;
+    out[key.slice(PROPOSAL_MESSAGE_FIELD_PREFIX.length)] = value;
+    any = true;
+  }
+  return any ? out : undefined;
 }
 
 /** Raised when one of the platform's hard limits — photos (#308) or listing-text lengths (#403) —
@@ -86,7 +100,7 @@ function parsePlatformFields(formData: FormData): PlatformInput {
     freeExtrasBudgetPercent: normalizeDecimalInput(str(formData, "freeExtrasBudgetPercent")) || null,
     freeExtrasMaximumBudget: normalizeDecimalInput(str(formData, "freeExtrasMaximumBudget")) || null,
     buyerMessageTemplate: str(formData, "buyerMessageTemplate") || null,
-    proposalMessageTemplate: str(formData, "proposalMessageTemplate") || null,
+    proposalMessageTemplates: proposalMessageTemplatesOf(formData),
     ...limits.value,
     ...textLimits.value,
     photoSides: str(formData, "photoSides"),

@@ -266,7 +266,10 @@ describe("the proposal operations (#2303)", () => {
   });
 
   it("reads the message from Direct's template without marking the proposal sent", async () => {
-    await prisma.platform.update({ where: { id: directId }, data: { proposalMessageTemplate: "Dzień dobry {buyer}!\n{lots}\nRazem {total}" } });
+    // The collection's own language, which the buyer has not changed (#2603).
+    await prisma.platformProposalMessage.create({
+      data: { platformId: directId, language: "en", template: "Dzień dobry {buyer}!\n{lots}\nRazem {total}" },
+    });
     const proposal = await ok<AgentProposal>(token, "POST", "/proposals", { contact: "Jan Kowalski" });
     const lot = await offer(directId, "8.00");
     await ok<AgentProposal>(token, "POST", `/proposals/${proposal.id}/lots`, { offers: [lot.id] });

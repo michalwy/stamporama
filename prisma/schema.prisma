@@ -7559,6 +7559,12 @@ model Contact {
   freeExtrasMinimumOrder  Decimal? @db.Decimal(10, 2)
   freeExtrasBudgetPercent Decimal? @db.Decimal(5, 2)
   freeExtrasMaximumBudget Decimal? @db.Decimal(10, 2)
+  // The language this contact reads (#2603) — a free ISO 639-1 code, as `Platform.titleLanguage` is.
+  // Null is *not known*: every material for a buyer that offers a language choice then opens in the
+  // language it used before — a proposal in the Direct platform's listing language, else the
+  // collection's. Choosing another language in such a material **writes it here**, so the next one
+  // for this contact opens in it; a proposal reads it live, so its live link follows.
+  language         String?
   createdAt        DateTime @default(now())
 
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -7669,11 +7675,6 @@ model Platform {
   // happens next, with `buyer-message-rules.ts`'s placeholders. Null or blank is no message. Not read
   // on the Facebook platform: there it is `facebook_defaults`' and each group's, under #1661's rule.
   buyerMessageTemplate String?
-  // The message a proposal's buyer is sent with its lots and prices (#2288), with
-  // `proposal-message-rules.ts`'s placeholders — as a post's text comes from its group's template.
-  // Read on the Direct platform only, the one a proposal's lots are on, and written empty on every
-  // other. Null or blank is no message: templates are explicit only (#1692).
-  proposalMessageTemplate String?
   // What the platform's description field accepts (#319): `plain` | `html` | `markdown`. Marketplaces
   // disagree — some show plain text with its line breaks, some take raw HTML, some paste rich text —
   // and the app renders and copies the description accordingly (ADR-0019). **Seeded** onto every
@@ -7851,6 +7852,9 @@ model Platform {
   itemExclusions       ItemPlatformExclusion[] @relation("PlatformItemExclusion")
   // The sellers last tracked on this platform (`Contact.defaultAuctionPlatformId`).
   defaultAuctionPlatformFor Contact[] @relation("ContactAuctionPlatform")
+  // The message a proposal's buyer is sent, one text per language (#2288, per language since #2603) —
+  // see `PlatformProposalMessage`. Direct's only.
+  proposalMessages PlatformProposalMessage[]
 
   @@unique([collectionId, name])
   @@unique([collectionId, platformModule])
@@ -7860,6 +7864,22 @@ model Platform {
   @@index([defaultAllegroListingProfileId])
   @@index([defaultDelcampeListingProfileId])
   @@map("platform")
+}
+
+// The message a proposal's buyer is sent with its lots and prices (#2288), **one text per language**
+// (#2603), with `proposal-message-rules.ts`'s placeholders — as a post's text comes from its group's
+// template. Kept on the Direct platform only, the one a proposal's lots are on. A proposal reads the
+// row for its own language and no other: a language with no row has no message, and nothing is filled
+// in from another language (#1692). `language` is a normalised ISO 639-1 code.
+model PlatformProposalMessage {
+  platformId String
+  language   String
+  template   String
+
+  platform Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@id([platformId, language])
+  @@map("platform_proposal_message")
 }
 
 model Location {

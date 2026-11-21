@@ -16,7 +16,7 @@ import {
   type ProposalSaleInput,
   type ProposalSaleResult,
 } from "@/lib/proposals";
-import { createProposalShareToken, revokeProposalShareToken } from "@/lib/proposal-handout";
+import { createProposalShareToken, revokeProposalShareToken, setProposalLanguage } from "@/lib/proposal-handout";
 import { swapProposalLotCopy } from "@/lib/listed-elsewhere";
 import { parseProposalLotPacking, type ProposalMove } from "@/lib/proposal-rules";
 
@@ -159,5 +159,17 @@ export async function revokeProposalShareLinkAction(proposalId: string): Promise
     return { status: "success" };
   } catch (err) {
     return failure(err, "Failed to withdraw the link. Please try again.");
+  }
+}
+
+/** Put the proposal — message, document and live link — in another language (#2603). Saved on the
+ *  contact, so their next proposal opens in it. */
+export async function setProposalLanguageAction(proposalId: string, language: string): Promise<ProposalActionState> {
+  const session = await getSession();
+  try {
+    await setProposalLanguage(session.user.id, proposalId, language);
+    return { status: "success" };
+  } catch (err) {
+    return failure(err, "Failed to change the language. Please try again.");
   }
 }

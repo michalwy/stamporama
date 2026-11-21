@@ -2,6 +2,7 @@ import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma } from "./db";
 import { normalizeLanguage } from "./languages";
+import { proposalMessageTemplateRows, type ProposalMessageTemplate } from "./proposal-message-rules";
 import { normalizePhotoSides } from "./offer-photo-config";
 import { normalizePhotoCoverStyle, normalizePlatformCoverColor } from "./photo-cover-rules";
 import { normalizeDescriptionFormat } from "./description-format";
@@ -148,9 +149,10 @@ export interface PlatformData {
   /** The message a buyer is sent after a sale here (#1815), or null for none. Not read for the
    * Facebook platform, whose message is on Settings → Facebook (#1661). */
   buyerMessageTemplate: string | null;
-  /** The message a proposal's buyer is sent with its lots and prices (#2288), or null for none. Read
-   * on the Direct platform only, and written empty on every other. */
-  proposalMessageTemplate: string | null;
+  /** The message a proposal's buyer is sent with its lots and prices (#2288), one text per language
+   * (#2603), ordered by language. Kept on the Direct platform only; a language with no entry has no
+   * message. */
+  proposalMessageTemplates: ProposalMessageTemplate[];
   /** The platform's hard photo limits (#308), each null when the platform states none. Read live by
    * the renderer (#310) rather than seeded onto offers. */
   maxPhotos: number | null;
@@ -208,7 +210,7 @@ const PLATFORM_SELECT = {
   freeExtrasBudgetPercent: true,
   freeExtrasMaximumBudget: true,
   buyerMessageTemplate: true,
-  proposalMessageTemplate: true,
+  proposalMessages: { select: { language: true, template: true }, orderBy: { language: "asc" } },
   maxPhotos: true,
   maxPhotoEdge: true,
   maxPhotoFileSizeMib: true,
@@ -236,7 +238,9 @@ type PlatformRow = Omit<
   | "freeExtrasMinimumOrder"
   | "freeExtrasBudgetPercent"
   | "freeExtrasMaximumBudget"
+  | "proposalMessageTemplates"
 > & {
+  proposalMessages: ProposalMessageTemplate[];
   defaultStartingPrice: Decimal | null;
   minimumPrice: Decimal | null;
   marketPriceStep: Decimal | null;
@@ -247,9 +251,10 @@ type PlatformRow = Omit<
 
 /** Money leaves this module as a 2-dp string, the convention the rest of the domain layer follows
  * (`offers.ts`, `valuation.ts`) — a `Decimal` does not survive the server/client boundary. */
-function toPlatformData(row: PlatformRow): PlatformData {
+function toPlatformData({ proposalMessages, ...row }: PlatformRow): PlatformData {
   return {
     ...row,
+    proposalMessageTemplates: proposalMessages,
     defaultStartingPrice: row.defaultStartingPrice?.toFixed(2) ?? null,
     minimumPrice: row.minimumPrice?.toFixed(2) ?? null,
     marketPriceStep: row.marketPriceStep?.toFixed(2) ?? null,
@@ -337,9 +342,10 @@ export interface PlatformInput {
   freeExtrasMaximumBudget?: string | null;
   /** The message to a buyer after a sale here (#1815), or null for none. Blank stores null. */
   buyerMessageTemplate?: string | null;
-  /** The Direct platform's proposal message (#2288), or null for none. Blank stores null; ignored on
-   * every other platform. */
-  proposalMessageTemplate?: string | null;
+  /** The Direct platform's proposal messages (#2288), keyed by language (#2603): the whole set,
+   * replacing the one saved — a language left out or blank has no message. Omitted leaves them as they
+   * are; ignored on every other platform. */
+  proposalMessageTemplates?: Readonly<Record<string, string | null | undefined>>;
   /** The platform's photo limits (#308) — null each means "no limit stated". */
   maxPhotos?: number | null;
   maxPhotoEdge?: number | null;
@@ -479,8 +485,6 @@ async function settingsData(
     freeExtrasBudgetPercent: freeExtrasFigure(data.freeExtrasBudgetPercent, "free-extras budget", 100),
     freeExtrasMaximumBudget: freeExtrasFigure(data.freeExtrasMaximumBudget, "maximum free-extras budget"),
     buyerMessageTemplate: data.buyerMessageTemplate?.trim() || null,
-    proposalMessageTemplate:
-      platformModule === DIRECT_PLATFORM_MODULE ? data.proposalMessageTemplate?.trim() || null : null,
     maxTitleLength: uses("maxTitleLength") ? (data.maxTitleLength ?? null) : null,
     maxDescriptionLength: data.maxDescriptionLength ?? null,
     maxPrivateNoteLength: uses("maxPrivateNoteLength") ? (data.maxPrivateNoteLength ?? null) : null,
@@ -657,12 +661,26 @@ export async function updatePlatform(
   const { collectionId, platformModule } = await assertPlatformOwner(ownerId, platformId);
   const name = platformModule ? undefined : genericName(data.name);
   const settings = await settingsData(collectionId, data, platformModule);
+  // The proposal messages (#2603) are rows of their own, written in the same transaction — Direct's
+  // alone, and only when the caller sent them.
+  const messages =
+    platformModule === DIRECT_PLATFORM_MODULE && data.proposalMessageTemplates !== undefined
+      ? proposalMessageTemplateRows(data.proposalMessageTemplates)
+      : null;
   try {
     return toPlatformData(
-      await prisma.platform.update({
-        where: { id: platformId },
-        data: { ...(name ? { name } : {}), ...settings },
-        select: PLATFORM_SELECT,
+      await prisma.$transaction(async (tx) => {
+        if (messages) {
+          await tx.platformProposalMessage.deleteMany({ where: { platformId } });
+          await tx.platformProposalMessage.createMany({
+            data: messages.map((m) => ({ platformId, ...m })),
+          });
+        }
+        return tx.platform.update({
+          where: { id: platformId },
+          data: { ...(name ? { name } : {}), ...settings },
+          select: PLATFORM_SELECT,
+        });
       })
     );
   } catch (err) {

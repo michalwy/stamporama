@@ -8,7 +8,7 @@ import { TextArea, TextInput } from "@/app/c/[collectionSlug]/shared/text-input"
 import { NumericInput } from "@/app/c/[collectionSlug]/shared/numeric-input";
 import { CoverColorPicker } from "@/app/c/[collectionSlug]/shared/photo-cover-editor";
 import { BuyerMessageTemplateField } from "@/app/c/[collectionSlug]/shared/buyer-message-template-field";
-import { ProposalMessageTemplateField } from "@/app/c/[collectionSlug]/shared/proposal-message-template-field";
+import { ProposalMessageTemplateFields } from "@/app/c/[collectionSlug]/shared/proposal-message-template-field";
 import { multiLineFormControl } from "@/app/control-style";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { COMMON_LANGUAGES } from "@/lib/languages";
@@ -571,13 +571,14 @@ export function PlatformFields({ collectionId, platform }: PlatformFieldsProps) 
           )}
 
           {/* The message a proposal's buyer is sent (#2288) — Direct's alone, the platform a proposal's
-              lots are on. */}
+              lots are on — one text per language (#2603). */}
           {isDirect && (
             <div>
-              <LabelWithError htmlFor="platform-proposal-message">Proposal message (optional)</LabelWithError>
-              <ProposalMessageTemplateField
-                id="platform-proposal-message"
-                defaultValue={platform?.proposalMessageTemplate ?? ""}
+              <LabelWithError>Proposal message (optional)</LabelWithError>
+              <ProposalMessageTemplateFields
+                collectionId={collectionId}
+                idPrefix="platform-proposal-message"
+                templates={platform?.proposalMessageTemplates ?? []}
                 style={{ ...INPUT_STYLE, ...multiLineFormControl, resize: "vertical", minHeight: "8rem" }}
               />
             </div>

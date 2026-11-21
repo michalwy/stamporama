@@ -53,6 +53,17 @@ collection's home market. A price observation takes its house's market, or its p
 is no house; one of your own lots takes its sale's seller's, or the sale's platform's. Changing it
 re-judges every result already recorded — nothing is stored on the results.
 
+### Language
+
+Any contact can have a **Language** — the one they read. It is empty until you set it, and offers the
+languages your collection already uses: its own language, your platforms' listing languages and your
+albums' languages. To use another, give a platform or an album that language first.
+
+What you send a buyer opens in their language: a [proposal](offers.md#the-language)'s message,
+document and link. With none set, a proposal opens in the language it always has — the Direct
+platform's listing language, else the collection's. **Choosing another language on a proposal saves it
+here**, so the next one for that buyer opens in it.
+
 ### Free extras
 
 Any contact can have **free extras** of its own — for a regular customer you want to be more generous
@@ -75,7 +86,7 @@ set changes nothing.
 A plain address-book contact is one short form. Tick **Seller** or **Auction house** and the dialog
 grows a second **tab** for what that role brings with it:
 
-- **Contact** — name, full name, email, phone, Facebook profiles, roles, market, free extras and notes. Always there, and where you land.
+- **Contact** — name, full name, email, phone, Facebook profiles, roles, market, language, free extras and notes. Always there, and where you land.
 - **Auction defaults** — the currency and fee terms a seller trades on.
 
 The tabs are **grouping only**: it is still one record with one **Save changes**, and what you typed
@@ -103,7 +114,7 @@ Click a contact's row to open its **page** — what you have done with that pers
 Ctrl-click, or the middle button, opens it in a new tab.
 
 The top of the page says **who** the contact is: the name, full name, roles, email, phone,
-Facebook profiles, market, free extras and notes. **Edit** opens the same dialog as the row's pencil, and
+Facebook profiles, market, language, free extras and notes. **Edit** opens the same dialog as the row's pencil, and
 **Merge with…** makes this contact and another one into one (see [Merging two contacts](#merging-two-contacts)).
 
 Below it, a **period switch** — **This year**, **Last 12 months** or **All time** — narrows every
@@ -218,7 +229,7 @@ Search for the other contact by name or full name. The dialog then shows the two
 the merged contact beside them, and you choose **which one remains**. The merged contact:
 
 - keeps the remaining contact's **name** and every detail it already has — **full name**, **email**,
-  **phone**, **market** — and takes the ones it lacks from the other;
+  **phone**, **market**, **language** — and takes the ones it lacks from the other;
 - holds **both contacts' Facebook profiles**, so a later sale to either account finds it;
 - carries **both sets of roles**;
 - keeps its own **notes**, with the other's added under them;

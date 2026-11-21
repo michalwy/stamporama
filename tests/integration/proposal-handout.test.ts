@@ -22,6 +22,7 @@ import {
   readProposalShareState,
   readSharedProposalDocument,
   revokeProposalShareToken,
+  setProposalLanguage,
   verifyProposalShareToken,
 } from "../../src/lib/proposal-handout";
 
@@ -161,26 +162,32 @@ describe("what a proposal's buyer is sent (#2288)", () => {
 
   it("writes the message from the Direct platform's template, the withdrawn lots left out — and nothing without one", async () => {
     const { proposalId, offerIds } = await proposalWith(["Austria", "25.00"], ["Gone", "9.00"], ["Untitled", "0"]);
-    assert.deepEqual(await readProposalMessage(userId, proposalId), { text: null, unknownPlaceholders: [] });
+    const none = await readProposalMessage(userId, proposalId);
+    assert.deepEqual([none.text, none.unknownPlaceholders, none.language], [null, [], "pl"]);
 
     const direct = await prisma.platform.findUniqueOrThrow({ where: { id: directId } });
     await updatePlatform(userId, directId, {
       name: direct.name,
       platformCurrency: "PLN",
-      proposalMessageTemplate: "  Hi {buyer}\n{lots}\nTotal {total} {oops}  ",
+      proposalMessageTemplates: { pl: "  Hi {buyer}\n{lots}\nTotal {total} {oops}  " },
     });
     await setOfferState(userId, offerIds[1], "withdrawn");
-    assert.deepEqual(await readProposalMessage(userId, proposalId), {
-      text: "Hi Jan Kowalski\n1. Austria — 25 zł\n3. Untitled\nTotal 25 zł {oops}",
-      unknownPlaceholders: ["{oops}"],
-    });
+    const message = await readProposalMessage(userId, proposalId);
+    assert.equal(message.text, "Hi Jan Kowalski\n1. Austria — 25 zł\n3. Untitled\nTotal 25 zł {oops}");
+    assert.deepEqual(message.unknownPlaceholders, ["{oops}"]);
     await assert.rejects(readProposalMessage(otherUserId, proposalId), /not found/);
+
+    // Saving the form without the field leaves the templates as they are.
+    await updatePlatform(userId, directId, { name: direct.name, platformCurrency: "PLN" });
+    assert.equal(await prisma.platformProposalMessage.count({ where: { platformId: directId } }), 1);
+    await updatePlatform(userId, directId, { name: direct.name, platformCurrency: "PLN", proposalMessageTemplates: { pl: "" } });
+    assert.equal(await prisma.platformProposalMessage.count({ where: { platformId: directId } }), 0);
   });
 
   it("keeps the template on Direct alone", async () => {
     const other = await prisma.platform.create({ data: { collectionId, name: `Other ${ts}`, platformCurrency: "PLN" } });
-    await updatePlatform(userId, other.id, { name: other.name, platformCurrency: "PLN", proposalMessageTemplate: "{lots}" });
-    assert.equal((await prisma.platform.findUniqueOrThrow({ where: { id: other.id } })).proposalMessageTemplate, null);
+    await updatePlatform(userId, other.id, { name: other.name, platformCurrency: "PLN", proposalMessageTemplates: { pl: "{lots}" } });
+    assert.equal(await prisma.platformProposalMessage.count({ where: { platformId: other.id } }), 0);
   });
 
   it("leaves a proposal being prepared as it is when anything for the buyer is made — only Mark sent sends it (#2329)", async () => {
@@ -306,5 +313,73 @@ describe("what a proposal's buyer is sent (#2288)", () => {
     // Nothing once the page shows only that the offer is closed.
     await moveProposal(userId, proposalId, "decline");
     assert.equal(await canServeProposalSharePhoto(access, lotImage), false);
+  });
+
+  it("sends a proposal in its buyer's language — the template for it alone, the titles rendered in it, a choice saved on the contact (#2603)", async () => {
+    // German is a language the collection uses: a platform lists in it.
+    await prisma.platform.create({ data: { collectionId, name: `Briefmarken ${ts}`, titleLanguage: "de" } });
+    await prisma.stampConditionTranslation.create({ data: { stampConditionId: conditionId, language: "de", name: "Gestempelt" } });
+    const hans = (await prisma.contact.create({ data: { collectionId, name: "Hans Müller", buyer: true, language: "de" } })).id;
+    const direct = await prisma.platform.findUniqueOrThrow({ where: { id: directId } });
+    await updatePlatform(userId, directId, {
+      name: direct.name,
+      platformCurrency: "PLN",
+      titleTemplate: "{condition}",
+      proposalMessageTemplates: { pl: "Dzień dobry {buyer}\n{lots}" },
+    });
+
+    const made = await createProposal(userId, collectionId, hans);
+    // One lot following the title template, one written by hand.
+    const generatedLot = await createOffer(
+      userId,
+      collectionId,
+      { platformId: directId, url: null, price: "10.00", startingPrice: null, currency: "PLN", listingDate: null },
+      { seedItemIds: [await copy()] }
+    );
+    const stored = (await prisma.offer.findUniqueOrThrow({ where: { id: generatedLot } })).name;
+    assert.equal(stored, "Used");
+    const handLot = await lot("Mein Titel", "5.00");
+    await addProposalLots(userId, made.proposalId, [generatedLot, handLot]);
+
+    // German, and no German template: no message, and nothing filled in from Polish.
+    const german = await readProposalMessage(userId, made.proposalId);
+    assert.equal(german.language, "de");
+    assert.equal(german.text, null);
+    assert.deepEqual(german.languages, ["pl", "de"]);
+
+    await updatePlatform(userId, directId, {
+      name: direct.name,
+      platformCurrency: "PLN",
+      titleTemplate: "{condition}",
+      proposalMessageTemplates: { pl: "Dzień dobry {buyer}\n{lots}", de: "Guten Tag {buyer}\n{lots}" },
+    });
+    assert.equal(
+      (await readProposalMessage(userId, made.proposalId)).text,
+      "Guten Tag Hans Müller\n1. Gestempelt — 10 zł\n2. Mein Titel — 5 zł"
+    );
+    const document = (await readProposalDocument(userId, made.proposalId, collectionId))!;
+    assert.equal(document.language, "de");
+    assert.deepEqual(document.lots.map((l) => l.title), ["Gestempelt", "Mein Titel"]);
+    // The lot's own title is not touched.
+    assert.equal((await prisma.offer.findUniqueOrThrow({ where: { id: generatedLot } })).name, "Used");
+
+    // The buyer's link follows the language: switching to Polish saves Polish on the contact.
+    const { token } = await createProposalShareToken(userId, made.proposalId);
+    const access = (await verifyProposalShareToken(token, { touch: false }))!;
+    await assert.rejects(setProposalLanguage(userId, made.proposalId, "fr"), /not one this collection uses/);
+    await setProposalLanguage(userId, made.proposalId, "pl");
+    assert.equal((await prisma.contact.findUniqueOrThrow({ where: { id: hans } })).language, "pl");
+    const shared = await readSharedProposalDocument(access);
+    assert.equal(shared.standing, "shown");
+    if (shared.standing === "shown") {
+      assert.equal(shared.document.language, "pl");
+      assert.deepEqual(shared.document.lots.map((l) => l.title), ["Used", "Mein Titel"]);
+    }
+    assert.match((await readProposalMessage(userId, made.proposalId)).text ?? "", /^Dzień dobry Hans Müller/);
+
+    // The next proposal for them opens in Polish.
+    const next = await createProposal(userId, collectionId, hans);
+    assert.equal((await readProposalMessage(userId, next.proposalId)).language, "pl");
+    await assert.rejects(setProposalLanguage(otherUserId, made.proposalId, "de"), /not found/);
   });
 });

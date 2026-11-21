@@ -15,6 +15,7 @@ const blank: ContactMergeDetails = {
   email: null,
   phone: null,
   market: null,
+  language: null,
   facebookProfileUrls: [],
   buyer: false,
   seller: false,
@@ -46,8 +47,9 @@ describe("mergedContactDetails (#2043)", () => {
   it("takes the details the remaining contact lacks from the other", () => {
     const merged = mergedContactDetails(
       contact({ name: "Jan" }),
-      contact({ name: "jan_2", fullName: "Jan Kowalski", email: "j@example.com", phone: "9", market: "DE" })
+      contact({ name: "jan_2", fullName: "Jan Kowalski", email: "j@example.com", phone: "9", market: "DE", language: "de" })
     );
+    assert.equal(merged.language, "de");
     assert.equal(merged.fullName, "Jan Kowalski");
     assert.equal(merged.email, "j@example.com");
     assert.equal(merged.phone, "9");

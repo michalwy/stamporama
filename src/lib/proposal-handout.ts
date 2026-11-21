@@ -1,7 +1,9 @@
 import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
-import { normalizeLanguage } from "./languages";
+import { buyerMaterialLanguage, normalizeLanguage } from "./languages";
+import { getCollectionLanguageChoices, setContactLanguage } from "./contacts";
+import { offerTitlesInLanguage } from "./offers";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
 import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import { zip, type ZipEntry } from "./zip";
@@ -15,7 +17,11 @@ import type { OfferListingType, OfferState } from "./offer-rules";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { DEFAULT_CURRENCY_STYLE, writtenAmount } from "./template-amount";
 import { proposalBuyerPickRefusal, proposalLotPrice, proposalStatusOf, proposalTotal } from "./proposal-rules";
-import { renderProposalMessage, unknownProposalMessagePlaceholders } from "./proposal-message-rules";
+import {
+  proposalMessageTemplateFor,
+  renderProposalMessage,
+  unknownProposalMessagePlaceholders,
+} from "./proposal-message-rules";
 import {
   isProposalShareTokenShape,
   proposalDocumentMark,
@@ -41,6 +47,12 @@ import {
 // `verifyProposalShareToken` hands back an access value carrying the proposal id it resolved to, and
 // the page and the photo route take that value rather than anything from the URL. What leaves this
 // module for a buyer carries no ids of the collection's: a lot is keyed by its lot number.
+//
+// **All three are in the buyer's language** (#2603): the contact's, else the Direct platform's listing
+// language, else the collection's — read live, so choosing another language on the proposal's card
+// (which saves it on the contact) moves the live link with it. The message comes from Direct's template
+// for that language and no other; each lot's title is rendered in it from its title template unless
+// the collector wrote it by hand, and the lot's stored title is not touched.
 
 const HASH_ALGO = "sha256";
 
@@ -67,7 +79,7 @@ async function readProposalHead(proposalId: string) {
       proposalNo: true,
       collectionId: true,
       status: true,
-      contact: { select: { name: true } },
+      contact: { select: { id: true, name: true, language: true } },
       collection: { select: { ownerId: true, defaultLanguage: true, baseCurrency: true } },
       lots: {
         orderBy: LOT_ORDER,
@@ -89,7 +101,11 @@ async function readProposalHead(proposalId: string) {
   if (!row) return null;
   const direct = await prisma.platform.findFirst({
     where: { collectionId: row.collectionId, platformModule: DIRECT_PLATFORM_MODULE },
-    select: { titleLanguage: true, platformCurrency: true, proposalMessageTemplate: true },
+    select: {
+      titleLanguage: true,
+      platformCurrency: true,
+      proposalMessages: { select: { language: true, template: true } },
+    },
   });
   const lots = row.lots.map((lot, index) => {
     const figures = {
@@ -108,22 +124,48 @@ async function readProposalHead(proposalId: string) {
       pickedAt: lot.proposalPickedAt,
     };
   });
+  const defaultLanguage = normalizeLanguage(row.collection.defaultLanguage);
+  // The proposal's language (#2603): its buyer's, else its platform's listing language, else the
+  // collection's, as a post's is.
+  const language = buyerMaterialLanguage(row.contact.language, direct?.titleLanguage, defaultLanguage);
   return {
     proposalId: row.id,
     proposalNo: row.proposalNo,
     collectionId: row.collectionId,
     ownerId: row.collection.ownerId,
     status: proposalStatusOf(row.status),
+    contactId: row.contact.id,
+    contactLanguage: normalizeLanguage(row.contact.language),
     buyerName: row.contact.name,
-    // The proposal's language: its platform's listing language, else the collection's, as a post's is.
-    language: normalizeLanguage(direct?.titleLanguage) ?? normalizeLanguage(row.collection.defaultLanguage),
+    language,
     currency: lots[0]?.currency ?? direct?.platformCurrency ?? row.collection.baseCurrency,
-    template: direct?.proposalMessageTemplate ?? null,
+    // The template for the proposal's language and no other (#2603).
+    template: proposalMessageTemplateFor(direct?.proposalMessages ?? [], language),
     lots,
   };
 }
 
 type ProposalHead = NonNullable<Awaited<ReturnType<typeof readProposalHead>>>;
+
+/**
+ * The head with each lot's title as the buyer reads it (#2603): rendered in the proposal's language
+ * from its title template where its platform lists in another (a post's lots are on Facebook, #2602), a
+ * title written by hand kept as written (`offerTitlesInLanguage`). Nothing is stored. Only the message
+ * and the document need it — the photos and the link's bookkeeping read the head as it is.
+ */
+async function withBuyerTitles(head: ProposalHead): Promise<ProposalHead> {
+  if (head.lots.length === 0) return head;
+  const titles = await offerTitlesInLanguage(
+    head.ownerId,
+    head.collectionId,
+    head.lots.map((lot) => lot.offerId),
+    head.language
+  );
+  return {
+    ...head,
+    lots: head.lots.map((lot) => (titles.has(lot.offerId) ? { ...lot, title: titles.get(lot.offerId)?.trim() ?? "" } : lot)),
+  };
+}
 
 /** The proposal is the caller's — and in `collectionId`, where one is named — or this throws. */
 async function assertProposalOwner(ownerId: string, proposalId: string, collectionId?: string): Promise<{ collectionId: string }> {
@@ -214,16 +256,24 @@ export async function buildProposalPhotoArchive(
 // ── The message ─────────────────────────────────────────────────────────────────────────────────
 
 /** The message as the proposal's screen shows it: the text, or null where the Direct platform has no
- *  template — then nothing is generated (#1692) — and the template's tokens that are not
- *  placeholders, which stay as typed. */
+ *  template for the proposal's language — then nothing is generated (#1692) — and the template's
+ *  tokens that are not placeholders, which stay as typed. With it, the language choice the card's
+ *  selector shows (#2603). */
 export interface ProposalMessage {
   text: string | null;
   unknownPlaceholders: string[];
+  /** The language the message, the document and the link are in: the contact's, else the Direct
+   *  platform's listing language, else the collection's. */
+  language: string | null;
+  /** The languages the selector offers — the ones the collection uses, the contact's own kept. */
+  languages: string[];
 }
 
-function messageOf(head: ProposalHead): ProposalMessage {
+function messageOf(head: ProposalHead, languages: string[]): ProposalMessage {
   const offered = head.lots.filter((lot) => lot.state !== "withdrawn");
   return {
+    language: head.language,
+    languages,
     text: renderProposalMessage(head.template, {
       proposalNo: head.proposalNo,
       buyerName: head.buyerName,
@@ -243,7 +293,34 @@ export async function readProposalMessage(
   await assertProposalOwner(ownerId, proposalId, collectionId);
   const head = await readProposalHead(proposalId);
   if (!head) throw new Error("Proposal not found.");
-  return messageOf(head);
+  const [titled, languages] = await Promise.all([
+    withBuyerTitles(head),
+    getCollectionLanguageChoices(ownerId, head.collectionId, [head.language]),
+  ]);
+  return messageOf(titled, languages);
+}
+
+/**
+ * Put the proposal in another language (#2603) — the message, the document and the live link the buyer
+ * already holds, all three read live. The choice is **saved on the contact**, so the next proposal for
+ * them opens in it; there is no column on the proposal. Only a language the collection uses (or the one
+ * the contact already has) is taken. Returns the language now in force.
+ */
+export async function setProposalLanguage(
+  ownerId: string,
+  proposalId: string,
+  language: string,
+  collectionId?: string
+): Promise<string> {
+  await assertProposalOwner(ownerId, proposalId, collectionId);
+  const head = await readProposalHead(proposalId);
+  if (!head) throw new Error("Proposal not found.");
+  const code = normalizeLanguage(language);
+  const choices = await getCollectionLanguageChoices(ownerId, head.collectionId, [head.contactLanguage]);
+  if (!code || !choices.includes(code)) {
+    throw new Error("That language is not one this collection uses. Add it to a platform or an album first.");
+  }
+  return (await setContactLanguage(ownerId, head.contactId, code)) ?? code;
 }
 
 // ── The document ────────────────────────────────────────────────────────────────────────────────
@@ -272,7 +349,8 @@ export interface ProposalDocumentLot {
 /** What the document draws. `lots` only while it is `shown`. */
 export interface ProposalDocument {
   proposalNo: number;
-  /** The proposal's language — the Direct platform's listing language, else the collection's. */
+  /** The proposal's language — its buyer's (#2603), else the Direct platform's listing language, else
+   *  the collection's. */
   language: string | null;
   standing: ProposalDocumentStanding;
   lots: ProposalDocumentLot[];
@@ -333,7 +411,7 @@ export async function readProposalDocument(
     return null;
   }
   const head = await readProposalHead(proposalId);
-  return head ? buildDocument(ownerId, head) : null;
+  return head ? buildDocument(ownerId, await withBuyerTitles(head)) : null;
 }
 
 // ── The collector's side of the link ────────────────────────────────────────────────────────────
@@ -486,7 +564,7 @@ export async function readSharedProposalDocument(access: ProposalShareAccess): P
   if (!head || head.collectionId !== access.collectionId) {
     return { standing: "closed", proposalNo: null, language: access.language };
   }
-  const document = await buildDocument(access.ownerId, head);
+  const document = await buildDocument(access.ownerId, await withBuyerTitles(head));
   if (document.standing === "shown") return { standing: "shown", document };
   return { standing: "closed", proposalNo: document.proposalNo, language: document.language };
 }
