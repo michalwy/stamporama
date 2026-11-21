@@ -6,6 +6,7 @@ import {
   AUCTION_SALE_STATUSES,
   bidFreshness,
   closingUrgency,
+  closesFromRow,
   deriveAuctionSaleName,
   isAuctionLotOutcome,
   isAuctionLotStatus,
@@ -151,6 +152,24 @@ describe("closingUrgency", () => {
   it("leaves a settled lot alone — its date is history, not a deadline", () => {
     assert.equal(closingUrgency({ status: "closed", endsAt: at(now, -30 * DAY) }, now), "later");
     assert.equal(closingUrgency({ status: "cancelled", endsAt: at(now, HOUR) }, now), "later");
+  });
+});
+
+describe("closesFromRow (#2677)", () => {
+  const now = new Date("2026-07-28T12:00:00.000Z");
+
+  it("offers the button on an open lot past its closing time", () => {
+    assert.equal(closesFromRow({ status: "open", endsAt: at(now, -50 * 60 * 1000) }, now), true);
+  });
+
+  it("does not offer it before the closing time", () => {
+    assert.equal(closesFromRow({ status: "open", endsAt: at(now, HOUR) }, now), false);
+    assert.equal(closesFromRow({ status: "open", endsAt: at(now, 3 * DAY) }, now), false);
+  });
+
+  it("drops it once the lot is closed or cancelled", () => {
+    assert.equal(closesFromRow({ status: "closed", endsAt: at(now, -HOUR) }, now), false);
+    assert.equal(closesFromRow({ status: "cancelled", endsAt: at(now, -HOUR) }, now), false);
   });
 });
 

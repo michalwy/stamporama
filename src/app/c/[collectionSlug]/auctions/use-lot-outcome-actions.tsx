@@ -151,7 +151,7 @@ export function useLotOutcomeActions(
    * (#1954). The screen asks rather than the row: on the watchlist the row is gone once its lot
    * closes, closed lots being hidden. */
   onChanged: (askToFinish?: AuctionSaleFinishAsk | null) => void
-): { actions: RowAction[]; dialog: React.ReactNode } {
+): { actions: RowAction[]; openClose: () => void; dialog: React.ReactNode } {
   const [dialog, setDialog] = useState<OutcomeDialog>({ kind: "none" });
   const [finalPrice, setFinalPrice] = useState("");
   const [wonTie, setWonTie] = useState<TieAnswer>(null);
@@ -199,6 +199,17 @@ export function useLotOutcomeActions(
     });
   }
 
+  /** Opens *Close the lot* — from the menu entry, and from the row's own button on a lot past its
+   * closing time (#2677), which is the same dialog by the same door. */
+  function openClose() {
+    // Seeded **here and only here** — on opening. Nothing re-applies it while the dialog is up,
+    // which is what makes a cleared field stay cleared.
+    setFinalPrice(closingPricePrefill(lot));
+    setWonTie(lot.status === "closed" && lot.outcome === "won" ? true : null);
+    setError(undefined);
+    setDialog({ kind: "close" });
+  }
+
   const actions: RowAction[] = [
     {
       key: "close",
@@ -206,14 +217,7 @@ export function useLotOutcomeActions(
       icon: "settle",
       disabled: lot.settled,
       hint: settledHint,
-      onSelect: () => {
-        // Seeded **here and only here** — on opening. Nothing re-applies it while the dialog is up,
-        // which is what makes a cleared field stay cleared.
-        setFinalPrice(closingPricePrefill(lot));
-        setWonTie(lot.status === "closed" && lot.outcome === "won" ? true : null);
-        setError(undefined);
-        setDialog({ kind: "close" });
-      },
+      onSelect: openClose,
     },
     // The outcome chip is right there on the row, so an entry it already answers is hidden rather
     // than shown greyed out — the exception to #273 the copies list makes for its offer action.
@@ -424,6 +428,7 @@ export function useLotOutcomeActions(
 
   return {
     actions,
+    openClose,
     dialog: dialogNode && createPortal(dialogNode, document.body),
   };
 }
