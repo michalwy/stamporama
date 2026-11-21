@@ -20,7 +20,7 @@ import type { RawCatalogPrice } from "./catalog-price";
 import { compareCatalogSortKeys } from "./catalog-sort-key";
 import { roundAmount } from "./decimal-input";
 import { catalogPriceMarkOf, type CatalogPriceMark } from "./catalog-price-mark";
-import { withIssueAncestors } from "./checklist-branches";
+import { withIssueAncestorsAndVariants } from "./checklist-branches";
 
 // The variant price grid (#618): a grid over a **tree**, because that is the shape of the source.
 //
@@ -529,7 +529,11 @@ async function resolveScope(
     await assertCollectionOwner(ownerId, issue.collectionId);
     const members = await prisma.issueMember.findMany({
       where: { issueId: scope.issueId },
-      select: { stampId: true, sortOrder: true, stamp: { select: { parentId: true } } },
+      select: {
+        stampId: true,
+        sortOrder: true,
+        stamp: { select: { parentId: true, ...VARIANT_FLAG_SELECT } },
+      },
       orderBy: [{ sortOrder: "asc" }, { stampId: "asc" }],
     });
     const issueLabel = issue.name ?? (issue.year != null ? String(issue.year) : "(unnamed issue)");
@@ -540,9 +544,15 @@ async function resolveScope(
         })
       : null;
     if (scope.checklistId && !checklist) throw new Error("Checklist not found.");
+    // A listed umbrella comes with its variants (#2674): its value is rolled up from them, and
+    // without them the grid has no cell that could price it.
     const inScope = checklist
-      ? withIssueAncestors(
-          members.map((m) => ({ stampId: m.stampId, parentId: m.stamp.parentId })),
+      ? withIssueAncestorsAndVariants(
+          members.map((m) => ({
+            stampId: m.stampId,
+            parentId: m.stamp.parentId,
+            isVariant: childIsVariant(m.stamp),
+          })),
           new Set(checklist.stamps.map((s) => s.stampId))
         )
       : null;

@@ -100,3 +100,39 @@ export function withIssueAncestors(
   }
   return out;
 }
+
+/**
+ * The rows of the variant price grid opened from a checklist (#2674): {@link withIssueAncestors},
+ * plus every **variant** below a listed stamp within the issue, at any depth. An umbrella's value is
+ * rolled up from its variants, so a grid that lists the umbrella without them leaves it with nothing
+ * to price.
+ *
+ * Only variant-kind children are followed (`isVariant`, ADR-0010 §3) — the ones that roll up. A
+ * distinct entry filed under a listed stamp (an error, a plate flaw) is its own entry, and stays off
+ * the grid unless the checklist lists it; so do the variants hanging under it.
+ */
+export function withIssueAncestorsAndVariants(
+  members: readonly { stampId: string; parentId: string | null; isVariant: boolean }[],
+  listed: ReadonlySet<string>
+): Set<string> {
+  const out = withIssueAncestors(members, listed);
+  const variantsOf = new Map<string, string[]>();
+  for (const m of members) {
+    if (!m.parentId || !m.isVariant) continue;
+    const siblings = variantsOf.get(m.parentId);
+    if (siblings) siblings.push(m.stampId);
+    else variantsOf.set(m.parentId, [m.stampId]);
+  }
+  const seen = new Set<string>();
+  // Only listed stamps that are members — `withIssueAncestors` dropped the others.
+  const stack = [...listed].filter((id) => out.has(id));
+  // `seen` keeps a cycle in bad data from looping.
+  while (stack.length > 0) {
+    const at = stack.pop()!;
+    if (seen.has(at)) continue;
+    seen.add(at);
+    out.add(at);
+    stack.push(...(variantsOf.get(at) ?? []));
+  }
+  return out;
+}

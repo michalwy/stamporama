@@ -233,3 +233,101 @@ describe("a checklist branch's scoped actions (#1520)", () => {
     assert.equal(await prisma.issueMember.count({ where: { issueId } }), before);
   });
 });
+
+// **A checklist's variant price grid carries its umbrellas' variants** (#2674). An umbrella on the
+// checklist rolls its value up from its variants, so the grid opened from the branch shows them at
+// any depth, listed or not — while a distinct entry filed under it (here a plate flaw) stays off
+// unless the checklist lists it.
+describe("a checklist's variant price grid carries its umbrellas' variants (#2674)", () => {
+  const ts = Date.now();
+  let userId: string;
+  let collectionId: string;
+  let issueId: string;
+  let perforated: string;
+  let plain: string;
+  let u: string;
+  let ua: string;
+  let ub: string;
+  let ubx: string;
+  let uf: string;
+  let p: string;
+
+  before(async () => {
+    userId = `test-user-clvariants-${ts}`;
+    await prisma.user.create({
+      data: {
+        id: userId,
+        name: "Test",
+        email: `${userId}@example.com`,
+        emailVerified: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    collectionId = (
+      await prisma.collection.create({
+        data: { slug: `col-clvariants-${ts}`, name: "Umbrellas", baseCurrency: "EUR", ownerId: userId },
+      })
+    ).id;
+    const collectionAreaId = (
+      await prisma.collectionArea.create({ data: { collectionId, name: "Poland" } })
+    ).id;
+    issueId = (
+      await prisma.issue.create({
+        data: { collectionId, issueNo: 1, collectionAreaId, name: "North Poland" },
+      })
+    ).id;
+    const stamp = async (name: string, parentId: string | null, actsAsVariantOverride: boolean | null) =>
+      (await prisma.stamp.create({ data: { collectionId, name, parentId, actsAsVariantOverride } })).id;
+    u = await stamp("91C", null, null);
+    ua = await stamp("91Ca", u, true);
+    ub = await stamp("91Cb", u, true);
+    ubx = await stamp("91Cbx", ub, true);
+    uf = await stamp("91C plate flaw", u, false);
+    p = await stamp("92C", null, null);
+    await prisma.issueMember.createMany({
+      data: [u, ua, ub, ubx, uf, p].map((stampId, sortOrder) => ({ issueId, stampId, sortOrder })),
+    });
+    perforated = (
+      await prisma.checklist.create({ data: { collectionId, issueId, name: "Perforated", sortOrder: 0 } })
+    ).id;
+    plain = (
+      await prisma.checklist.create({ data: { collectionId, issueId, name: "Plain", sortOrder: 1 } })
+    ).id;
+    await prisma.checklistStamp.createMany({
+      data: [
+        { checklistId: perforated, stampId: u, sortOrder: 0 },
+        { checklistId: perforated, stampId: p, sortOrder: 1 },
+        { checklistId: plain, stampId: p, sortOrder: 0 },
+      ],
+    });
+  });
+
+  after(async () => {
+    await prisma.collection.deleteMany({ where: { ownerId: userId } });
+    await prisma.user.deleteMany({ where: { id: userId } });
+  });
+
+  it("shows a listed umbrella's variants at any depth, and not the entry filed under it", async () => {
+    const grid = await getVariantPriceGrid(userId, { kind: "issue", issueId, checklistId: perforated });
+    assert.deepEqual(grid.rows.map((r) => r.stampId).sort(), [u, ua, ub, ubx, p].sort());
+    const row = new Map(grid.rows.map((r) => [r.stampId, r]));
+    // The umbrella is a rolled-up row, its variants roll up into it — as on the issue's grid.
+    assert.equal(row.get(u)!.identified, false);
+    assert.equal(row.get(ua)!.isVariant, true);
+    assert.equal(row.get(ubx)!.isVariant, true);
+    const whole = await getVariantPriceGrid(userId, { kind: "issue", issueId });
+    const wholeRow = new Map(whole.rows.map((r) => [r.stampId, r]));
+    for (const id of [u, ua, ub, ubx]) {
+      assert.deepEqual(
+        { ...row.get(id)!, depth: undefined },
+        { ...wholeRow.get(id)!, depth: undefined }
+      );
+    }
+  });
+
+  it("shows the same rows as before for a checklist with no umbrellas", async () => {
+    const grid = await getVariantPriceGrid(userId, { kind: "issue", issueId, checklistId: plain });
+    assert.deepEqual(grid.rows.map((r) => r.stampId), [p]);
+  });
+});
