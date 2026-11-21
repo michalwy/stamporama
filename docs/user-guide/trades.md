@@ -552,6 +552,15 @@ you can turn it on or off later without changing the address.
 **Expires** is optional and blank by default: the link stays live until you withdraw it. An exchange
 runs for weeks, and a link that dies mid-negotiation is a phone call.
 
+**The page is in your partner's language.** The dialog's **Language** opens in the language on your
+partner's [contact](contacts.md#language), else your collection's own. The page's headings, notes and
+buttons are in it, and stamp, series, area, condition and certificate names are too wherever your
+collection has them translated — the rest stay in your own wording. Choosing another language saves it
+on the contact straight away, so whatever you send them next opens in it too. It changes neither the
+address nor anything else about the link: the page your partner already has simply reads in the new
+language the next time it is opened. For a language the page has no words in, the dialog says
+**Page words in English** — the names are still translated.
+
 The link works at every stage of the exchange except a cancelled one — including while you are still
 composing, and after it is closed, when it is the record of what was actually exchanged. Generating a
 link does **not** move the trade to *Shared*; that stays your own decision on the ⋮ menu.

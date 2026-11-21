@@ -13,17 +13,21 @@ import { readPartnerTradeFeedback } from "@/lib/trade-feedback";
 import { readTradeShareChoices } from "@/lib/trade-proposals";
 import {
   TRADE_SHARE_REFUSAL_MESSAGE,
-  tradeShareSideHeading,
   type TradeShareRefusal,
 } from "@/lib/trade-share-rules";
 import {
-  TRADE_GROUP_LABEL,
   TRADE_GROUP_LEVELS,
   readTradeGroupLevels,
   type TradeGroupLevel,
 } from "@/lib/trade-grouping";
+import {
+  tradeShareCount,
+  tradeShareCountText,
+  tradeShareLabels,
+  type TradeShareLabels,
+} from "@/lib/trade-share-labels";
 import { SHARE_STYLESHEET } from "./share-styles";
-import { ShareSide, countText, money } from "./share-side";
+import { ShareSide, money } from "./share-side";
 import { PartnerFeedbackProvider, TradeNoteFeedback } from "./feedback-controls";
 
 // **The partner's copy of the trade** (#640; ADR-0039 §9): a read-only page addressed by a secret
@@ -107,23 +111,25 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
   // the partner has no way to tell the two apart and nothing they could do differently either.
   if (!view) return <Refusal message={TRADE_SHARE_REFUSAL_MESSAGE.unknown} />;
 
+  // **In the partner's language** (#2606): the page's own words from here, the names on it already
+  // translated by `readTradeShareView`. The client controls look theirs up by the same code.
+  const words = tradeShareLabels(view.language);
+
   return (
     <>
       <style>{SHARE_STYLESHEET}</style>
-      <main className="ts-page">
+      <main className="ts-page" lang={view.language ?? undefined}>
         <h1 className="ts-title">
-          Exchange #{view.tradeNo}
+          {words.exchangeNo(view.tradeNo)}
           <span className="ts-status">{view.statusLabel}</span>
         </h1>
-        <p className="ts-parties">
-          {view.collectorName} and {view.partnerName}
-        </p>
+        <p className="ts-parties">{words.parties(view.collectorName, view.partnerName)}</p>
 
-        <ValuationNote view={view} />
+        <ValuationNote view={view} words={words} />
 
         <hr className="ts-rule" />
 
-        <Arrange token={token} levels={view.levels} />
+        <Arrange token={token} levels={view.levels} words={words} />
 
         {/* Everything the partner's own answers touch is inside one provider (#667): the mark on a
             row, the words on it and the count at the head of its side are one state, so ticking a
@@ -133,11 +139,13 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
           token={token}
           canLeave={feedback.canLeave}
           initial={feedback.byLine}
+          language={view.language}
+          status={view.status}
         >
           {view.sections.map((section) => (
             <section key={section.id} className="ts-section">
               <h2 className="ts-section-name">{section.name}</h2>
-              <ColnectLists section={section} view={view} />
+              <ColnectLists section={section} view={view} words={words} />
               <div className="ts-sides">
                 {section.sides.map((side) => (
                   <ShareSide
@@ -145,6 +153,7 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
                     side={side}
                     token={token}
                     choices={choices}
+                    language={view.language}
                   />
                 ))}
               </div>
@@ -159,11 +168,11 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
                 <div key={side}>
                   <div className="ts-total-line">
                     <span>{heading}</span>
-                    <span>{countText(totals)}</span>
+                    <span>{tradeShareCountText(view.language, totals)}</span>
                   </div>
                   {totals.value !== null && view.valuation && (
                     <div className="ts-total-line">
-                      <span>Total</span>
+                      <span>{words.total}</span>
                       <span>{money(totals.value, view.valuation.currency)}</span>
                     </div>
                   )}
@@ -171,8 +180,8 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
                       has none would read as an answer while being a guess. */}
                   {totals.valueMissing > 0 && (
                     <div className="ts-total-line ts-warn">
-                      <span>Not priced</span>
-                      <span>{totals.valueMissing} lines</span>
+                      <span>{words.notPriced}</span>
+                      <span>{tradeShareCount(view.language, totals.valueMissing, (l) => l.lines)}</span>
                     </div>
                   )}
                 </div>
@@ -180,7 +189,7 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
             })}
           </div>
 
-          <RateNote view={view} />
+          <RateNote view={view} words={words} />
 
           {/* **What the partner has to say about the exchange as a whole** (#641). At the foot, after
               the totals, because that is the order the conversation happens in: the list is read, the
@@ -189,7 +198,14 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
               and they decide. */}
           <TradeNoteFeedback
             initial={feedback.trade}
-            closedMessage={feedback.closedMessage}
+            // Said in the page's language rather than read off the feedback, whose sentence is English.
+            closedMessage={
+              feedback.canLeave
+                ? null
+                : view.status === "closed"
+                  ? words.feedbackFinished
+                  : words.feedbackClosed(view.statusLabel)
+            }
             collectorName={view.collectorName}
           />
         </PartnerFeedbackProvider>
@@ -216,9 +232,11 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
 function ColnectLists({
   section,
   view,
+  words,
 }: {
   section: TradeShareSectionView;
   view: TradeShareView;
+  words: TradeShareLabels;
 }) {
   if (section.colnectLists.length === 0) return null;
   return (
@@ -234,7 +252,7 @@ function ColnectLists({
                 *give* and *receive* are the collector's words and they invert on this side of the
                 table. */}
             <div className="ts-lists-head">
-              {tradeShareSideHeading(side, view.collectorName, view.partnerName)} — on Colnect
+              {words.from(side === "give" ? view.collectorName : view.partnerName)} — {words.onColnect}
             </div>
             <ul>
               {own.map((list) => (
@@ -253,30 +271,21 @@ function ColnectLists({
 }
 
 /** What the figures on this page are, said once, before any of them are read. */
-function ValuationNote({ view }: { view: TradeShareView }) {
-  if (!view.valuation) {
-    return (
-      <p className="ts-note">
-        This list shows what is on each side. Figures are not included.
-      </p>
-    );
-  }
+function ValuationNote({ view, words }: { view: TradeShareView; words: TradeShareLabels }) {
+  if (!view.valuation) return <p className="ts-note">{words.noFigures}</p>;
+  const frozen = view.valuation.frozen ? ` ${words.frozen}` : "";
   if (view.valuation.kind === "agreed") {
     return (
       <p className="ts-note">
-        Figures are {view.valuation.catalogName ?? "the agreed catalogue"} prices, in{" "}
-        {view.valuation.currency}. A line read in a different publisher&rsquo;s catalogue says so
-        beside its figure.
-        {view.valuation.frozen && " These are the figures as agreed, not today's."}
+        {words.agreedFigures(view.valuation.catalogName, view.valuation.currency)}
+        {frozen}
       </p>
     );
   }
   return (
     <p className="ts-note">
-      No single catalogue has been agreed for this exchange, so the figures are{" "}
-      {view.collectorName}&rsquo;s own valuation, in {view.valuation.currency}. Each line says which
-      catalogue and edition it was read in.
-      {view.valuation.frozen && " These are the figures as agreed, not today's."}
+      {words.ownFigures(view.collectorName, view.valuation.currency)}
+      {frozen}
     </p>
   );
 }
@@ -286,11 +295,11 @@ function ValuationNote({ view }: { view: TradeShareView }) {
  *  Absent from most lists, which is why it is a footnote rather than a panel: Michel and StampWorld
  *  are both in EUR, so a single-currency list has nothing to state. Where there is something, a
  *  converted figure with no rate beside it is a figure nobody can check. */
-function RateNote({ view }: { view: TradeShareView }) {
+function RateNote({ view, words }: { view: TradeShareView; words: TradeShareLabels }) {
   if (!view.valuation || view.valuation.rates.length === 0) return null;
   return (
     <p className="ts-note">
-      Converted at{" "}
+      {words.convertedAt}{" "}
       {view.valuation.rates
         .map(
           (rate) =>
@@ -312,11 +321,19 @@ function RateNote({ view }: { view: TradeShareView }) {
  *
  * Links rather than controls, so the page needs no JavaScript and the arrangement is in the address.
  */
-function Arrange({ token, levels }: { token: string; levels: TradeGroupLevel[] }) {
+function Arrange({
+  token,
+  levels,
+  words,
+}: {
+  token: string;
+  levels: TradeGroupLevel[];
+  words: TradeShareLabels;
+}) {
   const on = new Set(levels);
   return (
     <nav className="ts-arrange">
-      <span className="ts-arrange-label">Group by</span>
+      <span className="ts-arrange-label">{words.groupBy}</span>
       {TRADE_GROUP_LEVELS.map((level) => {
         const next = on.has(level)
           ? levels.filter((l) => l !== level)
@@ -329,7 +346,7 @@ function Arrange({ token, levels }: { token: string; levels: TradeGroupLevel[] }
           : `/t/${encodeURIComponent(token)}`;
         return (
           <Link key={level} className="ts-chip" data-on={on.has(level)} href={href}>
-            {TRADE_GROUP_LABEL[level]}
+            {words.groupLevel[level]}
           </Link>
         );
       })}

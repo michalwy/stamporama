@@ -7,7 +7,6 @@ import {
   tradeProposalBanner,
   tradeProposalHint,
   tradeProposalOptionLabel,
-  tradeProposalPrompt,
   tradeProposalUnansweredNote,
   TRADE_PROPOSAL_ALREADY_TAKEN,
   TRADE_PROPOSAL_NOT_OFFERED,
@@ -42,11 +41,6 @@ describe("canProposeTradeCopy", () => {
 });
 
 describe("what the partner reads", () => {
-  it("asks the question with the number of copies in it", () => {
-    assert.equal(tradeProposalPrompt(2), "Two of these would do — which would you like?");
-    assert.match(tradeProposalPrompt(4), /^4 of these/);
-  });
-
   it("names a copy by its place in the choice and by nothing the collection knows it by", () => {
     assert.equal(tradeProposalOptionLabel(0), "Copy 1");
     assert.equal(tradeProposalOptionLabel(2), "Copy 3");
