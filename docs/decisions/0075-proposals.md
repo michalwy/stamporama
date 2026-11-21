@@ -116,7 +116,9 @@ a photo, downloading photos, opening the document or making its link all leave a
 Preparing. Opening the document to check it is not sending it, and a proposal turned Sent by mistake
 could only be reopened with a false *the buyer saw an earlier version*. **Only *Mark sent* marks a
 proposal Sent**, a reopened one included; the buyer opening the link still shows as *last opened* and
-changes no state.
+changes no state. **Amended by #2625 (2026-11-21):** on the phone, a share through the phone's own share
+menu that went through marks a Preparing proposal Sent as *Mark sent* would — the collector chose it
+over the issue's *copying marks it Sent too*. Copying on the phone changes nothing, as at the desk.
 
 ### 9. A sent proposal is fixed (#2307), and New offer makes a lot (#2304)
 

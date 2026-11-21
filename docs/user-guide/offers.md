@@ -3681,7 +3681,9 @@ The picks stay when you reopen the proposal. A lot taken out of the proposal los
 ### Sent, reopened, declined
 
 A proposal starts **Preparing**: lots come and go and their titles and prices change. **Mark sent**
-once it has gone to the buyer — it needs at least one lot. Nothing else marks it sent (above). When the
+once it has gone to the buyer — it needs at least one lot. Nothing else at the desk marks it sent
+(above); on the phone, sharing a proposal through the phone's share menu marks it sent too
+([Proposals on the phone](phone.md#proposals)). When the
 buyer opens the link, the document's window shows it as *last opened*, with the number of visits and a
 **Visit history** ([Who opened a share link](share-links.md)); that changes nothing either.
 
