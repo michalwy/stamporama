@@ -376,3 +376,180 @@ export function contactChangeNote(
   const quote = lines.join("\n");
   return { summary, quote: quote.length > MAX_QUOTE_LENGTH ? `${quote.slice(0, MAX_QUOTE_LENGTH - 1)}…` : quote };
 }
+
+// ── preview_contact_merge / merge_contacts / delete_contact (#2612) ──────────
+
+/** The dialog's fields of a contact, without its record — what a merge previews it will hold. */
+export interface AgentContactDetails {
+  readonly name: string;
+  readonly fullName: string | null;
+  readonly email: string | null;
+  readonly phone: string | null;
+  readonly notes: string | null;
+  readonly roles: readonly AgentContactRole[];
+  readonly market: string | null;
+  readonly language: string | null;
+  readonly facebookProfiles: readonly string[];
+  readonly defaultCurrency: string | null;
+  readonly defaultShippingCost: string | null;
+  readonly buyerPremiumPercent: string | null;
+  readonly buyerPremiumFixed: string | null;
+  readonly freeExtrasMinimumOrder: string | null;
+  readonly freeExtrasBudgetPercent: string | null;
+  readonly freeExtrasMaximumBudget: string | null;
+}
+
+export function contactDetails(contact: ContactLogFacts): AgentContactDetails {
+  return {
+    name: contact.name,
+    fullName: contact.fullName,
+    email: contact.email,
+    phone: contact.phone,
+    notes: contact.notes,
+    roles: contactRoles(contact),
+    market: contact.market,
+    language: contact.language,
+    facebookProfiles: [...contact.facebookProfileUrls],
+    defaultCurrency: contact.defaultCurrency,
+    defaultShippingCost: contact.defaultShippingCost,
+    buyerPremiumPercent: contact.buyerPremiumPercent,
+    buyerPremiumFixed: contact.buyerPremiumFixed,
+    freeExtrasMinimumOrder: contact.freeExtrasMinimumOrder,
+    freeExtrasBudgetPercent: contact.freeExtrasBudgetPercent,
+    freeExtrasMaximumBudget: contact.freeExtrasMaximumBudget,
+  };
+}
+
+/** How many records a merge moves from the contact merged away — the counts the *Merge with…* dialog
+ *  shows, and its Facebook profiles. */
+export interface ContactMergeMoves {
+  readonly purchases: number;
+  readonly sales: number;
+  readonly trades: number;
+  readonly proposals: number;
+  readonly auctionSales: number;
+  readonly priceObservations: number;
+  readonly conversationEntries: number;
+  readonly facebookProfiles: number;
+}
+
+/** What `contacts.ts`' merge candidate counts, under the names the agent reads. */
+export interface ContactMergeCounts {
+  readonly purchaseCount: number;
+  readonly saleCount: number;
+  readonly tradeCount: number;
+  readonly proposalCount: number;
+  readonly auctionSaleCount: number;
+  readonly priceObservationCount: number;
+  readonly conversationEntryCount: number;
+  readonly facebookProfileUrls: readonly string[];
+}
+
+export function contactMergeMoves(other: ContactMergeCounts): ContactMergeMoves {
+  return {
+    purchases: other.purchaseCount,
+    sales: other.saleCount,
+    trades: other.tradeCount,
+    proposals: other.proposalCount,
+    auctionSales: other.auctionSaleCount,
+    priceObservations: other.priceObservationCount,
+    conversationEntries: other.conversationEntryCount,
+    facebookProfiles: other.facebookProfileUrls.length,
+  };
+}
+
+function counted(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** The moves as the dialog words them — the zero ones left out; "nothing" when there are none. */
+export function contactMergeMovesSentence(moves: ContactMergeMoves): string {
+  const parts = [
+    moves.purchases > 0 ? counted(moves.purchases, "purchase", "purchases") : null,
+    moves.sales > 0 ? counted(moves.sales, "sale", "sales") : null,
+    moves.trades > 0 ? counted(moves.trades, "trade", "trades") : null,
+    moves.proposals > 0 ? counted(moves.proposals, "proposal", "proposals") : null,
+    moves.auctionSales > 0 ? counted(moves.auctionSales, "auction sale", "auction sales") : null,
+    moves.priceObservations > 0 ? counted(moves.priceObservations, "price observation", "price observations") : null,
+    moves.conversationEntries > 0 ? counted(moves.conversationEntries, "conversation entry", "conversation entries") : null,
+    moves.facebookProfiles > 0 ? counted(moves.facebookProfiles, "Facebook profile", "Facebook profiles") : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? parts.join(", ") : "nothing";
+}
+
+/** One field the remaining contact gains or changes in a merge, as the preview states it. */
+export interface AgentContactFieldChange {
+  readonly field: string;
+  readonly before: string | null;
+  readonly after: string | null;
+}
+
+export function agentFieldChanges(changes: readonly ContactChange[]): AgentContactFieldChange[] {
+  return changes.map((change) => ({ field: change.label, before: change.before, after: change.after }));
+}
+
+/**
+ * The note a merge leaves on the remaining contact's conversation log, the Assistant's: the summary
+ * names the contact merged away and what moved, the quote its id and each field the remaining contact
+ * took, from the old value to the new — a merge cannot be undone, so this is what tells it apart later.
+ */
+export function contactMergeNote(
+  other: { readonly id: string; readonly name: string },
+  moves: ContactMergeMoves,
+  changes: readonly ContactChange[]
+): { summary: string; quote: string } {
+  const summary = `Contact merged by the Assistant: ${other.name} merged into this contact — ${contactMergeMovesSentence(moves)} moved.`;
+  const lines = [
+    `Merged away: ${other.name} (${other.id}), deleted.`,
+    `Moved: ${contactMergeMovesSentence(moves)}.`,
+    ...changes.map((change) =>
+      change.label === "Facebook profiles"
+        ? `Facebook profiles: ${[change.after, change.before].filter((part) => part !== null).join("; ")}`
+        : `${change.label}: ${shown(change.before)} → ${shown(change.after)}`
+    ),
+  ];
+  const quote = lines.join("\n");
+  return { summary, quote: quote.length > MAX_QUOTE_LENGTH ? `${quote.slice(0, MAX_QUOTE_LENGTH - 1)}…` : quote };
+}
+
+/** What is filed under a contact, each record by what it is called by — the refusal of a delete. */
+export interface ContactHoldings {
+  readonly purchases: readonly number[];
+  readonly sales: readonly number[];
+  readonly trades: readonly number[];
+  readonly proposals: readonly number[];
+  readonly auctionSales: readonly { readonly name: string }[];
+  readonly priceObservations: number;
+  readonly conversationEntries: number;
+}
+
+function numbered(numbers: readonly number[], one: string, many: string): string | null {
+  if (numbers.length === 0) return null;
+  const shownNumbers = numbers.slice(0, 10).join(", ");
+  const more = numbers.length > 10 ? ` and ${numbers.length - 10} more` : "";
+  return `${numbers.length === 1 ? one : many} ${shownNumbers}${more}`;
+}
+
+/** Each kind of record filed under the contact, named — empty when the contact holds nothing. */
+export function contactHoldingsParts(holdings: ContactHoldings): string[] {
+  const auctionNames = holdings.auctionSales.slice(0, 10).map((sale) => `"${sale.name}"`).join(", ");
+  const auctionMore = holdings.auctionSales.length > 10 ? ` and ${holdings.auctionSales.length - 10} more` : "";
+  return [
+    numbered(holdings.purchases, "purchase", "purchases"),
+    numbered(holdings.sales, "sale", "sales"),
+    numbered(holdings.trades, "trade", "trades"),
+    numbered(holdings.proposals, "proposal", "proposals"),
+    holdings.auctionSales.length > 0
+      ? `${holdings.auctionSales.length === 1 ? "auction sale" : "auction sales"} ${auctionNames}${auctionMore}`
+      : null,
+    holdings.priceObservations > 0 ? counted(holdings.priceObservations, "price observation", "price observations") : null,
+    holdings.conversationEntries > 0
+      ? counted(holdings.conversationEntries, "conversation entry", "conversation entries")
+      : null,
+  ].filter((part): part is string => part !== null);
+}
+
+/** The refusal of `delete_contact` for a contact with history: what it holds, and merging instead. */
+export function contactNotEmptyMessage(name: string, parts: readonly string[]): string {
+  return `${name} is not deleted. Filed under them: ${parts.join("; ")}. A contact with history is merged, never deleted, so nothing filed under it is lost — if they duplicate another contact, merge them into it with \`merge_contacts\` (\`preview_contact_merge\` shows what would move). Nothing was deleted.`;
+}

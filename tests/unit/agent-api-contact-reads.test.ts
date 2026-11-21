@@ -5,6 +5,11 @@ import {
   contactChangeNote,
   contactChanges,
   contactFieldChanges,
+  contactHoldingsParts,
+  contactMergeMoves,
+  contactMergeMovesSentence,
+  contactMergeNote,
+  contactNotEmptyMessage,
   contactRecord,
   contactRoles,
   contactRow,
@@ -219,5 +224,69 @@ describe("the note a contact write leaves (#2611)", () => {
 
   it("is nothing when nothing changed", () => {
     assert.equal(contactChangeNote(contactChanges(LOG_CONTACT, { ...LOG_CONTACT }), false), null);
+  });
+});
+
+describe("merging and deleting a contact (#2612)", () => {
+  const NONE = { purchases: [], sales: [], trades: [], proposals: [], auctionSales: [], priceObservations: 0, conversationEntries: 0 };
+
+  it("holds nothing when nothing is filed under the contact", () => {
+    assert.deepEqual(contactHoldingsParts(NONE), []);
+  });
+
+  it("names each record filed under the contact by what it is called by", () => {
+    assert.deepEqual(contactHoldingsParts({ ...NONE, sales: [20] }), ["sale 20"]);
+    assert.deepEqual(
+      contactHoldingsParts({
+        purchases: [4, 5],
+        sales: [],
+        trades: [2],
+        proposals: [1],
+        auctionSales: [{ name: "Feldman 2026" }],
+        priceObservations: 3,
+        conversationEntries: 1,
+      }),
+      ["purchases 4, 5", "trade 2", "proposal 1", 'auction sale "Feldman 2026"', "3 price observations", "1 conversation entry"]
+    );
+  });
+
+  it("cuts a long list of numbers after ten", () => {
+    const sales = Array.from({ length: 13 }, (_, i) => 13 - i);
+    assert.deepEqual(contactHoldingsParts({ ...NONE, sales }), ["sales 13, 12, 11, 10, 9, 8, 7, 6, 5, 4 and 3 more"]);
+  });
+
+  it("refuses a delete with what the contact holds, pointing at the merge", () => {
+    const message = contactNotEmptyMessage("Bruno", ["sale 20"]);
+    assert.match(message, /^Bruno is not deleted\. Filed under them: sale 20\./);
+    assert.match(message, /merge_contacts/);
+    assert.match(message, /Nothing was deleted\.$/);
+  });
+
+  const MOVES = contactMergeMoves({
+    purchaseCount: 0,
+    saleCount: 2,
+    tradeCount: 0,
+    proposalCount: 1,
+    auctionSaleCount: 0,
+    priceObservationCount: 0,
+    conversationEntryCount: 1,
+    facebookProfileUrls: ["https://www.facebook.com/jan"],
+  });
+
+  it("words the moves as the dialog does, leaving out what does not move", () => {
+    assert.equal(contactMergeMovesSentence(MOVES), "2 sales, 1 proposal, 1 conversation entry, 1 Facebook profile");
+    assert.equal(contactMergeMovesSentence(contactMergeMoves({
+      purchaseCount: 0, saleCount: 0, tradeCount: 0, proposalCount: 0, auctionSaleCount: 0,
+      priceObservationCount: 0, conversationEntryCount: 0, facebookProfileUrls: [],
+    })), "nothing");
+  });
+
+  it("notes a merge with the contact merged away, what moved and each detail taken", () => {
+    const note = contactMergeNote({ id: "c2", name: "jan_2" }, MOVES, [{ label: "email", before: null, after: "j@example.com" }]);
+    assert.equal(note.summary, "Contact merged by the Assistant: jan_2 merged into this contact — 2 sales, 1 proposal, 1 conversation entry, 1 Facebook profile moved.");
+    assert.equal(
+      note.quote,
+      "Merged away: jan_2 (c2), deleted.\nMoved: 2 sales, 1 proposal, 1 conversation entry, 1 Facebook profile.\nemail: (none) → j@example.com"
+    );
   });
 });

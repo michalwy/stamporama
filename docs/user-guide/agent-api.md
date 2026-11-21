@@ -183,7 +183,7 @@ arrives. It does not close or reopen a lot,
 mark an order in transit or arrived, or delete a purchase, and it will not remove a lot that already
 holds copies or has closed. It does not touch the order a closed trade created beyond its note, nor an
 opening balance at all, and it never
-changes a contact from here — that is done on *your contacts*, below — and never deletes one.
+changes, merges or deletes a contact from here — that is done on *your contacts*, below.
 Everything it writes is on the purchase's own screen, where you can change it back.
 
 On **sales**, it can record what sold — say, after going through your offers on Facebook and
@@ -316,8 +316,24 @@ reads German, ship him at 5 EUR*:
 
 **Every change it makes is noted in the contact's
 [conversation log](contacts.md#the-conversation-log)**, marked *Assistant*: which details changed, and
-each one's old and new value, so you can see what it did and put a wrong one back. It never deletes
-or merges a contact.
+each one's old and new value, so you can see what it did and put a wrong one back.
+
+When it finds that two contacts are one person — a buyer bidding from a second Facebook account, a
+contact made twice — it can, with a **read and write** token:
+
+- **show what merging them would do**, as [**Merge with…**](contacts.md#merging-two-contacts) shows
+  it, without changing anything: the contact as it will be once merged, the details it takes from the
+  other, and how many purchases, sales, trades, proposals, auction sales, price observations,
+  conversation entries and Facebook profiles move;
+- **merge them**, exactly as **Merge with…** does. It names which one remains; everything the other
+  holds moves to it, and the other is deleted. As in the app, a merge cannot be undone. The merge is
+  noted in the remaining contact's conversation log, marked *Assistant*: which contact was merged
+  away, what moved, and each detail the remaining one took;
+- **delete a contact made by mistake** — but only one with nothing filed under it: no purchase, sale,
+  trade, proposal, auction sale, price observation or conversation entry. Otherwise it is refused
+  with what the contact still holds — *sale 20* — and merging is suggested instead, so no purchase,
+  sale or proposal is ever lost with a contact. (Deleting from the app takes a contact's proposals
+  and conversation log with it; the assistant's delete never does.)
 
 On **shipping and packing**, it can set up the data you would otherwise type in yourself under
 [Settings → Carriers](collections.md#carriers), on a platform's shipping options and under

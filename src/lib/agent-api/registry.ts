@@ -132,8 +132,11 @@ import {
 import { getFacebookPostOperation } from "./operations/facebook-posts";
 import {
   createContactOperation,
+  deleteContactOperation,
   findContactsOperation,
   getContactOperation,
+  mergeContactsOperation,
+  previewContactMergeOperation,
   updateContactOperation,
 } from "./operations/contacts";
 import {
@@ -329,6 +332,9 @@ export const OPERATIONS: readonly Operation[] = [
   getContactOperation,
   createContactOperation,
   updateContactOperation,
+  previewContactMergeOperation,
+  mergeContactsOperation,
+  deleteContactOperation,
   listConversationEntriesOperation,
   addConversationEntriesOperation,
   updateConversationEntryOperation,

@@ -468,7 +468,8 @@ describe("the agent API's operation modules (#1036)", () => {
  * irreversible** (closing a lot freezes its cost basis, arriving moves copies, deleting a purchase
  * is gone), and **existing contacts** (their details are the collector's). Each row below is one of
  * those, and says which. #2611 opened editing a contact to the agent, through `update_contact` alone —
- * the test after this one holds `updateContact` to `operations/contacts.ts`.
+ * the test after this one holds `updateContact` to `operations/contacts.ts` — and #2612 merging two
+ * and deleting an empty one, through `mergeContacts` and `deleteEmptyContact`, never `deleteContact`.
  *
  * `deleteLot` is here although removing an empty lot is allowed: it deletes the lot's copies with
  * it. The operation goes through `deleteEmptyLot`, whose emptiness is part of the delete itself.
@@ -559,6 +560,38 @@ describe("the agent API's operation modules (#2611)", () => {
     }
     const domain = readFileSync(path.join(ROOT, "src/lib/contacts.ts"), "utf8");
     assert.match(domain, /export async function updateContact\(/, "`updateContact` is not an export of contacts.ts any more");
+  });
+});
+
+/**
+ * **A contact is merged and deleted from the same module** (#2612): `merge_contacts` notes each merge on
+ * the remaining contact's conversation log, and `delete_contact` deletes only a contact with nothing
+ * filed under it. The app's own `deleteContact` takes a contact's proposals and conversation log with
+ * it, so no operation module may reach it (the purchase map above already says so); the empty-only
+ * delete and the merge are held to `operations/contacts.ts`.
+ */
+describe("the agent API's operation modules (#2612)", () => {
+  const contactsModule = path.join(AGENT_API, "operations/contacts.ts");
+
+  it("reach mergeContacts and deleteEmptyContact from the contact operations and nowhere else", () => {
+    const held = new Set(["mergeContacts", "deleteEmptyContact"]);
+    const misplaced: string[] = [];
+    for (const file of operationModules()) {
+      if (file === contactsModule) continue;
+      for (const { name, from } of importedBindings(file)) {
+        if (held.has(name)) misplaced.push(`${path.relative(ROOT, file)} imports \`${name}\` from "${from}"`);
+      }
+    }
+    assert.deepEqual(misplaced, [], `A contact is merged and deleted by the contact operations alone.\n  ${misplaced.join("\n  ")}`);
+    const names = importedBindings(contactsModule).map((binding) => binding.name);
+    for (const name of held) {
+      assert.ok(names.includes(name), `the walk did not see \`${name}\` in operations/contacts.ts`);
+    }
+    assert.ok(!names.includes("deleteContact"), "operations/contacts.ts reaches the app's delete, which takes proposals with it");
+    const domain = readFileSync(path.join(ROOT, "src/lib/contacts.ts"), "utf8");
+    for (const name of held) {
+      assert.match(domain, new RegExp(`export async function ${name}\\(`), `\`${name}\` is not an export of contacts.ts any more`);
+    }
   });
 });
 
