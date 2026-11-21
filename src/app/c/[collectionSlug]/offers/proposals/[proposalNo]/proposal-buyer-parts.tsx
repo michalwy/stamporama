@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { baseBtn } from "@/app/button-style";
 import { Icon } from "@/app/icons";
 import { PhotoLightbox, THUMB_OBJECT_FIT } from "@/app/photo-viewer";
@@ -12,12 +13,20 @@ import { canCopyImages, copyImageAt } from "@/app/c/[collectionSlug]/shared/copy
 import { ThumbPreview } from "@/app/c/[collectionSlug]/inventory/photo-thumb";
 import type { ProposalScreen } from "@/lib/proposals";
 import type { ProposalLotPhotos } from "@/lib/proposal-handout";
-import { useProposalMessage } from "../use-proposals-query";
+import { languageLabel } from "@/lib/languages";
+import { hasProposalDocumentLabels } from "@/lib/proposal-document-rules";
+import { setProposalLanguageAction } from "@/app/actions/proposals";
+import { formControl } from "@/app/control-style";
+import { proposalKeys, useProposalMessage } from "../use-proposals-query";
 
 // **What a proposal's buyer is sent** (#2288), on the proposal's screen: the message to copy, the lots'
 // photos to download in one archive — each lot's are also on its row, to copy or download one by one —
 // and the document to print or share as a link. Each carries the lot numbers the screen shows. None of
 // them changes the proposal's state: only *Mark sent* marks it Sent (#2329).
+//
+// All three are in one language (#2603), chosen at the top of the card: it opens in the contact's
+// language, else the Direct platform's listing language, and a choice is saved on the contact — so the
+// next proposal for them opens in it — and moves the live link the buyer already holds.
 
 const META: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-text-muted)" };
 
@@ -86,6 +95,79 @@ const PHOTO_BUTTON: React.CSSProperties = {
 
 const lotsText = (n: number) => (n === 1 ? "1 lot" : `${n} lots`);
 
+const SELECT: React.CSSProperties = {
+  ...formControl,
+  padding: "0.25rem 0.5rem",
+  border: "1px solid var(--color-border-strong)",
+  borderRadius: "0.375rem",
+  fontSize: "0.8125rem",
+  color: "var(--color-text-primary)",
+  background: "var(--color-bg-elevated)",
+  cursor: "pointer",
+};
+
+/** The language the message, the document and the link are in (#2603). A choice is saved on the
+ *  contact; the three are read again in it. */
+function ProposalLanguageSelect({
+  collectionId,
+  proposalId,
+  contactName,
+  language,
+  languages,
+}: {
+  collectionId: string;
+  proposalId: string;
+  contactName: string;
+  language: string | null;
+  languages: string[];
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
+
+  function choose(next: string) {
+    startTransition(async () => {
+      const result = await setProposalLanguageAction(proposalId, next);
+      if (result.status === "error") {
+        toast({ message: result.message, tone: "error" });
+        return;
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: proposalKeys.message(collectionId, proposalId) }),
+        queryClient.invalidateQueries({ queryKey: proposalKeys.shareLink(collectionId, proposalId) }),
+      ]);
+      toast({ message: `${languageLabel(next)} saved on ${contactName} for their next proposal too` });
+    });
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+      <label htmlFor="proposal-language" style={{ ...HEADING, textTransform: "uppercase" }}>
+        Language
+      </label>
+      <select
+        id="proposal-language"
+        value={language ?? ""}
+        disabled={isPending || languages.length === 0}
+        onChange={(e) => choose(e.target.value)}
+        style={SELECT}
+      >
+        {language === null && <option value="">—</option>}
+        {languages.map((code) => (
+          <option key={code} value={code}>
+            {languageLabel(code)}
+          </option>
+        ))}
+      </select>
+      {language !== null && !hasProposalDocumentLabels(language) && (
+        <Tooltip content="The document and the link have no headings or notices in this language. The lots' titles and the message are still in it.">
+          <span style={{ ...META, color: "var(--color-warning)" }}>Page words in English</span>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
 /** The card above the lots: the message, the photos' archive and the document. */
 export function ProposalBuyerCard({
   screen,
@@ -108,6 +190,17 @@ export function ProposalBuyerCard({
 
   return (
     <section style={CARD} aria-label="For the buyer">
+      {message && (
+        <div style={{ gridColumn: "1 / -1" }}>
+          <ProposalLanguageSelect
+            collectionId={screen.collectionId}
+            proposalId={screen.proposalId}
+            contactName={screen.contact.name}
+            language={message.language}
+            languages={message.languages}
+          />
+        </div>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <h3 style={HEADING}>Message</h3>
@@ -130,7 +223,8 @@ export function ProposalBuyerCard({
           </>
         ) : (
           <p style={{ ...META, margin: 0 }}>
-            No message: {screen.platform.name} has no proposal message template.{" "}
+            No message: {screen.platform.name} has no proposal message template
+            {message?.language ? ` in ${languageLabel(message.language)}` : ""}.{" "}
             <Link href={settings} style={LINK}>
               Write one in Settings → {screen.platform.name}
             </Link>

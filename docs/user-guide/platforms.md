@@ -640,7 +640,13 @@ The **Direct** platform has one more template, **Proposal message**: the text yo
 placeholders are `{buyer}` (the contact's name), `{lots}` (the lots not withdrawn, one per line, each
 with its lot number and price: `2. Austria 1850 Mercury — 25 zł`), `{total}` and `{proposal}` (the
 proposal's number). Amounts take `:code` or `:none` as in the other messages, and `{proposal:3}` pads
-the number. Leave it empty and proposals offer no message. No other platform has the field.
+the number. No other platform has the field.
+
+It has **one text per language** — a field for each language your collection uses (its own language,
+your platforms' listing languages and your albums' languages), each labelled with its language. A
+proposal is sent in [its buyer's language](offers.md#the-language) and takes the text for that
+language **and no other**: a language left empty has no message, and nothing is filled in from
+another language.
 
 ## Listing text limits
 

@@ -1267,8 +1267,9 @@ the two sharing `proposalListWhere`.
   default — and `2=35.00` at a price agreed instead; an unpriced lot named alone is refused rather
   than sold at nought.
 - **The message is read, not set** — settled with the collector on 2026-11-01. A proposal has no
-  text of its own: the message is rendered from the Direct platform's template (#2288), so
-  `get_proposal` carries it, null without a template (#1692). **Reading it does not mark the
+  text of its own: the message is rendered from the Direct platform's template (#2288) for the
+  buyer's language (#2603), so `get_proposal` carries it, null without a template in that language
+  (#1692). **Reading it does not mark the
   proposal sent**, as copying it in the app does: handing it over is the collector's act.
 - **Writes commit at once, as every API write does** — also settled on 2026-11-01. #2303 proposed a
   preview before each commit; nothing on this surface works that way but `preview_stamp_size_apply`,

@@ -2,7 +2,7 @@ import "server-only";
 import type { Decimal } from "@prisma/client/runtime/client";
 import { prisma, type DbTransaction } from "./db";
 import { forgetRealizationRatios } from "./realization-ratio-cache";
-import { normalizeLanguage } from "./languages";
+import { isLanguageCode, languageChoices, normalizeLanguage } from "./languages";
 import { normalizeFacebookProfileUrl } from "./facebook-profile-rules";
 import { FACEBOOK_PROFILES_SELECT } from "./facebook-sales";
 import { normalizeMarketCode } from "./market-anchoring";
@@ -118,6 +118,17 @@ function marketData(raw: string | null | undefined): string | null | undefined {
   return code;
 }
 
+/** A language as written (#2603): blank is none, anything else must read as an ISO 639-1 code once
+ * normalised (`de-AT` → `de`). `undefined` passes through, so an update that does not mention it
+ * leaves it alone. */
+function languageData(raw: string | null | undefined): string | null | undefined {
+  if (raw === undefined) return undefined;
+  const code = normalizeLanguage(raw);
+  if (code === null) return null;
+  if (!isLanguageCode(code)) throw new ContactFieldError("A language is a two-letter code, such as de.");
+  return code;
+}
+
 /** Raised when a delete is blocked because the contact is still referenced by one or
  * more purchases as their supplier. The `Purchase` FK is `onDelete: Restrict`
  * (ADR-0008/0009), so the contact must be detached from those purchases first. */
@@ -158,6 +169,10 @@ export interface ContactData extends ContactRoles {
    * results count. Null is *not known*: the platform's market then answers, and failing that the
    * collection's home market. */
   market: string | null;
+  /** The language this contact reads (#2603), an ISO 639-1 code, or null while it is not known. Every
+   * material for a buyer that offers a language choice opens in it, and choosing another there saves
+   * that one here ({@link setContactLanguage}). */
+  language: string | null;
   /** Seller defaults for auction sales (#350, ADR-0021): the currency and fees this seller normally
    * trades on. **Seeded** onto an `AuctionSale` at creation and editable there, so changing them
    * here never re-prices a sale already tracked or settled. Only meaningful for the `seller` /
@@ -187,6 +202,7 @@ const CONTACT_SELECT = {
   phone: true,
   facebookProfiles: FACEBOOK_PROFILES_SELECT,
   market: true,
+  language: true,
   buyer: true,
   seller: true,
   exchangePartner: true,
@@ -310,6 +326,9 @@ export interface ContactCreateInput {
   /** The market (#1634), as typed — normalised on write, refused when it is not a two-letter code.
    * Omitted on an update leaves it as it is. */
   market?: string | null;
+  /** The language the contact reads (#2603), as typed — normalised on write, refused when it is not a
+   * language code; blank clears it. Omitted on an update leaves it as it is. */
+  language?: string | null;
   buyer?: boolean;
   seller?: boolean;
   exchangePartner?: boolean;
@@ -478,6 +497,7 @@ export async function createContact(
   if (!name) throw new Error("Contact name is required.");
   const profileUrls = profileUrlsData(data.facebookProfileUrls) ?? [];
   const market = marketData(data.market) ?? null;
+  const language = languageData(data.language) ?? null;
   const freeExtras = freeExtrasTerms(data);
   try {
     return toContactData(await prisma.$transaction(async (tx) => {
@@ -492,6 +512,7 @@ export async function createContact(
           email: data.email ?? null,
           phone: data.phone ?? null,
           market,
+          language,
           buyer: data.buyer ?? false,
           seller: data.seller ?? false,
           exchangePartner: data.exchangePartner ?? false,
@@ -524,6 +545,7 @@ export async function updateContact(
   if (!name) throw new Error("Contact name is required.");
   const profileUrls = profileUrlsData(data.facebookProfileUrls);
   const market = marketData(data.market);
+  const language = languageData(data.language);
   const freeExtras = freeExtrasTerms(data);
   try {
     const updated = toContactData(await prisma.$transaction(async (tx) => {
@@ -538,6 +560,7 @@ export async function updateContact(
           email: data.email ?? null,
           phone: data.phone ?? null,
           market,
+          language,
           buyer: data.buyer ?? false,
           seller: data.seller ?? false,
           exchangePartner: data.exchangePartner ?? false,
@@ -628,6 +651,36 @@ export async function getCollectionTranslationContext(
     titleLanguages: Array.from(codes).sort(),
     defaultLanguage: defaultLanguage ?? collection.defaultLanguage,
   };
+}
+
+/**
+ * The languages a material for a buyer can be put into (#2603): the collection's own default language
+ * first, then the languages it uses — its platforms' listing languages and its albums' — and any of
+ * `keep` outside them (the contact's own, say), so a choice made before stays on its selector.
+ */
+export async function getCollectionLanguageChoices(
+  ownerId: string,
+  collectionId: string,
+  keep: readonly (string | null | undefined)[] = []
+): Promise<string[]> {
+  const context = await getCollectionTranslationContext(ownerId, collectionId);
+  return languageChoices(context.defaultLanguage, context.titleLanguages, keep);
+}
+
+/**
+ * Save the language a contact reads (#2603) — what choosing a language in a material for them does,
+ * so the next material for them opens in it. Null forgets it. Refused with {@link ContactFieldError}
+ * when it is not a language code.
+ */
+export async function setContactLanguage(
+  ownerId: string,
+  contactId: string,
+  language: string | null
+): Promise<string | null> {
+  await assertContactOwner(ownerId, contactId);
+  const code = languageData(language) ?? null;
+  await prisma.contact.update({ where: { id: contactId }, data: { language: code }, select: { id: true } });
+  return code;
 }
 
 /** Delete a contact. Blocked with {@link ContactInUseError} when any purchase still
@@ -776,6 +829,7 @@ export async function mergeContacts(
         email: merged.email,
         phone: merged.phone,
         market: merged.market,
+        language: merged.language,
         buyer: merged.buyer,
         seller: merged.seller,
         exchangePartner: merged.exchangePartner,

@@ -8,6 +8,9 @@
 //
 // What a placeholder comes out as is the template's whole contract: nothing is added, substituted or
 // fallen back to (#1692). With no template there is no message at all.
+//
+// **One template per language** (#2603): a proposal is sent in its buyer's language, and its message
+// comes from the template for that language and no other — a language with none has no message.
 
 import {
   isKnownTemplateToken,
@@ -19,6 +22,7 @@ import {
   type CurrencyStyle,
   type TemplateValue,
 } from "./template-amount";
+import { normalizeLanguage } from "./languages";
 
 /** One placeholder a proposal's message may carry, with the label and example its editor shows.
  *  `amount` marks one that writes amounts and so takes the currency parameter (#2028); `number` one
@@ -97,4 +101,48 @@ export function renderProposalMessage(template: string | null | undefined, input
  *  so a misspelt `{lot}` is seen there rather than in the buyer's chat. */
 export function unknownProposalMessagePlaceholders(template: string): string[] {
   return templateTokens(template).filter((token) => !isKnownTemplateToken(token, PROPOSAL_MESSAGE_PLACEHOLDERS));
+}
+
+// ── One template per language (#2603) ────────────────────────────────────────────────────────────
+
+/** One language's proposal message template, as the Direct platform keeps it. */
+export interface ProposalMessageTemplate {
+  /** A normalised ISO 639-1 code. */
+  language: string;
+  template: string;
+}
+
+/** The name a language's template field carries on Settings → Direct, `proposalMessageTemplate:de` —
+ *  the action reads every field so named as the whole set. */
+export const PROPOSAL_MESSAGE_FIELD_PREFIX = "proposalMessageTemplate:";
+
+/**
+ * The rows a set of templates keyed by language is saved as: each language normalised, the text
+ * trimmed, a blank one left out — a language with no text has no message. Where two keys normalise to
+ * the same language the first with text wins. Ordered by language.
+ */
+export function proposalMessageTemplateRows(
+  templates: Readonly<Record<string, string | null | undefined>>
+): ProposalMessageTemplate[] {
+  const rows = new Map<string, string>();
+  for (const [key, raw] of Object.entries(templates)) {
+    const language = normalizeLanguage(key);
+    const template = raw?.trim();
+    if (!language || !template || rows.has(language)) continue;
+    rows.set(language, template);
+  }
+  return [...rows]
+    .map(([language, template]) => ({ language, template }))
+    .sort((a, b) => a.language.localeCompare(b.language));
+}
+
+/** The template for `language` and no other — null where that language has none, or the proposal has
+ *  no language at all. Nothing is filled in from another language. */
+export function proposalMessageTemplateFor(
+  templates: readonly ProposalMessageTemplate[],
+  language: string | null
+): string | null {
+  const code = normalizeLanguage(language);
+  if (!code) return null;
+  return templates.find((t) => normalizeLanguage(t.language) === code)?.template ?? null;
 }

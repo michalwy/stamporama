@@ -5,7 +5,7 @@
 Accepted. Decided in #2287 on 2026-11-01, which built it; the design was settled with the collector
 in the issue, and its *to be confirmed* points were implemented as written. #2288 (what the buyer is
 sent) and #2289 (a proposal becomes a sale, §6 — built 2026-11-01) build on it; #2601 lets the buyer
-tick the lots they want (§10); #2602 makes a Facebook post into a proposal sharing its lots (§11).
+tick the lots they want (§10); #2602 makes a Facebook post into a proposal sharing its lots (§11); #2603 sends it in the buyer's language (§12).
 
 ## Context
 
@@ -189,6 +189,34 @@ buyer takes is sold in the post, and does not go up with it (#2560).
 
 The message the buyer is sent is still Direct's template (§8); the post's own preview link is
 unchanged.
+
+### 12. It is sent in the buyer's language (#2603)
+
+Added by #2603, which built it on 2026-11-21, settled with the collector that day; its *to be
+confirmed* points were implemented as written. §8's *the proposal's language* was the Direct
+platform's listing language, else the collection's, whoever the buyer was. Now **a contact has a
+language** (`Contact.language`, null until set, edited on the contact's page) and a proposal is in
+it: **the contact's language, else Direct's listing language, else the collection's**.
+
+- **The choice is the contact's, not the proposal's.** The proposal's card has a *Language* selector;
+  choosing there writes `Contact.language`, so the next proposal for them opens in it. No column was
+  added to the proposal: the message, the document and the live link read the contact's language
+  live, which is how changing it **moves the link the buyer already holds**. Every other material for
+  a buyer that gets a language choice follows the same rule in its own issue (#2604 order summary,
+  #2605 specification, #2606 trade page).
+- **The languages offered are those the collection uses** — its default language, its platforms'
+  listing languages, its albums' (`languageChoices`), plus the contact's own if nothing uses it any
+  more. A new language is added there first.
+- **The message has one template per language** (`PlatformProposalMessage`, Direct's only;
+  `Platform.proposalMessageTemplate` is gone, its text moved to Direct's listing language, else the
+  collection's). The proposal takes the template for its language and **no other**: a language with
+  none has no message, and the card names the language whose template is missing (#1692).
+- **Each lot's title is rendered in the language** from its title template (`offerTitlesInLanguage`),
+  translated names falling back name by name as an offer's specification does; a title written by hand
+  (`nameEdited`) is shown as written, and the lot's stored title never changes. Where the language is
+  the one the titles were written in, the stored titles are used as they are.
+- The page's own words are the eighteen languages of §8's labels, English otherwise, said beside the
+  selector. The photos keep the labels they were made with.
 
 ## Consequences
 

@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   PROPOSAL_MESSAGE_PLACEHOLDERS,
+  proposalMessageTemplateFor,
+  proposalMessageTemplateRows,
   renderProposalMessage,
   unknownProposalMessagePlaceholders,
   type ProposalMessageInput,
@@ -52,5 +54,25 @@ describe("a proposal's message (#2288)", () => {
     const template = PROPOSAL_MESSAGE_PLACEHOLDERS.map((p) => p.token).join(" ");
     assert.deepEqual(unknownProposalMessagePlaceholders(template), []);
     assert.doesNotMatch(renderProposalMessage(template, input) ?? "", /\{/);
+  });
+});
+
+describe("one proposal message template per language (#2603)", () => {
+  it("saves each language's text normalised and trimmed, a blank one as none", () => {
+    assert.deepEqual(proposalMessageTemplateRows({ "PL": "  Cześć {buyer} ", de: "Hallo", en: "   ", fr: null, "de-AT": "Servus" }), [
+      { language: "de", template: "Hallo" },
+      { language: "pl", template: "Cześć {buyer}" },
+    ]);
+  });
+
+  it("takes the template for the proposal's language and no other", () => {
+    const templates = [
+      { language: "pl", template: "Cześć" },
+      { language: "de", template: "Hallo" },
+    ];
+    assert.equal(proposalMessageTemplateFor(templates, "de"), "Hallo");
+    assert.equal(proposalMessageTemplateFor(templates, "DE-de"), "Hallo");
+    assert.equal(proposalMessageTemplateFor(templates, "en"), null);
+    assert.equal(proposalMessageTemplateFor(templates, null), null);
   });
 });

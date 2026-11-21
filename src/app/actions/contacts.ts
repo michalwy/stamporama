@@ -80,6 +80,8 @@ function parseContactFields(formData: FormData, name: string): ContactCreateInpu
     // The market (#1634) means something only for a contact that sells — a seller or a house — so
     // a contact that is neither keeps none.
     market: isSeller ? str(formData, "market") || null : null,
+    // The language the contact reads (#2603), any role; blank clears it.
+    language: str(formData, "language") || null,
     buyer: bool(formData, "buyer"),
     seller: bool(formData, "seller"),
     exchangePartner: bool(formData, "exchangePartner"),

@@ -14,6 +14,8 @@ export interface ContactMergeDetails {
   email: string | null;
   phone: string | null;
   market: string | null;
+  /** The language the contact reads (#2603). */
+  language: string | null;
   facebookProfileUrls: string[];
   buyer: boolean;
   seller: boolean;
@@ -64,6 +66,7 @@ export function mergedContactDetails(
     email: remaining.email ?? other.email,
     phone: remaining.phone ?? other.phone,
     market: remaining.market ?? other.market,
+    language: remaining.language ?? other.language,
     facebookProfileUrls: [
       ...remaining.facebookProfileUrls,
       ...other.facebookProfileUrls.filter((url) => !remaining.facebookProfileUrls.includes(url)),

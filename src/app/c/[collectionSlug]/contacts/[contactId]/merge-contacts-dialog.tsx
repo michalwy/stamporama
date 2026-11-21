@@ -17,6 +17,7 @@ import type { ContactMergeCandidate } from "@/lib/contacts";
 import { mergedContactDetails, type ContactMergeDetails } from "@/lib/contact-merge-rules";
 import { facebookProfileLabel } from "@/lib/facebook-profile-rules";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
+import { languageLabel } from "@/lib/languages";
 import { freeExtraTermsSummary } from "@/lib/free-extra-rules";
 import { CONTACT_ROLES } from "../contact-roles";
 import { contactKeys, useContacts } from "../use-contacts-query";
@@ -191,6 +192,7 @@ export function MergeContactsDialog({
                   <Row label="Email" a={a.email} b={b.email} merged={merged.email} />
                   <Row label="Phone" a={a.phone} b={b.phone} merged={merged.phone} />
                   <Row label="Market" a={marketLabel(a.market)} b={marketLabel(b.market)} merged={marketLabel(merged.market)} />
+                  <Row label="Language" a={codeLabel(a.language)} b={codeLabel(b.language)} merged={codeLabel(merged.language)} />
                   <Row label="Facebook" a={profiles(a)} b={profiles(b)} merged={profiles(merged)} />
                   <Row label="Roles" a={roles(a)} b={roles(b)} merged={roles(merged)} />
                   {showAuctionDefaults && (
@@ -269,6 +271,10 @@ function movesSentence(other: ContactMergeCandidate): ReactNode {
       {list} of <strong>{other.name}</strong> {total === 1 ? "moves" : "move"}
     </>
   );
+}
+
+function codeLabel(code: string | null): string | null {
+  return code ? languageLabel(code) : null;
 }
 
 function marketLabel(code: string | null): string | null {

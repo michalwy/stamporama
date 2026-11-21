@@ -13,6 +13,8 @@ import {
 import { Icon } from "@/app/icons";
 import { COMMON_CURRENCIES } from "@/lib/currencies";
 import { COMMON_MARKETS } from "@/lib/market-anchoring";
+import { languageChoices, languageLabel } from "@/lib/languages";
+import { useTitleLanguages } from "../shared/use-title-languages";
 import type { ContactListItem } from "@/lib/contacts";
 import { CONTACT_ROLES } from "./contact-roles";
 import { NumericInput } from "../shared/numeric-input";
@@ -127,6 +129,8 @@ function FacebookProfileFields({ initial, disabled }: { initial: readonly string
 
 export interface ContactFormDialogProps {
   mode: "add" | "edit";
+  /** The collection, whose languages the Language field offers (#2603). */
+  collectionId: string;
   /** The row being edited (add mode leaves this undefined). */
   contact?: ContactListItem;
   isPending: boolean;
@@ -140,6 +144,7 @@ export interface ContactFormDialogProps {
  * are checked. A contact may carry any combination of roles, including none. */
 export function ContactFormDialog({
   mode,
+  collectionId,
   contact,
   isPending,
   error,
@@ -156,6 +161,9 @@ export function ContactFormDialog({
   const [requestedTab, setRequestedTab] = useState<TabKey>("contact");
 
   const isAuctionSide = isSeller || isAuctionHouse;
+  // The languages the collection uses (#2603), the contact's own kept even where nothing uses it now.
+  const { titleLanguages, defaultLanguage } = useTitleLanguages(collectionId);
+  const languages = languageChoices(defaultLanguage, titleLanguages, [contact?.language]);
   const tabs: { key: TabKey; label: string }[] = [
     { key: "contact", label: "Contact" },
     ...(isAuctionSide ? ([{ key: "auction", label: "Auction defaults" }] as const) : []),
@@ -359,6 +367,31 @@ export function ContactFormDialog({
                       </p>
                     </div>
                   )}
+
+                  {/* The language the contact reads (#2603): what a proposal for them — and every other
+                      material for a buyer with a language choice — opens in. Any role may have one. */}
+                  <div style={FIELD_GAP}>
+                    <LabelWithError htmlFor="contact-language">Language</LabelWithError>
+                    <select
+                      // Remounted once the collection's languages arrive, so the saved one is selected.
+                      key={languages.join(",")}
+                      id="contact-language"
+                      name="language"
+                      defaultValue={contact?.language ?? ""}
+                      disabled={isPending}
+                      style={{ ...INPUT_STYLE, cursor: "pointer" }}
+                    >
+                      <option value="">— not known —</option>
+                      {languages.map((code) => (
+                        <option key={code} value={code}>
+                          {languageLabel(code)}
+                        </option>
+                      ))}
+                    </select>
+                    <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", margin: "0.25rem 0 0" }}>
+                      What a proposal for them opens in. Choosing another on a proposal saves it here.
+                    </p>
+                  </div>
 
                   {/* The contact's own free-extras terms (#2416), for a regular customer treated more
                       generously than a platform's terms (#2409) treat every buyer: on a sale to it each
