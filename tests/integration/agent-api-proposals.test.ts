@@ -6,6 +6,7 @@ import { createItem } from "../../src/lib/items";
 import { createAssistantToken } from "../../src/lib/api-tokens";
 import { createOffer } from "../../src/lib/offers";
 import { getDirectPlatform, getProposalScreen, moveProposal } from "../../src/lib/proposals";
+import { createProposalShareToken, saveProposalBuyerPick, verifyProposalShareToken } from "../../src/lib/proposal-handout";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
 import { DELETE, GET, PATCH, POST } from "../../src/app/api/v1/[...path]/route";
 import type { AgentProposal, AgentProposalRow, AgentProposalSaleOptions } from "../../src/lib/agent-api/proposal-reads";
@@ -273,6 +274,68 @@ describe("the proposal operations (#2303)", () => {
     assert.match(read.message ?? "", /^Dzień dobry Jan Kowalski!/);
     assert.equal(read.status, "preparing");
     assert.equal((await getProposalScreen(userId, proposal.id))!.status, "preparing");
+  });
+
+  it("reads the lots the buyer picked, narrows the list to them, and sells them as picked (#2607)", async () => {
+    const proposal = await ok<AgentProposal>(token, "POST", "/proposals", { contact: "Jan Kowalski" });
+    const p = `/proposals/${proposal.proposalNo}`;
+    const offers = [];
+    for (const price of ["1.00", "10.00", "3.00", "4.00", "15.00", "6.00", "20.00"]) offers.push(await offer(directId, price));
+    let read = await ok<AgentProposal>(token, "POST", `${p}/lots`, { offers: offers.map((o) => o.id) });
+    assert.deepEqual(read.lots.map((lot) => lot.lotNo), [1, 2, 3, 4, 5, 6, 7]);
+    assert.equal(read.buyerPicks, null);
+    assert.ok(read.lots.every((lot) => lot.pick === null));
+    assert.match(
+      (await refused(token, "POST", `${p}/sale`, { lots: ["picked"], sale: "new" })).message,
+      /The buyer has picked no lot of proposal/
+    );
+
+    // The buyer ticks 2, 5 and 7 on the proposal's link.
+    const { token: shareToken } = await createProposalShareToken(userId, proposal.id);
+    const access = (await verifyProposalShareToken(shareToken))!;
+    const at = new Date("2026-11-21T10:00:00Z");
+    for (const lotNo of [2, 5, 7]) await saveProposalBuyerPick(access, lotNo, true, at);
+
+    // A read only token reads them, with the time of the last change.
+    read = await ok<AgentProposal>(readOnlyToken, "GET", p);
+    assert.deepEqual(read.buyerPicks, { lots: [2, 5, 7], changedAt: at.toISOString() });
+    assert.deepEqual(
+      read.lots.filter((lot) => lot.pick === "picked").map((lot) => lot.lotNo),
+      [2, 5, 7]
+    );
+    const options = await ok<AgentProposalSaleOptions>(readOnlyToken, "GET", `${p}/sale-options`);
+    assert.deepEqual(options.lots.filter((lot) => lot.picked).map((lot) => lot.lotNo), [2, 5, 7]);
+
+    // Finding proposals narrows to those with picks.
+    const withPicks = await ok<ListResponse<AgentProposalRow>>(readOnlyToken, "GET", "/proposals?picked=true");
+    assert.equal(withPicks.total, 1);
+    assert.equal(withPicks.items[0]!.id, proposal.id);
+    assert.equal(withPicks.items[0]!.pickedLots, 3);
+    const every = await ok<ListResponse<AgentProposalRow>>(readOnlyToken, "GET", "/proposals");
+    assert.ok(every.total > 1);
+
+    // Sold as the buyer picked: those three, each at its own price, the sale to review.
+    const sold = await ok<AgentProposalConversion>(token, "POST", `${p}/sale`, { lots: ["picked"], sale: "new" });
+    assert.equal(sold.proposal.status, "sold");
+    assert.deepEqual(
+      sold.sale.lines.map((line) => [line.offerNo, line.price]).sort(),
+      [
+        [offers[1]!.offerNo, "10.00"],
+        [offers[4]!.offerNo, "15.00"],
+        [offers[6]!.offerNo, "20.00"],
+      ].sort()
+    );
+    assert.deepEqual(sold.proposal.lots.map((lot) => lot.state), [
+      "withdrawn",
+      "sold",
+      "withdrawn",
+      "withdrawn",
+      "sold",
+      "withdrawn",
+      "sold",
+    ]);
+    assert.ok(sold.sale.toReview, "a sale the agent recorded waits for the collector");
+    assert.equal(sold.sale.toReview!.created, true);
   });
 
   it("refuses an unknown contact with the close ones, and every write to a read-only token", async () => {

@@ -1381,7 +1381,9 @@ describe("the agent API's operation modules (#2198)", () => {
  * *Convert to sale…* in its API form, which marks the sale *to review* (#1948) in its transaction.
  * Marking a proposal sent, declining it, the buyer's link, and the screen's unmarked conversion stay
  * in the app: each writer of `proposals.ts` and `proposal-handout.ts` is read off its exports by verb,
- * so one added later has to be placed. A lot's price is `patchOffer`, the offers' own write.
+ * so one added later has to be placed. A lot's price is `patchOffer`, the offers' own write. The
+ * buyer's picks (#2601) are read and sold from (#2607) but never written: `saveProposalBuyerPick` is
+ * the buyer's own route's.
  */
 const PROPOSAL_API_WRITES = [
   "createProposal",
@@ -1396,7 +1398,7 @@ describe("the agent API's operation modules (#2303)", () => {
   const domain = readFileSync(path.join(ROOT, "src/lib/proposals.ts"), "utf8");
   const handout = readFileSync(path.join(ROOT, "src/lib/proposal-handout.ts"), "utf8");
   const writerPattern =
-    /export async function ((?:create|update|set|delete|remove|add|make|move|mark|convert|write|revoke)[A-Za-z]*)\(/g;
+    /export async function ((?:create|update|set|save|delete|remove|add|make|move|mark|convert|write|revoke)[A-Za-z]*)\(/g;
   const proposalWriters = [...domain.matchAll(writerPattern), ...handout.matchAll(writerPattern)].map((match) => match[1]);
 
   it("reach the proposal writes from their own module and nowhere else", () => {
@@ -1423,8 +1425,14 @@ describe("the agent API's operation modules (#2303)", () => {
     );
   });
 
-  it("reach no other writer of a proposal — no send, no decline, no link, no unmarked sale", () => {
-    for (const closed of ["moveProposal", "convertProposalToSale", "createProposalShareToken", "revokeProposalShareToken"]) {
+  it("reach no other writer of a proposal — no send, no decline, no link, no pick, no unmarked sale", () => {
+    for (const closed of [
+      "moveProposal",
+      "convertProposalToSale",
+      "createProposalShareToken",
+      "revokeProposalShareToken",
+      "saveProposalBuyerPick",
+    ]) {
       assert.ok(proposalWriters.includes(closed), `the walk did not find \`${closed}\` among the proposal writers`);
     }
     const closed = new Set(proposalWriters.filter((name) => !PROPOSAL_API_WRITES.includes(name)));
@@ -1437,7 +1445,7 @@ describe("the agent API's operation modules (#2303)", () => {
     assert.deepEqual(
       breaches,
       [],
-      `Sending, declining and the buyer's link stay in the app (#2303).\n  ${breaches.join("\n  ")}`
+      `Sending, declining, the buyer's link and the buyer's picks stay in the app (#2303, #2607).\n  ${breaches.join("\n  ")}`
     );
   });
 

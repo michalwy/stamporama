@@ -9,7 +9,7 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras, #2551 a purchase lot's copies and #2610 a contact read in full; both wrappers exist and the registry carries **one hundred and fifty-five operations** (measured off `OPERATIONS` when #2610 landed and added `find_contacts` and `get_contact`; one hundred and fifty-three when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras, #2551 a purchase lot's copies, #2610 a contact read in full and #2607 a proposal's buyer picks (no operation of its own); both wrappers exist and the registry carries **one hundred and fifty-five operations** (measured off `OPERATIONS` when #2610 landed and added `find_contacts` and `get_contact`; one hundred and fifty-three when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
 operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #2511's `withdraw_offer`, #2531's `sell_copies`, #2532's `find_free_extras` and `add_free_extras`, #2551's three lot-copy writes, #1168's bid recommendation, and #1037's catalog-number
@@ -1239,15 +1239,15 @@ more: put lots together for them, price them, and record which they took.
 
 | operation | writes | what it is for |
 | --- | --- | --- |
-| `list_proposals` | no | the proposals, by contact and status, with lots, open lots and total |
-| `get_proposal` | no | one proposal: contact, Direct platform, lots (lot number, offer, title, state, price, copies), total, message, the sale it became |
+| `list_proposals` | no | the proposals, by contact, status and `picked` (#2607), with lots, open lots, picked lots and total |
+| `get_proposal` | no | one proposal: contact, Direct platform, lots (lot number, offer, title, state, price, copies, the buyer's pick), the buyer's picks and when they last changed (#2607), total, message, the sale it became |
 | `create_proposal` | yes | *New proposal* for a contact named exactly |
 | `add_proposal_lots` | yes | *Add offers…* — open Direct offers by number or id |
 | `make_proposal_lots` | yes | *New lots…* — copies into new Direct offers, `each` or `together` |
 | `set_proposal_lot_price` | yes | the lot's price field — `patchOffer`, as `set_offer_price` writes it |
 | `remove_proposal_lot` | yes | the lot's *Take out*; the offer stays |
-| `get_proposal_sale_options` | no | *Convert to sale…*'s lists: open lots and the contact's sales not yet sent |
-| `convert_proposal_to_sale` | yes | the lots the buyer took sold, into a new Direct sale or their open sale; the rest withdrawn |
+| `get_proposal_sale_options` | no | *Convert to sale…*'s lists: open lots, each marked `picked`, and the contact's sales not yet sent |
+| `convert_proposal_to_sale` | yes | the lots the buyer took — by number, or `picked` (#2607) — sold, into a new Direct sale or their open sale; the rest withdrawn |
 
 **Every write is the screen's own path** in `proposals.ts`, and every rule is the domain's —
 `proposalLotsRefusal`, `proposalLotRefusal`, the conversion's refusals — relayed with the app's own
@@ -1277,12 +1277,27 @@ the two sharing `proposalListWhere`.
 - **No send, no decline, no link, no document.** Marking a proposal sent, declining it, and the
   buyer's link and document stay in the app. `make_proposal_lots`' `packing` is required rather than
   remembered as the screen remembers it: an agent states it.
+- **The buyer's picks are read, never written** (#2607; settled with the collector on 2026-11-21
+  that what #2601 made sense of is covered here too, the issue's *to be confirmed* points — a read
+  only token reads them, the API never changes one — implemented as written). Each lot of
+  `get_proposal` carries `pick` — `proposalLotPick`'s `picked` / `unavailable` / null, as the screen
+  marks it — and `buyerPicks` is `{ lots, changedAt }`, every lot ticked by number (the unavailable
+  ones included, as the screen's *Buyer picked N lots* counts them) and `Proposal.buyerPicksChangedAt`,
+  null while nothing is ticked. `list_proposals`' `picked=true` is `ProposalListFilters.withBuyerPicks`
+  (any lot ticked); its rows carry `pickedLots`. `convert_proposal_to_sale` takes the **word `picked`**
+  among its `lots` — pure `proposalSaleLotsWithPicks` (`proposal-reads.ts`): every lot whose pick is
+  `picked` at its own price, as *Convert to sale…* opens with them ticked, a pick no longer available
+  passed over as the dialog passes it over, lots named beside it added or re-priced (`picked`,
+  `5=30.00`), and `picked` with nothing left to sell refused rather than selling only the rest. A word
+  rather than a second parameter, so *the picks and lot 3* is one list and every refusal stays the
+  grammar's.
 
 **The boundary is the import map in `tests/unit/agent-api-operation-boundary.test.ts`**: the five
 proposal writes are reached from `operations/proposals.ts` alone, the API conversion must mark the
 sale, and every other writer of `proposals.ts` and `proposal-handout.ts` — read off their exports by
 verb — is out of every operation module: `moveProposal`, the unmarked
-`convertProposalToSale` and the link's writers. `tests/integration/agent-api-proposals.test.ts`
+`convertProposalToSale`, the link's writers and the buyer's `saveProposalBuyerPick` (#2607 added
+`save` to the verbs walked, which is what brought it in). `tests/integration/agent-api-proposals.test.ts`
 drives the scenario through the real route. The trades' *no send-shaped name* guard and the sales'
 *no sale-named write* guard exempt these operations by name, each saying why: a Proposal is not a
 trade proposal, and the conversion records a sale as `sell_offer` does.

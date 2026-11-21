@@ -232,9 +232,12 @@ does not record a running auction's current bid either: the price it sells at is
 On **[proposals](offers.md#proposals)** — an offer you put together for one buyer — it can answer a
 buyer who asked for more. It can:
 
-- **find a proposal** by contact or state, and read one: its lots by their numbers, each with its
-  offer, copies and price, the total, the sale it became, and the message for the buyer as your
-  Direct platform's template writes it. A **read only** token can do this much. Reading the message
+- **find a proposal** by contact or state — or only those where the buyer has
+  [ticked lots](offers.md#the-buyers-picks) — and read one: its lots by their numbers, each with its
+  offer, copies and price, which lots the buyer picked and when they last changed their picks (a
+  picked lot since sold elsewhere or withdrawn is marked no longer available, as on the proposal's
+  screen), the total, the sale it became, and the message for the buyer as your Direct platform's
+  template writes it. A **read only** token can do this much. Reading the message
   does not mark the proposal sent — sending it is still yours;
 - **start a proposal** for a contact, **add** offers already on Direct as its lots, **make new lots**
   from copies — an offer each, or one offer of them all, as [**New lots…**](offers.md#giving-it-lots)
@@ -242,13 +245,15 @@ buyer who asked for more. It can:
   refuse it, with the same reason — a [sent proposal](offers.md#sent-reopened-declined) among them,
   which only you can reopen;
 - **turn it into a sale** with the lots the buyer took, named by their lot numbers — at each lot's
-  price or at a price agreed — into a new Direct sale or one of the buyer's open sales, as
+  price or at a price agreed — or simply **as the buyer picked them**, so *sell Jan what he picked*
+  needs no lot numbers from you, into a new Direct sale or one of the buyer's open sales, as
   [**Convert to sale…**](offers.md#selling-it) does. The other lots are withdrawn and the proposal is
   *Sold*; the sale is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
   until you confirm it.
 
 **It does not mark a proposal sent, decline it, or make its link or document for the buyer** — what
-reaches the buyer stays on the proposal's screen.
+reaches the buyer stays on the proposal's screen. **Nor does it tick or untick a lot**: the picks are
+the buyer's.
 
 On the **conversations with your buyers**, it can keep the
 [log](sales.md#the-conversation-with-the-buyer) that a sale's screen and a contact's page show —

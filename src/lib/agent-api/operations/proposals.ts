@@ -18,20 +18,21 @@ import { readProposalMessage } from "../../proposal-handout";
 import { proposalLotsRefusal, type ProposalLotPacking, type ProposalStatus } from "../../proposal-rules";
 import { invalidRequest, notFound } from "../errors";
 import { listResponse, parseListWindow } from "../list";
-import { optionalString, requiredString, stringList } from "../params";
+import { optionalBoolean, optionalString, requiredString, stringList } from "../params";
 import { resolveSeller } from "../purchase-reads";
 import { parseSaleRef } from "../conversation-log-reads";
 import {
   AGENT_PROPOSAL_LOT_PACKINGS,
   AGENT_PROPOSAL_STATUSES,
+  BUYER_PICKS,
   NEW_SALE,
   parseLotNo,
   parseLotPrice,
   parseOfferRef,
   parseProposalRef,
-  parseProposalSaleLots,
   proposalRecord,
   proposalRow,
+  proposalSaleLotsWithPicks,
   proposalSaleOptions,
 } from "../proposal-reads";
 import { readSaleById } from "./sales";
@@ -57,6 +58,12 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // domain's and are not restated: a lot is an open Direct offer in no other proposal, lots and their
 // prices change only while a proposal is being prepared — a sent one is fixed until the collector
 // reopens it in the app (#2307) — and each refusal is the app's own sentence.
+//
+// **The buyer's picks are read, never written** (#2607). What the buyer ticked on the live page
+// (#2601) is theirs: `get_proposal` reads it, `list_proposals` narrows to it, and
+// `convert_proposal_to_sale` takes `picked` for the picks still for sale — as *Convert to sale…*
+// opens with them ticked. `saveProposalBuyerPick` is the buyer's route's alone, held out of every
+// operation module by the boundary test.
 //
 // **No send, no decline, no link.** Marking a proposal sent, declining it, and the buyer's link and
 // document stay in the app — the collector decided on 2026-11-01 that what reaches the buyer is
@@ -180,6 +187,7 @@ export async function readProposals(
   const filters = {
     ...(contactValue !== null ? { contactId: await resolveContactParam(context, contactValue, "contact") } : {}),
     ...(statuses.length > 0 ? { statuses: [...statuses] as ProposalStatus[] } : {}),
+    ...(optionalBoolean(params, "picked") === true ? { withBuyerPicks: true } : {}),
   };
   const window = parseListWindow(params);
   const [page, total, header] = await Promise.all([
@@ -224,11 +232,19 @@ export const listProposalsOperation: Operation = {
         "Restrict to these statuses: `preparing` (being put together — the only one whose lots change), `sent` (gone to the buyer, fixed as it went), `sold` (turned into a sale) and `declined`. Left out, every status.",
       values: AGENT_PROPOSAL_STATUSES,
     },
+    {
+      name: "picked",
+      in: "query",
+      type: "boolean",
+      required: false,
+      description:
+        "Send true for only the proposals whose buyer has ticked lots on the proposal's link — what they want. Left out, every proposal.",
+    },
   ],
   result: {
     kind: "list",
     description:
-      "The proposals. `lots` counts every lot and `openLots` those still offered; `total` is the lots not withdrawn at their prices, in `currency`, and `unpriced` counts the lots it leaves out for having no price yet.",
+      "The proposals. `lots` counts every lot, `openLots` those still offered and `pickedLots` those the buyer ticked on the proposal's link, the ones since sold or withdrawn included; `total` is the lots not withdrawn at their prices, in `currency`, and `unpriced` counts the lots it leaves out for having no price yet.",
   },
   handler: async (context, params) => readProposals(context, params),
 };
@@ -236,14 +252,14 @@ export const listProposalsOperation: Operation = {
 // ── get_proposal ─────────────────────────────────────────────────────────────
 
 const PROPOSAL_RESULT_DESCRIPTION =
-  "The proposal: its status, its contact, the Direct platform its lots are on, and the sale it became once `sold`. Each lot carries its `lotNo` — the number the buyer is sent and answers with — its offer's number and id, title, state, listing type, price (null while it has none), sets and the copies on it by copy number. `total` is the lots not withdrawn at their prices and `unpriced` counts those with no price. `message` is the text for the buyer from the Direct platform's template — null when the platform has none, since nothing is generated without one; reading it here does not mark the proposal sent.";
+  "The proposal: its status, its contact, the Direct platform its lots are on, and the sale it became once `sold`. Each lot carries its `lotNo` — the number the buyer is sent and answers with — its offer's number and id, title, state, listing type, price (null while it has none), sets, the copies on it by copy number, and `pick` — `picked` where the buyer ticked it on the proposal's link, `unavailable` where they did but it has since sold elsewhere or been withdrawn, null where they did not. `buyerPicks` lists the lots the buyer ticked by number and `changedAt`, when they last ticked or unticked one; it is null while nothing is ticked. Picks are the buyer's: nothing here changes them. `total` is the lots not withdrawn at their prices and `unpriced` counts those with no price. `message` is the text for the buyer from the Direct platform's template — null when the platform has none, since nothing is generated without one; reading it here does not mark the proposal sent.";
 
 export const getProposalOperation: Operation = {
   name: "get_proposal",
   method: "GET",
   path: "/proposals/{proposal}",
   description:
-    "One proposal in full: its contact, status, every lot with its number, offer, copies and price, the total, the message text for the buyer, and the sale it became.",
+    "One proposal in full: its contact, status, every lot with its number, offer, copies and price, the lots the buyer picked on the proposal's link and when, the total, the message text for the buyer, and the sale it became.",
   writes: false,
   parameters: [PROPOSAL_PARAMETER],
   result: { kind: "object", description: PROPOSAL_RESULT_DESCRIPTION },
@@ -272,7 +288,7 @@ export const getProposalSaleOptionsOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "`lots` are the open lots, by `lotNo`, each with its price (null while it has none) and `setsToSell` — the sets whose copies have not left, each selling at the lot's price. `sales` are the contact's sales still open, newest first, each with its marketplace, day, status, currency and line count; a sale in another currency than the lots is refused. `newSalePlatform` is where a new sale is recorded.",
+      "`lots` are the open lots, by `lotNo`, each with its price (null while it has none), `setsToSell` — the sets whose copies have not left, each selling at the lot's price — and `picked`, whether the buyer ticked it on the proposal's link. `sales` are the contact's sales still open, newest first, each with its marketplace, day, status, currency and line count; a sale in another currency than the lots is refused. `newSalePlatform` is where a new sale is recorded.",
   },
   handler: async (context, params) => readProposalSaleOptions(context, params),
 };
@@ -501,13 +517,14 @@ export interface AgentProposalConversion {
 
 export async function convertToSale(context: OperationContext, params: ParsedParams): Promise<AgentProposalConversion> {
   const proposal = await resolveProposal(context, requiredString(params, "proposal"));
-  const specs = parseProposalSaleLots(stringList(params, "lots"), "lots");
-  if (specs.length === 0) {
+  const values = stringList(params, "lots");
+  if (values.length === 0) {
     throw invalidRequest(
-      'Send the lots the buyer took as "lots". If they took none, the proposal is declined — which stays with the collector. Nothing was sold.'
+      `Send the lots the buyer took as "lots" — or \`${BUYER_PICKS}\` for the lots they picked on the proposal's link. If they took none, the proposal is declined — which stays with the collector. Nothing was sold.`
     );
   }
   const lots = await proposalLots(context, proposal.id);
+  const specs = proposalSaleLotsWithPicks(values, lots, "lots", proposal.proposalNo);
   const sold = specs.map((spec) => {
     const lot = lotNumbered(lots, spec.lotNo, proposal.proposalNo);
     const price = spec.price ?? lot.price;
@@ -557,7 +574,7 @@ export const convertProposalToSaleOperation: Operation = {
   method: "POST",
   path: "/proposals/{proposal}/sale",
   description:
-    "Record which lots of a proposal the buyer took, as the app's Convert to sale… does: every set each still has is sold at the lot's price — or the price agreed — into a new Direct sale for the proposal's contact, dated today, or into one of their sales not yet sent on any marketplace, in the lots' currency. The lots not named are withdrawn and the proposal becomes `sold`; none of it can be undone from here. The sale waits for the collector's review. Read `get_proposal_sale_options` first.",
+    "Record which lots of a proposal the buyer took, as the app's Convert to sale… does — named by number, or `picked` for the lots the buyer ticked on the proposal's link: every set each still has is sold at the lot's price — or the price agreed — into a new Direct sale for the proposal's contact, dated today, or into one of their sales not yet sent on any marketplace, in the lots' currency. The lots not named are withdrawn and the proposal becomes `sold`; none of it can be undone from here. The sale waits for the collector's review. Read `get_proposal_sale_options` first.",
   writes: true,
   parameters: [
     PROPOSAL_PARAMETER,
@@ -567,7 +584,7 @@ export const convertProposalToSaleOperation: Operation = {
       type: "string[]",
       required: true,
       description:
-        "The lots the buyer took, by lot number: `2` sells lot 2 at its own price, `2=35.00` at the price agreed instead, in the lot's currency. At least one; a buyer who took none has declined, which is the collector's to record.",
+        "The lots the buyer took, by lot number: `2` sells lot 2 at its own price, `2=35.00` at the price agreed instead, in the lot's currency. `picked` sells every lot the buyer ticked on the proposal's link that can still be sold, each at its own price — a pick since sold elsewhere or withdrawn is passed over, and `picked` with none left is refused. Lots named beside it are added to the picks, or set the price of a picked one: `picked`, `5=30.00`. At least one; a buyer who took none has declined, which is the collector's to record.",
     },
     {
       name: "sale",
