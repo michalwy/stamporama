@@ -207,8 +207,9 @@ desktop-only.
 - **The language** is the desk card's choice (#2603) at the tap target: `setProposalLanguageAction`,
   saved on the contact, then `router.refresh()` reads the message in it. Every write is the desk's own
   server action; afterwards the page is read again and `invalidateAll` marks the offer lists stale.
-- **Stays at the desk**: making a proposal, adding or removing lots, prices, the document (PDF) — the
-  live link shows the buyer everything — and the photos.
+- **Stays at the desk**: making a proposal — bar one made from a Facebook post not yet up (#2632,
+  below) — adding or removing lots, prices, the document (PDF) — the live link shows the buyer
+  everything — and the photos.
 
 ## Closing a proposal (#2627)
 
@@ -281,7 +282,7 @@ desktop-only.
   bid is recorded, then *Bid*; a quick buy's *Price*. A post of one numbers its lot 1.
 - **A tap on a lot opens its phone offer screen** (`phoneOfferPath`), where the bid (#2010), *Sell*
   (#2009) and *Withdraw* (#2008) already are. The post's own moves are added here: publishing
-  (#2629), bids lot by lot (#2630) and closing it (#2631), all below; the rest by #2632. A proposal made from the post links to `phoneProposalPath` —
+  (#2629), bids lot by lot (#2630), closing it (#2631) and making it into a proposal (#2632), all below. A proposal made from the post links to `phoneProposalPath` —
   #2625's screen.
 
 ## Publishing a Facebook post (#2629)
@@ -364,6 +365,27 @@ desktop-only.
 - **Afterwards the phone stays on the post** (`router.refresh()`), so the next winner can be handled,
   where the phone's other sales go to *Sales to do*; the toast names the lots and the sale
   (`phoneLotsSoldMessage`) and links there.
+
+## A proposal made from a post (#2632)
+
+- **A post not yet up is made into a proposal from its phone screen** (settled with the collector on
+  2026-11-21): the buyer with first refusal is reached on the phone, so the proposal is made there too.
+  `PhonePostProposal` (`phone/posts/[postNo]/phone-post-proposal.tsx`), under the post's header, is
+  offered **exactly where the desk's ⋮ *Make a proposal…* is** — `phonePostCanPropose`
+  (`phone-post-view.ts`, pure), the desk's own `postProposalRefusal` asked of `PhonePost`: not up, with
+  lots, no open proposal made from it. An open one is the header's link instead; a closed one is still
+  linked and the move comes back, as at the desk.
+- **Only the contact is asked** (decided in writing the issue), picked as the phone's other contact
+  fields pick one — `PurchaseContactSelect`, with no role, so every contact is suggested as in the
+  desk's `ContactSelect`. A name typed without picking is resolved on the server by
+  `resolvePurchaseContact`, whose `role` became optional for it: an existing contact of that name in any
+  case, else a new one with no role, as the desk's *Create* makes. The sentence above the field is the
+  desk dialog's, `POST_PROPOSAL_SHARES_LOTS` (`proposal-rules.ts`).
+- **The write is the desk's**: `makePhonePostProposal` (`src/lib/phone-post-proposal.ts`, action
+  `makePhonePostProposalAction`) asks `postProposalRefusal` first — so a refused proposal leaves no new
+  contact behind — then calls `createProposalFromPost`, which asks it again in its transaction.
+  Afterwards the phone opens the proposal's screen (`phoneProposalPath`), where it is shared (#2625).
+  Tests: `tests/integration/phone-post-proposal.test.ts`, `tests/unit/phone-post-view.test.ts`.
 
 ## Start a purchase (#2006)
 
@@ -484,6 +506,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Publishing a Facebook post: copy text and captions, share or save photos, paste the link, approve | #2629 |
 | A Facebook post's bids, lot by lot on the post's screen | #2630 |
 | Closing a Facebook post: sell each winner's ticked lots, withdraw the rest | #2631 |
+| A proposal made from a Facebook post not yet up | #2632 |
 
 **Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
 editing and publishing offers — bar a Facebook post's publishing (#2629); intake, lots and the cost split; everything not in the table.

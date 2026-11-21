@@ -11,9 +11,12 @@ import {
   FACEBOOK_POST_STAGE_LABEL,
   FACEBOOK_POST_STAGES,
   facebookLotPrice,
+  hasFacebookPostGoneUp,
   isFacebookPostStage,
+  type FacebookLotStanding,
   type FacebookPostStage,
 } from "./facebook-post-rules";
+import { isProposalOpen, postProposalRefusal, type ProposalStatus } from "./proposal-rules";
 import type { OfferState } from "./offer-rules";
 
 /** What the phone's list of posts shows (#2626): the posts not over by default, every post, or one stage. */
@@ -99,4 +102,23 @@ export function phonePostLots(
     price: { ...facebookLotPrice(lot), currency: lot.currency },
     bidding: phonePostLotBidding(lot, now),
   }));
+}
+
+/** Whether the post's phone screen offers *Make a proposal* (#2632): exactly where the desk's post
+ *  screen offers *Make a proposal…* (#2602) — before the post is up, with lots, and while no proposal
+ *  made from it is open; that one is linked instead. The desk's own refusal, asked of the post as the
+ *  phone read it, so the two cannot disagree. */
+export function phonePostCanPropose(post: {
+  postNo: number;
+  kit: { lots: readonly FacebookLotStanding[] };
+  proposal: { proposalNo: number; contactName: string; status: ProposalStatus } | null;
+}): boolean {
+  return (
+    postProposalRefusal({
+      postNo: post.postNo,
+      up: hasFacebookPostGoneUp(post.kit.lots),
+      lotCount: post.kit.lots.length,
+      openProposal: post.proposal && isProposalOpen(post.proposal.status) ? post.proposal : null,
+    }) === null
+  );
 }

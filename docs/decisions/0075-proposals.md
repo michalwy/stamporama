@@ -200,6 +200,11 @@ above. Publishing the post stays the collector's (settled with the collector tha
 makes sense of #2602 is covered in the API too*; the issue's *to be confirmed* point implemented as
 written).
 
+*Amended by #2632 (2026-11-21):* the post's phone screen makes one too (ADR-0072), where the desk offers
+it and through the same `createProposalFromPost`, asking only the contact — picked, or typed and then
+found by name or made with no role — and opening the proposal's phone screen to share it (settled with
+the collector that day; *only the contact is asked* implemented as written).
+
 ### 12. It is sent in the buyer's language (#2603)
 
 Added by #2603, which built it on 2026-11-21, settled with the collector that day; its *to be

@@ -213,6 +213,20 @@ withdrawn lots and quick buys have no field.
 Tap a lot to open its offer screen, where you can also record its bid and sell or withdraw it, as for
 [a Facebook group auction](#a-facebook-group-auction). **Full app** opens the same post at the desk.
 
+### Making a proposal of a post
+
+Before a post goes up you can offer it to a regular buyer first, as a proposal made from the post — the
+same as **Make a proposal…** at the desk. While a post is not yet up and has lots, its screen has
+**Make a proposal…** under the title:
+
+1. Tap **Make a proposal…** and, under **For**, start typing the contact's name and pick them. A name
+   you type without picking is an existing contact of that name, or a new contact.
+2. Tap **Make proposal**. The proposal has the post's own lots, with their numbers, and the phone opens
+   its screen, where you can [share it with the buyer](#proposals) straight away.
+
+The post's screen then links to the proposal instead. Once that proposal is sold or declined, the post
+can be made into a new one.
+
 ### Closing a post
 
 When a post's auctions end, sell each winner's lots and withdraw the rest from the post's screen, as
@@ -310,8 +324,9 @@ in the state the desk allows it:
 - **Decline…** asks first, then closes the proposal as declined and withdraws its open lots. A
   proposal made from a post withdraws nothing.
 
-Swapping a lot's copy for a twin listed nowhere, making a proposal, adding or taking out lots, changing their prices, the printable document and the
-lots' photos stay at the desk: **Full app** opens the same proposal there.
+Swapping a lot's copy for a twin listed nowhere, making a proposal — other than
+[one made from a post](#making-a-proposal-of-a-post) — adding or taking out lots, changing their prices,
+the printable document and the lots' photos stay at the desk: **Full app** opens the same proposal there.
 
 ## Browse by area
 

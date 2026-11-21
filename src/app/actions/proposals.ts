@@ -18,6 +18,7 @@ import {
   type ProposalSaleInput,
   type ProposalSaleResult,
 } from "@/lib/proposals";
+import { makePhonePostProposal } from "@/lib/phone-post-proposal";
 import { createProposalShareToken, revokeProposalShareToken, setProposalLanguage } from "@/lib/proposal-handout";
 import { swapProposalLotCopy } from "@/lib/listed-elsewhere";
 import { parseProposalLotPacking, type ProposalDeletion, type ProposalMove } from "@/lib/proposal-rules";
@@ -57,6 +58,21 @@ export async function createProposalFromPostAction(
   const session = await getSession();
   try {
     return { status: "success", ...(await createProposalFromPost(session.user.id, postId, contactId)) };
+  } catch (err) {
+    return failure(err, "Failed to make the proposal.");
+  }
+}
+
+/** *Make a proposal* on a post's phone screen (#2632): the desk's *Make a proposal…* for a contact picked
+ *  or typed as the phone's contact fields take one. */
+export async function makePhonePostProposalAction(
+  collectionId: string,
+  postId: string,
+  contact: { contactId: string; contactName: string }
+): Promise<{ status: "success"; proposalId: string; proposalNo: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await makePhonePostProposal(session.user.id, collectionId, postId, contact)) };
   } catch (err) {
     return failure(err, "Failed to make the proposal.");
   }
