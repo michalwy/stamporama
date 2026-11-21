@@ -29,7 +29,7 @@ import { WithdrawFacebookPostDialog, withdrawnPostMessage } from "./withdraw-pos
 import { NewFacebookPostDialog } from "./new-post-dialog";
 import { postsViewNarrowings, type PostsNarrowing } from "./posts-view-params";
 import { usePostsView } from "./use-posts-view";
-import { calendarDay, relativeDay, shortDay, shortDayTime } from "./post-list-dates";
+import { auctionsEndWhen, calendarDay, relativeDay, shortDay } from "./post-list-dates";
 
 const CHIP: React.CSSProperties = {
   fontSize: "0.75rem",
@@ -442,15 +442,14 @@ function PostDates({ post }: { post: FacebookPostListItem }) {
   if (dates.endsFrom && dates.endsTo) {
     const from = new Date(dates.endsFrom);
     const to = new Date(dates.endsTo);
-    parts.push(
-      dates.endsFrom === dates.endsTo
-        ? { key: "ends", text: `auctions end ${shortDayTime(from, now)} (${relativeDay(from, now)})`, hint: "When the post's auctions end" }
-        : {
-            key: "ends",
-            text: `auctions end ${shortDayTime(from, now)} – ${shortDayTime(to, now)}`,
-            hint: "The post's auctions end at different times — the earliest and the latest",
-          }
-    );
+    parts.push({
+      key: "ends",
+      text: `auctions end ${auctionsEndWhen(from, to, now)}`,
+      hint:
+        dates.endsFrom === dates.endsTo
+          ? "When the post's auctions end"
+          : "The post's auctions end at different times — the earliest and the latest",
+    });
   }
   if (dates.endedAt) {
     parts.push({ key: "ended", text: `ended ${shortDay(new Date(dates.endedAt), now)}`, hint: "When the post's last lot ended" });

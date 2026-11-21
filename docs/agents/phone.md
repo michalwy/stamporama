@@ -195,6 +195,28 @@ desktop-only.
   desk — nothing of its own. `PhoneOfferSell` is keyed on the offer's price, so a bid just recorded
   becomes the price *Sell* starts at (`phoneSalePriceDefault`).
 
+## Facebook posts (#2626)
+
+- **`phone/posts`** (`phonePostsPath`) is the desk's own pages of posts (`useFacebookPostsInfinite`,
+  `listFacebookPostsPaginated`) under one narrowing in the URL, `show`: absent is **not over** — a
+  `notOver` filter on the shared read, `NOT` the over stage's query, so the two can never disagree —
+  else one stage or `all`. A select, not chips, for #2008's reason. Rules in `phone-post-view.ts`
+  (pure, unit-tested). The row's closing time is `dates.endsFrom/endsTo`, worded by the desk list's
+  `auctionsEndWhen` (`post-list-dates.ts`), drawn after mount (#490).
+- **`phone/posts/[postNo]`** (`phonePostPath`, the post's short number as at the desk) is a server
+  page over `getPhonePost` (`src/lib/phone-posts.ts`): the desk's `getFacebookPostKit`,
+  `readFacebookPostPhotos` and `readPostProposal` — **not** `getFacebookPostScreen`, whose texts,
+  translations and titles are preparation the phone does not do. **When it closes** is
+  `facebookPostAuctionsEnd` (`facebook-post-list-figures.ts`), the rule the list's *auctions end* was
+  rewired to, read only while the post is up.
+- **A lot's picture** (decided in writing #2626): the photo it goes into the post with, as the desk's
+  post screen shows it — a captioned post's one drawn photo, else the first of its upload set
+  (`phonePostLotPhotoId`). **Its price** is the desk post screen's `facebookLotPrice`: *Start* until a
+  bid is recorded, then *Bid*; a quick buy's *Price*. A post of one numbers its lot 1.
+- **The screen only reads.** A tap on a lot opens its phone offer screen (`phoneOfferPath`), where the
+  bid (#2010), *Sell* (#2009) and *Withdraw* (#2008) already are. #2629–#2632 add the post's own moves
+  here. A proposal made from the post links to `phoneProposalPath` — #2625's screen.
+
 ## Start a purchase (#2006)
 
 - **What the phone writes** (decided with the collector on 2026-10-17): a real purchase through
@@ -308,6 +330,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Offers: list, offer screen, pause / resume / withdraw | #2008 |
 | Sell an offer: buyer and price, one set at a time | #2009 |
 | Facebook group auction: record bid, close | #2010 |
+| Facebook posts: list, a post's screen with all its lots | #2626 |
 
 **Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
 editing and publishing offers; intake, lots and the cost split; everything not in the table.

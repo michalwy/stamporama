@@ -1009,7 +1009,10 @@ place; it changes nothing about the post itself.
 
 Away from the desk, record it on the phone: the auction's offer screen there has the same
 **Bidding** part — see [Stamporama on a phone](phone.md#a-facebook-group-auction). A bid recorded on
-the phone is the same bid, and the desk shows it exactly as if you had typed it there.
+the phone is the same bid, and the desk shows it exactly as if you had typed it there. The phone also
+has **Facebook posts**: a list of your posts and each post's screen with all its lots, their prices
+and states and when the post closes, a tap on a lot opening its offer screen — see
+[Stamporama on a phone](phone.md#facebook-posts).
 
 ## When an auction ends
 
