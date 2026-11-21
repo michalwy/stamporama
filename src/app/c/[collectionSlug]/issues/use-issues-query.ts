@@ -13,6 +13,7 @@ import { appendTagFilterParams, type TagFilterOpts } from "@/lib/tag-filter";
 import { appendIssueFormatParam } from "@/lib/issue-format-filter";
 import { SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
 import type { IssueSearchField } from "@/lib/issue-search-fields";
+import { appendIssueListScopeParams, type IssueListScope } from "@/lib/issue-list-params";
 import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
@@ -23,24 +24,9 @@ interface IssuesPage {
   nextCursor: string | null;
 }
 
-export interface IssueListFilters extends TagFilterOpts {
-  /** The issue format filter (#2440): issues holding a stamp in one of these. */
-  issueFormatIds?: string[];
-  areaIds?: string[];
-  search?: string;
-  /** Vendor + bare number parsed out of the quick search text (#289), so a prefixed
-   *  catalog number ("Mi PL 200") matches even though that spelling is never stored. */
-  searchCatalogVendorId?: string;
-  searchCatalogNumber?: string;
-  /** The fields the search box matches, when the collector narrowed it beside the box (#2239);
-   *  absent is every field. */
-  searchFields?: IssueSearchField[];
-  catalogVendorId?: string;
-  catalogNumber?: string;
-  /** The catalogues a number is searched in (#2529); absent is every one. */
-  catalogScope?: string[];
-  /** "none" for the no-year bucket, otherwise a numeric year string. */
-  year?: string;
+/** The list's narrowing (`IssueListScope`, the one shape the route and the run over the shown issues
+ *  read, #2664) and how its rows are drawn. */
+export interface IssueListFilters extends IssueListScope {
   sortBy?: IssueSortBy;
   sortDir?: "asc" | "desc";
   /** Condition whose price fills the price column / issue totals. */
@@ -122,20 +108,8 @@ export function useIssuesInfinite(
     queryFn: async ({ pageParam }) => {
       const params = new URLSearchParams();
       if (pageParam) params.set("offset", pageParam as string);
-      if (filters.areaIds && filters.areaIds.length > 0)
-        params.set("areaIds", filters.areaIds.join(","));
-      if (filters.search) params.set("search", filters.search);
-      if (filters.searchCatalogVendorId)
-        params.set("searchCatalogVendorId", filters.searchCatalogVendorId);
-      if (filters.searchCatalogNumber)
-        params.set("searchCatalogNumber", filters.searchCatalogNumber);
-      if (filters.searchFields) params.set(SEARCH_FIELDS_PARAM, filters.searchFields.join(","));
-      if (filters.catalogVendorId) params.set("catalogVendorId", filters.catalogVendorId);
-      if (filters.catalogNumber) params.set("catalogNumber", filters.catalogNumber);
-      if (filters.catalogScope) params.set(CATALOG_SCOPE_PARAM, filters.catalogScope.join(","));
-      appendTagFilterParams(params, filters);
-      appendIssueFormatParam(params, filters.issueFormatIds);
-      if (filters.year) params.set("year", filters.year);
+      // The narrowing through the one writer the run over the shown issues uses too (#2664).
+      appendIssueListScopeParams(params, filters);
       if (filters.displayConditionId) params.set("displayConditionId", filters.displayConditionId);
       if (filters.displayFormatId) params.set("displayFormatId", filters.displayFormatId);
       if (filters.sortBy) params.set("sortBy", filters.sortBy);

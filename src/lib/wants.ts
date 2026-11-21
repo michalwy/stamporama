@@ -1675,10 +1675,29 @@ async function wantGapForStamps(
   stampIds: string[],
   acceptance: WantAcceptanceInput
 ): Promise<{ missing: string[]; toCreate: string[] }> {
-  const ids = [...new Set(stampIds)];
-  if (ids.length === 0) return { missing: [], toCreate: [] };
-  const members = new Set(ids);
-  const rollup = await loadChecklistVariantRollup(collectionId, ids);
+  return (await wantGapsForChecklists(collectionId, [stampIds], acceptance))[0];
+}
+
+/**
+ * {@link wantGapForStamps} for many checklists at once — the gap of each, read in **three queries
+ * whatever their number** (#2664). A run over an area's issues holds hundreds of checklists, and a
+ * query per checklist was the one-issue shape scaled past what a connection pool takes.
+ *
+ * Each list is still judged **as its own membership**: the rollup is loaded over the union, but a
+ * held stamp is attributed through `memberFor` with that one list's members, so a `226yw` copy
+ * answers the basic list's `226` and the specialised list's `226yw` exactly as it does when the
+ * lists are read one at a time. Loading over the union only lengthens chains past stamps that are
+ * members of no list being judged, which `memberFor` never reaches.
+ */
+async function wantGapsForChecklists(
+  collectionId: string,
+  lists: readonly string[][],
+  acceptance: WantAcceptanceInput
+): Promise<{ missing: string[]; toCreate: string[] }[]> {
+  const distinct = lists.map((l) => [...new Set(l)]);
+  const all = [...new Set(distinct.flat())];
+  if (all.length === 0) return distinct.map(() => ({ missing: [], toCreate: [] }));
+  const rollup = await loadChecklistVariantRollup(collectionId, all);
 
   const [copies, openWants] = await Promise.all([
     prisma.item.findMany({
@@ -1691,7 +1710,7 @@ async function wantGapForStamps(
       },
     }),
     prisma.want.findMany({
-      where: { collectionId, closedAt: null, stampId: { in: ids } },
+      where: { collectionId, closedAt: null, stampId: { in: all } },
       select: {
         stampId: true,
         conditions: { select: { conditionId: true } },
@@ -1701,13 +1720,11 @@ async function wantGapForStamps(
     }),
   ]);
 
-  const satisfied = new Set(
+  // The stamps holding a copy these terms would take — attributed to a member per list below.
+  const held = new Set(
     copies
       .filter((c) => wantMatchesCopy({ ...acceptance, stampId: c.stampId }, c))
-      .flatMap((c) => {
-        const member = rollup.memberFor(c.stampId, members);
-        return member === null ? [] : [member];
-      })
+      .map((c) => c.stampId)
   );
   const wantedOnTheseTerms = new Set(
     openWants
@@ -1721,8 +1738,16 @@ async function wantGapForStamps(
       .map((w) => w.stampId)
   );
 
-  const missing = ids.filter((id) => !satisfied.has(id));
-  return { missing, toCreate: missing.filter((id) => !wantedOnTheseTerms.has(id)) };
+  return distinct.map((ids) => {
+    const members = new Set(ids);
+    const satisfied = new Set<string>();
+    for (const stampId of held) {
+      const member = rollup.memberFor(stampId, members);
+      if (member !== null) satisfied.add(member);
+    }
+    const missing = ids.filter((id) => !satisfied.has(id));
+    return { missing, toCreate: missing.filter((id) => !wantedOnTheseTerms.has(id)) };
+  });
 }
 
 /** Writes one want per stamp of a gap, all on the terms the gap was taken against, and reports what
@@ -1752,8 +1777,35 @@ async function writeGeneratedWants(
         select: { id: true },
       });
       // Wide-open terms are the absence of rows, so a whole-issue run on the default writes the
-      // wants alone rather than three deletes per want against tables it just did not fill.
-      if (hasTerms) for (const w of wants) await writeAcceptance(tx, w.id, acceptance);
+      // wants alone. The wants are new, so there is nothing to delete first, and each axis is one
+      // statement over the whole run — a run over an area writes hundreds of wants (#2664), and a
+      // statement per want would outlast the transaction.
+      if (hasTerms) {
+        if (acceptance.conditionIds.length) {
+          await tx.wantCondition.createMany({
+            data: wants.flatMap((w) =>
+              acceptance.conditionIds.map((conditionId) => ({ wantId: w.id, conditionId }))
+            ),
+          });
+        }
+        if (acceptance.certificateStatusIds.length) {
+          await tx.wantCertificateStatus.createMany({
+            data: wants.flatMap((w) =>
+              acceptance.certificateStatusIds.map((certificateStatusId) => ({
+                wantId: w.id,
+                certificateStatusId,
+              }))
+            ),
+          });
+        }
+        if (acceptance.formatIds.length) {
+          await tx.wantFormat.createMany({
+            data: wants.flatMap((w) =>
+              acceptance.formatIds.map((formatId) => ({ wantId: w.id, formatId }))
+            ),
+          });
+        }
+      }
     });
   }
   return { created: gap.toCreate.length, missing: gap.missing.length };
@@ -1927,4 +1979,110 @@ export async function createWantsForIssue(
     toCreate: [...new Set(gaps.flatMap((g) => g.toCreate))],
   };
   return writeGeneratedWants(collectionId, gap, terms, priority);
+}
+
+/**
+ * What a run over many issues would want (#2664) — the Issues list's *Add missing to want list*,
+ * over every issue the list is showing.
+ *
+ * The one-issue add (#548) taken over a set of issues, each read the way that add reads it: its own
+ * checklists, standard ones only unless the specialised are switched on (#1617), each mapped to the
+ * run's depth (#1240) and its gap taken **as its own membership**, then unioned — so a stamp on two
+ * checklists, or on the checklists of two issues, is one want. A checklist spanning issues (#1416)
+ * belongs to none of them and is not read.
+ *
+ * The figures are what the dialog states before anything is written: the issues covered, those
+ * with something missing, and those with no checklist to want from — counted, because an issue that
+ * contributes nothing should be seen to, not silently skipped.
+ */
+export interface IssuesWantGap {
+  issueCount: number;
+  /** Issues with no checklist the run reads — none at all, or (switched off) only specialised ones. */
+  issuesWithoutChecklist: number;
+  /** Issues with at least one missing stamp, wanted already or not. */
+  issuesWithGaps: number;
+  /** Distinct stamps missing over the run. */
+  missingStampIds: string[];
+  /** The subset with no open want on these terms — what the run writes. */
+  toCreateStampIds: string[];
+}
+
+async function issuesWantGap(
+  collectionId: string,
+  issueIds: readonly string[],
+  terms: WantAcceptanceInput,
+  depth: WantDepth,
+  includeSpecialised: boolean
+): Promise<IssuesWantGap> {
+  const ids = [...new Set(issueIds)];
+  const checklists =
+    ids.length === 0
+      ? []
+      : await prisma.checklist.findMany({
+          where: { collectionId, issueId: { in: ids }, ...shownChecklistWhere(includeSpecialised) },
+          select: {
+            id: true,
+            issueId: true,
+            stamps: { where: COUNTING_CHECKLIST_MEMBER, select: { stampId: true } },
+          },
+        });
+  const targets = await mapChecklistsToDepth(collectionId, checklists, depth);
+  const gaps = await wantGapsForChecklists(
+    collectionId,
+    checklists.map((c) => targets.get(c)!),
+    terms
+  );
+
+  const withChecklist = new Set(checklists.map((c) => c.issueId));
+  const withGaps = new Set(
+    checklists.filter((_, i) => gaps[i].missing.length > 0).map((c) => c.issueId)
+  );
+  return {
+    issueCount: ids.length,
+    issuesWithoutChecklist: ids.filter((id) => !withChecklist.has(id)).length,
+    issuesWithGaps: withGaps.size,
+    missingStampIds: [...new Set(gaps.flatMap((g) => g.missing))],
+    toCreateStampIds: [...new Set(gaps.flatMap((g) => g.toCreate))],
+  };
+}
+
+/** The confirmation's figures for a run over many issues (#2664) — see {@link IssuesWantGap}. */
+export async function previewIssuesMissingWants(
+  ownerId: string,
+  collectionId: string,
+  issueIds: readonly string[],
+  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
+  depth: WantDepth = "main",
+  includeSpecialised = false
+): Promise<IssuesWantGap> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const terms = await validateAcceptance(collectionId, acceptance);
+  return issuesWantGap(collectionId, issueIds, terms, depth, includeSpecialised);
+}
+
+/**
+ * The run over many issues itself (#2664). The gap is **recomputed here**, as the one-issue add does
+ * — the figure the collector confirmed is what they agreed to, not what is trusted — and written on
+ * the one set of terms, priority and depth the dialog asked once for the whole run. An existing want
+ * is never closed or changed; one already open on these terms is skipped, which is what makes a
+ * second run create nothing.
+ */
+export async function createWantsForIssues(
+  ownerId: string,
+  collectionId: string,
+  issueIds: readonly string[],
+  acceptance: WantAcceptanceInput = ANY_ACCEPTANCE,
+  priority: WantPriority = "normal",
+  depth: WantDepth = "main",
+  includeSpecialised = false
+): Promise<{ created: number; missing: number }> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const terms = await validateAcceptance(collectionId, acceptance);
+  const gap = await issuesWantGap(collectionId, issueIds, terms, depth, includeSpecialised);
+  return writeGeneratedWants(
+    collectionId,
+    { missing: gap.missingStampIds, toCreate: gap.toCreateStampIds },
+    terms,
+    priority
+  );
 }

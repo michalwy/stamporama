@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CATALOG_SCOPE_PARAM, parseCatalogScope } from "@/lib/catalog-search-scope";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { readYearFilter } from "@/lib/list-area-year-filter";
 import { listIssuesPaginated, type IssueSortBy } from "@/lib/issues";
-import { tagFilterFromParams } from "@/lib/tag-filter";
-import { ISSUE_FORMAT_FILTER_PARAM, parseIssueFormatIds } from "@/lib/issue-format-filter";
-import { parseSearchFields, readListSearchParams, SEARCH_FIELDS_PARAM } from "@/lib/search-fields";
-import { ISSUE_SEARCH_FIELD_KEYS } from "@/lib/issue-search-fields";
+import { readIssueListScopeParams } from "@/lib/issue-list-params";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 
 const VALID_SORT_BY = new Set<IssueSortBy>(["year", "name", "catalogNumber"]);
@@ -26,16 +21,8 @@ export async function GET(
   const sp = request.nextUrl.searchParams;
   const offsetParam = sp.get("offset");
   const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
-  const areaIdsParam = sp.get("areaIds");
-  const areaIds = areaIdsParam ? areaIdsParam.split(",") : undefined;
-  const { search, searchExact } = readListSearchParams(sp);
-  const searchCatalogVendorId = sp.get("searchCatalogVendorId") || undefined;
-  const searchCatalogNumber = sp.get("searchCatalogNumber") || undefined;
-  // The fields the search box was narrowed to beside it (#2239); absent is every field.
-  const searchFields = parseSearchFields(sp.get(SEARCH_FIELDS_PARAM), ISSUE_SEARCH_FIELD_KEYS);
-  const catalogVendorId = sp.get("catalogVendorId") || undefined;
-  const catalogScope = parseCatalogScope(sp.get(CATALOG_SCOPE_PARAM));
-  const catalogNumber = sp.get("catalogNumber") || undefined;
+  // The narrowing — read by the one function the run over the shown issues reads it with (#2664).
+  const scope = readIssueListScopeParams(sp);
   const displayConditionId = sp.get("displayConditionId") || undefined;
   const displayFormatId = sp.get("displayFormatId") || undefined;
   const sortByParam = sp.get("sortBy") as IssueSortBy | null;
@@ -46,22 +33,7 @@ export async function GET(
   try {
     const result = await listIssuesPaginated(session.user.id, collectionId, {
       offset,
-      areaIds,
-      search,
-      searchExact,
-      searchCatalogVendorId,
-      searchCatalogNumber,
-      searchFields,
-      catalogVendorId,
-      catalogScope,
-      catalogNumber,
-      // The collector's own labels (#1182) — a filter like any other, so the list and both
-      // facet rails narrow by it and their counts answer for it.
-      ...tagFilterFromParams(sp),
-      // The issue format (#2440): issues holding a stamp in one of the ticked formats.
-      issueFormatIds: parseIssueFormatIds(sp.get(ISSUE_FORMAT_FILTER_PARAM)),
-      // One year, No year, or a span of them (#2258) — the one parser every list route reads it with.
-      ...readYearFilter(sp.get("year")),
+      ...scope,
       displayConditionId,
       displayFormatId,
       sortBy,

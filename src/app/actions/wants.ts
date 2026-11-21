@@ -14,7 +14,10 @@ import {
   findWantsSatisfiedBy,
   createWantsForIssue,
   previewIssueMissingWants,
+  createWantsForIssues,
+  previewIssuesMissingWants,
   isWantPriority,
+  type IssuesWantGap,
   type IssueWantGapChecklist,
   type ArrivingCopy,
   type WantAcceptanceInput,
@@ -25,6 +28,8 @@ import {
 } from "@/lib/wants";
 import { isWantDepth, type WantDepth } from "@/lib/want-depth-rules";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
+import { listIssueIds } from "@/lib/issues";
+import { readIssueListScopeParams } from "@/lib/issue-list-params";
 
 // Server actions for the want list (#532; ADR-0032).
 //
@@ -195,6 +200,75 @@ export async function addIssueMissingToWantListAction(
       acceptance,
       isWantPriority(priority) ? priority : "normal",
       isWantDepth(depth) ? depth : "main"
+    );
+    return { status: "success", ...result };
+  } catch (err) {
+    return {
+      status: "error",
+      message: err instanceof Error ? err.message : "Failed to add the missing stamps.",
+    };
+  }
+}
+
+/** The issues the Issues list is showing (#2664), from the very query string its rows were read
+ *  with — `issue-list-params.ts` writes it on the screen and reads it here and in the list's route. */
+async function shownIssueIds(ownerId: string, collectionId: string, scopeQuery: string) {
+  return listIssueIds(ownerId, collectionId, readIssueListScopeParams(new URLSearchParams(scopeQuery)));
+}
+
+/** {@link IssuesWantGap} counted rather than listed — what the dialog states. */
+export type ShownIssuesWantGapPreview = Omit<IssuesWantGap, "missingStampIds" | "toCreateStampIds"> & {
+  missing: number;
+  toCreate: number;
+};
+
+/** What *Add missing to want list* over every issue the list shows would write (#2664). The stamp
+ *  ids stay on the server: the dialog states counts, and the write recomputes them anyway. */
+export async function previewShownIssuesMissingWantsAction(
+  collectionId: string,
+  scopeQuery: string,
+  acceptance: WantAcceptanceInput,
+  depth: WantDepth
+): Promise<ShownIssuesWantGapPreview> {
+  const session = await getSession();
+  const issueIds = await shownIssueIds(session.user.id, collectionId, scopeQuery);
+  const gap = await previewIssuesMissingWants(
+    session.user.id,
+    collectionId,
+    issueIds,
+    acceptance,
+    isWantDepth(depth) ? depth : "main",
+    await readIncludeSpecialised(collectionId)
+  );
+  return {
+    issueCount: gap.issueCount,
+    issuesWithoutChecklist: gap.issuesWithoutChecklist,
+    issuesWithGaps: gap.issuesWithGaps,
+    missing: gap.missingStampIds.length,
+    toCreate: gap.toCreateStampIds.length,
+  };
+}
+
+/** The run itself (#2664): the shown issues read again, their gap recomputed, the wants written on
+ *  the one set of terms, priority and depth — unknown words falling back as the one-issue add's do. */
+export async function addShownIssuesMissingToWantListAction(
+  collectionId: string,
+  scopeQuery: string,
+  acceptance: WantAcceptanceInput,
+  priority: WantPriority,
+  depth: WantDepth
+): Promise<AddMissingWantsState> {
+  const session = await getSession();
+  try {
+    const issueIds = await shownIssueIds(session.user.id, collectionId, scopeQuery);
+    const result = await createWantsForIssues(
+      session.user.id,
+      collectionId,
+      issueIds,
+      acceptance,
+      isWantPriority(priority) ? priority : "normal",
+      isWantDepth(depth) ? depth : "main",
+      await readIncludeSpecialised(collectionId)
     );
     return { status: "success", ...result };
   } catch (err) {

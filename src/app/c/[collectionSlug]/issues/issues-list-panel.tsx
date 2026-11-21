@@ -46,6 +46,8 @@ import { StampFormDialog } from "@/app/c/[collectionSlug]/shared/stamp-form-dial
 import { IssueDialog } from "@/app/c/[collectionSlug]/shared/issue-form-dialog";
 import { DeleteIssueDialog } from "./delete-issue-dialog";
 import { CatalogImportDialog } from "./catalog-import-dialog";
+import { AddShownIssuesWantsDialog } from "@/app/c/[collectionSlug]/wants/add-shown-issues-wants-dialog";
+import { appendIssueListScopeParams } from "@/lib/issue-list-params";
 import { Icon } from "@/app/icons";
 import { DeleteStampDialog } from "@/app/c/[collectionSlug]/shared/delete-stamp-dialog";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
@@ -135,6 +137,7 @@ type DialogState =
   | { kind: "none" }
   | { kind: "create-issue" }
   | { kind: "import-catalog" }
+  | { kind: "want-missing"; scopeQuery: string }
   | {
       kind: "edit-issue";
       issue: IssueListItem;
@@ -850,6 +853,42 @@ export function IssuesListPanel({
                 <Icon name="import" size="sm" />
                 Import CSV
               </button>
+              {/* Want everything missing across the issues the list shows (#2664) — the one-issue
+                  add from a row's menu, over an area, its sub-areas and years at once. The run is
+                  named by the very query string the rows were read with, so it covers what is on
+                  screen; nothing to cover is a disabled button with its reason. */}
+              <Tooltip
+                content={
+                  allIssues.length === 0
+                    ? "The list shows no issues"
+                    : "Want every stamp missing from the checklists of the issues the list shows — the area, its sub-areas, the years and every filter in force. The dialog counts them before anything is written."
+                }
+              >
+                <button
+                  type="button"
+                  disabled={allIssues.length === 0}
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    appendIssueListScopeParams(params, filters);
+                    openDialog({ kind: "want-missing", scopeQuery: params.toString() });
+                  }}
+                  style={{
+                    ...FILTER_CONTROL_STYLE,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem",
+                    cursor: allIssues.length === 0 ? "not-allowed" : "pointer",
+                    opacity: allIssues.length === 0 ? 0.5 : 1,
+                    fontWeight: 600,
+                    color: "var(--color-text-secondary)",
+                    padding: "0.375rem 0.875rem",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <Icon name="wants" size="sm" />
+                  Add missing to want list…
+                </button>
+              </Tooltip>
             </>
           }
         />
@@ -963,6 +1002,15 @@ export function IssuesListPanel({
           error={error}
           onClose={closeDialog}
           onSubmit={handleCreateIssueSubmit}
+        />
+      )}
+
+      {dialog.kind === "want-missing" && (
+        <AddShownIssuesWantsDialog
+          collectionId={collectionId}
+          scopeQuery={dialog.scopeQuery}
+          // Its own close, as the import's: the dialog owns its pending state.
+          onClose={() => setDialog({ kind: "none" })}
         />
       )}
 

@@ -129,11 +129,6 @@ export function AddIssueWantsDialog({
   // nothing missing starts unticked: it is shown — the collector asked about this issue and "that
   // one is complete" is an answer — but ticking it would promise a want it cannot write.
   const [picked, setPicked] = useState<Set<string> | null>(null);
-  // The terms every want of this run is written on, wide open by default — "anything will do", the
-  // one thing a gap on its own can honestly say. Naming them here is what makes a second run over
-  // the same set meaningful: *used, for sale* and *mint, for me* are two different intents about
-  // one stamp, and only terms can tell them apart.
-  const [acceptance, setAcceptance] = useState<WantAcceptanceInput>(ANY_ACCEPTANCE);
   // One urgency for the whole run (#695). Going after a set is a single decision about what to
   // chase first, so it is asked once here rather than left to be re-set a dozen times on the list.
   const [priority, setPriority] = useState<WantPriority>("normal");
@@ -148,30 +143,7 @@ export function AddIssueWantsDialog({
   // Any of the three axis menus being open — the shell must not take Escape from them (#361).
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // **The same remembered profile the want form reads and writes** (#533; ADR-0032 §9), not a
-  // second one of its own (#695). A run of wants is a run whichever door it is entered by — twelve
-  // through this dialog and the thirteenth through the form is one evening on one set of terms —
-  // and two memories over one question would each keep answering it with the other's last run
-  // missing. Seeded during **render** once the dictionary lands, the want form's own pattern, and
-  // skipped outright if the terms were already touched: a late default must not take back an
-  // answer.
-  const { data: profiles } = useAcceptanceProfiles(collectionId);
-  const [profileSeeded, setProfileSeeded] = useState(false);
-  if (!profileSeeded && profiles) {
-    setProfileSeeded(true);
-    const untouched =
-      acceptance.conditionIds.length === 0 &&
-      acceptance.certificateStatusIds.length === 0 &&
-      acceptance.formatIds.length === 0;
-    const remembered = untouched ? readRememberedProfile(collectionId, profiles) : null;
-    if (remembered) {
-      setAcceptance({
-        conditionIds: [...remembered.conditionIds],
-        certificateStatusIds: [...remembered.certificateStatusIds],
-        formatIds: [...remembered.formatIds],
-      });
-    }
-  }
+  const { acceptance, setAcceptance, profiles } = useRunAcceptance(collectionId);
 
   const { invalidate: invalidateWants } = useInvalidateWants();
   const { invalidateStampsAndIssues } = useInvalidateStampsAndIssues();
@@ -292,22 +264,7 @@ export function AddIssueWantsDialog({
         ) : (
           <>
             {/* The depth leads: it decides which stamps every figure below is about. */}
-            <div style={{ marginBottom: "0.75rem" }}>
-              <LabelWithError>Want</LabelWithError>
-              <WantDepthChoice value={depth} onChange={setDepth} disabled={isPending} />
-              <span
-                style={{
-                  display: "block",
-                  marginTop: "0.375rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-text-muted)",
-                }}
-              >
-                {depth === "main"
-                  ? "One want per stamp, whichever variant — a variant on the checklist is wanted as the stamp it is a variant of."
-                  : "One want per variant — a stamp that has variants is wanted as each of them, including variants the checklist does not list, and never itself."}
-              </span>
-            </div>
+            <WantDepthField value={depth} onChange={setDepth} disabled={isPending} />
             {gaps.length > 1 && (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.75rem" }}>
                 {gaps.map((g) => (
@@ -421,6 +378,74 @@ export function AddIssueWantsDialog({
 }
 
 /**
+ * The terms a bulk run writes its wants on, and the profiles they may have been seeded from — shared
+ * by the one-issue add and the run over the issues the list shows (#2664), which ask one question.
+ */
+export function useRunAcceptance(collectionId: string) {
+  // The terms every want of this run is written on, wide open by default — "anything will do", the
+  // one thing a gap on its own can honestly say. Naming them here is what makes a second run over
+  // the same set meaningful: *used, for sale* and *mint, for me* are two different intents about
+  // one stamp, and only terms can tell them apart.
+  const [acceptance, setAcceptance] = useState<WantAcceptanceInput>(ANY_ACCEPTANCE);
+  // **The same remembered profile the want form reads and writes** (#533; ADR-0032 §9), not a
+  // second one of its own (#695). A run of wants is a run whichever door it is entered by — twelve
+  // through this dialog and the thirteenth through the form is one evening on one set of terms —
+  // and two memories over one question would each keep answering it with the other's last run
+  // missing. Seeded during **render** once the dictionary lands, the want form's own pattern, and
+  // skipped outright if the terms were already touched: a late default must not take back an
+  // answer.
+  const { data: profiles } = useAcceptanceProfiles(collectionId);
+  const [profileSeeded, setProfileSeeded] = useState(false);
+  if (!profileSeeded && profiles) {
+    setProfileSeeded(true);
+    const untouched =
+      acceptance.conditionIds.length === 0 &&
+      acceptance.certificateStatusIds.length === 0 &&
+      acceptance.formatIds.length === 0;
+    const remembered = untouched ? readRememberedProfile(collectionId, profiles) : null;
+    if (remembered) {
+      setAcceptance({
+        conditionIds: [...remembered.conditionIds],
+        certificateStatusIds: [...remembered.certificateStatusIds],
+        formatIds: [...remembered.formatIds],
+      });
+    }
+  }
+  return { acceptance, setAcceptance, profiles };
+}
+
+/** The run's depth with what it means underneath (#1240) — led by every bulk run, since it decides
+ *  which stamps every figure below it is about. */
+export function WantDepthField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: WantDepth;
+  onChange: (next: WantDepth) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div style={{ marginBottom: "0.75rem" }}>
+      <LabelWithError>Want</LabelWithError>
+      <WantDepthChoice value={value} onChange={onChange} disabled={disabled} />
+      <span
+        style={{
+          display: "block",
+          marginTop: "0.375rem",
+          fontSize: "0.8125rem",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        {value === "main"
+          ? "One want per stamp, whichever variant — a variant on the checklist is wanted as the stamp it is a variant of."
+          : "One want per variant — a stamp that has variants is wanted as each of them, including variants the checklist does not list, and never itself."}
+      </span>
+    </div>
+  );
+}
+
+/**
  * Main stamps or variants (#1240), as two chips in a `radiogroup` — `WantPriorityChoice`'s shape,
  * for its reason: the whole vocabulary fits on one line, and a closed menu would hide the one word
  * that says what the counts below it are counting.
@@ -470,7 +495,7 @@ function WantDepthChoice({
   );
 }
 
-const MESSAGE_STYLE: React.CSSProperties = {
+export const MESSAGE_STYLE: React.CSSProperties = {
   margin: 0,
   fontSize: "0.9375rem",
   color: "var(--color-text-primary)",
@@ -478,7 +503,7 @@ const MESSAGE_STYLE: React.CSSProperties = {
 };
 
 /** Wide open — the default, and what the completeness card's own button has always written. */
-const ANY_ACCEPTANCE: WantAcceptanceInput = {
+export const ANY_ACCEPTANCE: WantAcceptanceInput = {
   conditionIds: [],
   certificateStatusIds: [],
   formatIds: [],
@@ -486,7 +511,7 @@ const ANY_ACCEPTANCE: WantAcceptanceInput = {
 
 /** The terms as a cache key. Sorted, because a set is not an order and re-ticking two boxes the
  *  other way round is the same question — the server compares sets too (`acceptanceSetsEqual`). */
-function acceptanceKey(a: WantAcceptanceInput): string {
+export function acceptanceKey(a: WantAcceptanceInput): string {
   const axis = (ids: (string | null)[]) => [...ids].map((id) => id ?? "~").sort().join(",");
   return `${axis(a.conditionIds)}|${axis(a.certificateStatusIds)}|${axis(a.formatIds)}`;
 }

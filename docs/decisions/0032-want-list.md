@@ -232,6 +232,14 @@ because an issue may hold several checklists (#531), the dialog asks **which** �
 "the set" of an issue that carries more than one, and a stamp on no checklist at all is an extra
 nobody is shopping for.
 
+The Issue list's toolbar widens the reach once more (#2664): the same action over **every issue the
+list is showing** — an area, its sub-areas, the years and every filter in force. Again the rules
+are unchanged; per issue it reads what the one-issue add reads, and the gaps are unioned. It drops
+the per-checklist ticks (a hundred issues' checklists is a list nobody reads; the specialised switch
+says which kind) and counts, before writing, the issues covered, those with a gap and those with no
+checklist. Checklists spanning issues belong to no issue on the list and are left out. The agent API
+gets no counterpart: wanting is confirmed on screen.
+
 It also carries **terms** and a **priority** (#695), wide open and `normal` by default. That is not a softening of the paragraph above: a
 gap still carries no acceptance criteria, and nothing is derived from it — the terms are *stated by
 the collector*, exactly as they are on the form, and the generator only stops throwing them away.
