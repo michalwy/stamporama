@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import {
-  focusManager,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -27,7 +25,8 @@ import type {
   OfferLookupTarget,
   OfferListNeighbours,
 } from "@/lib/offers";
-import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
+import { lotsAwaitingPhotos, lotsDoneWaiting } from "@/lib/lot-photo-wait";
+import { READY_WAIT_POLL_MS, useLotPoll } from "./use-lot-poll";
 import type { CatalogueFillLine } from "@/lib/lot-catalogue-fill";
 import type { ListedElsewhereEntry } from "@/lib/listed-elsewhere";
 import type { OwnOffers } from "@/lib/copy-open-offers";
@@ -190,9 +189,6 @@ export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
   });
 }
 
-/** How often a screen showing an offer that waits for its photos to turn Ready asks again (#1893). */
-const READY_WAIT_POLL_MS = 3_000;
-
 /** How often a captioned post's lots still being drawn are asked after (#1861). */
 const LOT_PHOTO_POLL_MS = 2_000;
 
@@ -276,26 +272,6 @@ export function useFacebookPostScreen(collectionId: string, postId: string) {
   return query;
 }
 
-/**
- * Ask after some of a post's lots (#2221, #2222) while there are any to ask after: each answer is new
- * data, so the next ask is scheduled from it — until none is left waiting. Not in a tab out of view,
- * as `refetchInterval` would not: coming back reads the post whole anyway.
- */
-function useLotPoll(waiting: string[], dataUpdatedAt: number, ms: number, ask: (lots: string[]) => Promise<void>) {
-  const lots = waiting.join(",");
-  const askRef = useRef(ask);
-  useEffect(() => {
-    askRef.current = ask;
-  });
-  useEffect(() => {
-    if (!lots) return;
-    const timer = setTimeout(() => {
-      if (focusManager.isFocused()) void askRef.current(lots.split(","));
-    }, ms);
-    return () => clearTimeout(timer);
-  }, [lots, dataUpdatedAt, ms]);
-}
-
 /** A post's lots as Prepare rows (#2031), keyed by the lot's offer id; null once the post is up. While
  *  a lot waits for its photos before turning Ready (#1893), or its photos are being made again (#2114)
  *  — *Publish…* waits for them — those lots are asked after, as the Prepare screen does, and only
@@ -318,13 +294,6 @@ export function useFacebookPostLotsPrepare(collectionId: string, postId: string,
   return query;
 }
 
-/** The lots whose Prepare row waits on their photos. */
-function lotsAwaitingPhotos(rows: Record<string, PrepareOffer> | null | undefined): string[] {
-  return Object.values(rows ?? {})
-    .filter((o) => o.readyAfterPhotos || o.readyBlockers.some(isPhotoRunBlocker))
-    .map((o) => o.id);
-}
-
 /** Some of a post's Prepare rows read again (#2222), each written in place of the one the screen
  *  holds — or taken out, for a lot neither Preparing nor Ready any more. */
 async function settlePrepareRows(queryClient: QueryClient, collectionId: string, postId: string, offerIds: string[]) {
@@ -338,6 +307,10 @@ async function settlePrepareRows(queryClient: QueryClient, collectionId: string,
   queryClient.setQueryData<Record<string, PrepareOffer> | null>(key, (rows) =>
     offerIds.reduce((next, offerId) => withPrepareRow(next, offerId, fresh?.[offerId] ?? null), rows ?? null)
   );
+  // A lot whose wait is over has turned Ready, or been refused (#2639): its Prepare row says so, but
+  // the row's state, its actions and the post's bulk actions are drawn from the screen — the lot is
+  // read again whole, as a change made from its row is.
+  await Promise.all(lotsDoneWaiting(offerIds, fresh).map((offerId) => settlePostLot(queryClient, collectionId, postId, offerId)));
 }
 
 /** Some of a post's lot photos read again (#2221), each written in place of the one the screen holds.

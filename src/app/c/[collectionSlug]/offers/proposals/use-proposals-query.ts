@@ -15,6 +15,8 @@ import type { ProposalStatus } from "@/lib/proposal-rules";
 import type { ListedElsewhereCopy } from "@/lib/listed-elsewhere-rules";
 import { withPrepareRow } from "@/lib/facebook-post-lot-refresh";
 import { withProposalLot, withProposalLotPhotos } from "@/lib/proposal-lot-refresh";
+import { lotsAwaitingPhotos, lotsDoneWaiting } from "@/lib/lot-photo-wait";
+import { READY_WAIT_POLL_MS, useLotPoll } from "../use-lot-poll";
 
 // Proposals (#2287). Every key is under the offers key, `["offers", collectionId, …]`, so a write to
 // any offer — a lot priced, withdrawn, sold — refreshes the proposal it is in, and `invalidateAll`
@@ -84,9 +86,13 @@ export function useProposalScreen(collectionId: string, proposalId: string) {
   });
 }
 
-/** The proposal's open lots as Prepare rows, keyed by offer id — what its price fields edit. */
+/** The proposal's open lots as Prepare rows, keyed by offer id — what its price fields edit. While a
+ *  lot waits for its photos before turning Ready (#1893), or its photos are being made again, those
+ *  lots are asked after alone, as a post's screen asks after its own (#2222) — and a lot whose wait is
+ *  over is read again whole, so its state follows without a reload (#2639). */
 export function useProposalLotsPrepare(collectionId: string, proposalId: string) {
-  return useQuery<Record<string, PrepareOffer>>({
+  const queryClient = useQueryClient();
+  const query = useQuery<Record<string, PrepareOffer>>({
     queryKey: proposalKeys.prepare(collectionId, proposalId),
     queryFn: async () => {
       const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/prepare`);
@@ -94,6 +100,28 @@ export function useProposalLotsPrepare(collectionId: string, proposalId: string)
       return (await res.json()).lots;
     },
   });
+  useLotPoll(lotsAwaitingPhotos(query.data), query.dataUpdatedAt, READY_WAIT_POLL_MS, (lots) =>
+    settleWaitingLots(queryClient, collectionId, proposalId, lots)
+  );
+  return query;
+}
+
+/** Some of the proposal's Prepare rows read again while they wait on their photos, each written in
+ *  place of the one the screen holds — and each lot whose wait is over then read again whole: its
+ *  Prepare row carries no state, and the row, its actions and the proposal's own moves are drawn from
+ *  the screen (#2639). */
+async function settleWaitingLots(queryClient: QueryClient, collectionId: string, proposalId: string, offerIds: string[]) {
+  const key = proposalKeys.prepare(collectionId, proposalId);
+  if (offerIds.length === 0 || !queryClient.getQueryData(key)) return;
+  const res = await fetch(`/api/collections/${collectionId}/proposals/${proposalId}/prepare?lots=${offerIds.join(",")}`);
+  if (!res.ok) return;
+  const fresh: Record<string, PrepareOffer> = (await res.json()).lots;
+  queryClient.setQueryData<Record<string, PrepareOffer> | null>(key, (rows) =>
+    offerIds.reduce((next, offerId) => withPrepareRow(next, offerId, fresh[offerId] ?? null), rows ?? null)
+  );
+  await Promise.all(
+    lotsDoneWaiting(offerIds, fresh).map((offerId) => settleProposalLot(queryClient, collectionId, proposalId, offerId))
+  );
 }
 
 export function useProposalLotCandidates(collectionId: string, proposalId: string) {
