@@ -12,12 +12,14 @@ import {
   parseVariantNumberSpec,
   formatCatalogNumber,
   AUTO_CREATE_MAX_STAMPS,
+  type VariantNumberMode,
 } from "@/lib/catalog-number";
 import type { AreaCatalogEntry } from "@/lib/areas";
 import type { StampSubtypeData } from "@/lib/subtypes";
 import type { CatalogDuplicateGroup, DuplicateCatalogMode } from "@/lib/duplicate-catalog";
 import { LS_LAST_SUBTYPE, LS_LAST_VARIANT_SPACE, readLast, writeLast } from "./add-copy-defaults";
 import { TextInput } from "./text-input";
+import { Segmented } from "./segmented";
 import { formControl } from "@/app/control-style";
 
 // A whole run of variants under one base stamp, in one save (#722).
@@ -98,6 +100,10 @@ export function AddVariantRangeDialog({
     : null;
 
   const [spec, setSpec] = useState("");
+  // Whether the pieces typed are suffixes hung off the base number or full numbers is the
+  // collector's to say, never guessed from a digit (#2671): `x2` under `88B` is `88Bx2`. It is not
+  // remembered — every opening starts on suffixes, which is what a variant range is mostly for.
+  const [mode, setMode] = useState<VariantNumberMode>("suffixes");
   // One space between the base number and each suffix (#2652), for catalogues that print `88B T.I`.
   // It starts where the collector last left it, as the subtype does; the dialog only ever mounts
   // on a click, so reading the browser's storage while it is first drawn is safe.
@@ -125,8 +131,8 @@ export function AddVariantRangeDialog({
   }, [collectionId]);
 
   const parsed = useMemo(
-    () => (spec.trim() ? parseVariantNumberSpec(spec, baseNumber, { separateWithSpace }) : null),
-    [spec, baseNumber, separateWithSpace]
+    () => (spec.trim() ? parseVariantNumberSpec(spec, baseNumber, { mode, separateWithSpace }) : null),
+    [spec, baseNumber, mode, separateWithSpace]
   );
   const numbers = parsed && !("error" in parsed) ? parsed.numbers : [];
   const specError = parsed && "error" in parsed ? parsed.error : null;
@@ -216,18 +222,38 @@ export function AddVariantRangeDialog({
               </p>
 
               <input type="hidden" name="catalogVendorId" value={vendor.catalogVendorId} />
+              <input type="hidden" name="variantMode" value={mode} />
 
               <LabelWithError htmlFor="f-variant-numbers">Variant numbers</LabelWithError>
-              <TextInput
-                id="f-variant-numbers"
-                name="variantNumbers"
-                value={spec}
-                autoFocus
-                disabled={isPending}
-                placeholder={baseNumber ? `e.g. a-f, or ${baseNumber}a-${baseNumber}f` : "e.g. 240a-240f"}
-                onChange={(e) => setSpec(e.target.value)}
-                style={INPUT_STYLE}
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <TextInput
+                    id="f-variant-numbers"
+                    name="variantNumbers"
+                    value={spec}
+                    autoFocus
+                    disabled={isPending}
+                    placeholder={
+                      mode === "suffixes"
+                        ? "e.g. a-f, or x2, y3"
+                        : `e.g. ${baseNumber || "240"}a-${baseNumber || "240"}f`
+                    }
+                    onChange={(e) => setSpec(e.target.value)}
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <Segmented
+                  label="Read as"
+                  inline
+                  value={mode}
+                  onChange={setMode}
+                  disabled={isPending}
+                  options={[
+                    { value: "suffixes", label: "Suffixes" },
+                    { value: "full", label: "Full numbers" },
+                  ]}
+                />
+              </div>
               <div
                 style={{
                   marginTop: "0.25rem",
@@ -235,34 +261,43 @@ export function AddVariantRangeDialog({
                   color: "var(--color-text-muted)",
                 }}
               >
-                Suffixes on their own (<code>a-f</code>, <code>A-C</code>, <code>I-III</code>,
-                <code>a, c, e</code>) are read against{" "}
-                {baseNumber ? <strong>{baseNumber}</strong> : "the base number"}; full numbers work
-                too.
+                {mode === "suffixes" ? (
+                  <>
+                    Each one is added to{" "}
+                    {baseNumber ? <strong>{baseNumber}</strong> : "the base number"}:{" "}
+                    <code>a-f</code>, <code>I-III</code>, <code>x2-x5</code>, <code>x2, y3</code>.
+                  </>
+                ) : (
+                  <>
+                    Each one is a whole catalogue number, as written: <code>240a-240f</code>.
+                  </>
+                )}
               </div>
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  marginTop: "0.5rem",
-                  fontSize: "0.8125rem",
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  name="separateWithSpace"
-                  value="1"
-                  checked={separateWithSpace}
-                  disabled={isPending}
-                  onChange={(e) => setSeparateWithSpace(e.target.checked)}
-                />
-                Separate with a space
-                <span style={{ color: "var(--color-text-muted)" }}>
-                  — {baseNumber || "240"} a, not {baseNumber || "240"}a
-                </span>
-              </label>
+              {mode === "suffixes" && (
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    marginTop: "0.5rem",
+                    fontSize: "0.8125rem",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    name="separateWithSpace"
+                    value="1"
+                    checked={separateWithSpace}
+                    disabled={isPending}
+                    onChange={(e) => setSeparateWithSpace(e.target.checked)}
+                  />
+                  Separate with a space
+                  <span style={{ color: "var(--color-text-muted)" }}>
+                    — {baseNumber || "240"} a, not {baseNumber || "240"}a
+                  </span>
+                </label>
+              )}
 
               {subtypes.length > 0 && (
                 <div style={{ marginTop: "1rem" }}>
