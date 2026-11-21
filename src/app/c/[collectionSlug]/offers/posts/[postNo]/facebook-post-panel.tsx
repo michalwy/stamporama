@@ -7,6 +7,7 @@ import {
   FACEBOOK_POST_STAGE_LABEL,
   facebookLotPrice,
   facebookLotSalePrice,
+  facebookLotWithdrawMessage,
   facebookPostLink,
   facebookPostMoves,
   facebookPostStage,
@@ -1060,11 +1061,7 @@ export function FacebookPostPanel({
       {dialog.kind === "withdrawLot" && (
         <ConfirmDialog
           title={dialog.lot.lotNo === null ? `Withdraw offer #${dialog.lot.offerNo}` : `Withdraw lot ${dialog.lot.lotNo}`}
-          message={
-            lots.length > 1
-              ? "This lot is no longer for sale; the post and its other lots stay up. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
-              : "This takes the listing down. Withdrawn is final — to sell here again, create a new offer. The copies are untouched."
-          }
+          message={facebookLotWithdrawMessage(1, lots.length)}
           actionLabel="Withdraw"
           pendingLabel="Withdrawing…"
           isPending={isPending}

@@ -213,6 +213,25 @@ withdrawn lots and quick buys have no field.
 Tap a lot to open its offer screen, where you can also record its bid and sell or withdraw it, as for
 [a Facebook group auction](#a-facebook-group-auction). **Full app** opens the same post at the desk.
 
+### Closing a post
+
+When a post's auctions end, sell each winner's lots and withdraw the rest from the post's screen, as
+with the ticks on the desk's post screen. While a post is up, every lot still up has a tick beside it.
+
+1. Tick the lots one buyer won. A bar at the bottom says how many are ticked and what they come to.
+2. Tap **Sell…**. Each ticked lot is listed with the price it sells at — its last recorded bid, so
+   record the winning bids first. A lot with no bid recorded is marked so, and would sell at 0.00.
+3. Type the buyer's name as their Facebook profile shows it and, if you have it, their profile link —
+   the phone says whether it found them or will create a new buyer, as **Sell…** on an offer does.
+4. Under **Into**, keep **A new sale**, dated today, or pick one of the buyer's open sales on Facebook
+   to add the lots to.
+5. Tap **Record sale**. The lots go into the sale, each at its own price, and the screen stays on the
+   post with them shown sold, ready for the next winner. The new sale waits in **Sales to do**.
+
+To withdraw the lots nobody won, tick them and tap **Withdraw…**; the phone asks first, in the desk's
+words, then takes them out. Lots without a bid are never withdrawn by themselves — tick them. A post
+waiting for the group's approval or not yet up has no ticks: that is done at the desk.
+
 ### Publishing a post
 
 A post that is **Ready to post** can be put up from the phone, where the Facebook app is. Its screen

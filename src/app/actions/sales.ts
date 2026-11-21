@@ -53,6 +53,7 @@ import { parseAmount, parsePrice } from "@/lib/sale-rules";
 import { assertCollectionOwner } from "@/lib/platform-category";
 import { facebookOfferSaleCurrency } from "@/lib/facebook-sales";
 import { sellPhoneOffer, type PhoneOfferSaleInput } from "@/lib/phone-offers";
+import { sellPhonePostLots, type PhonePostSaleInput, type PhonePostSaleResult } from "@/lib/phone-post-close";
 import { removeSaleAttachment } from "@/lib/sale-attachments";
 import { readIncludeSpecialised } from "@/lib/specialised-checklists-preference";
 import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
@@ -151,6 +152,23 @@ export async function sellOfferFromPhoneAction(
     return result.ok ? { status: "success", id: result.saleId } : { status: "error", message: result.message };
   } catch (e) {
     return fail(e, "Failed to record this sale. Please try again.");
+  }
+}
+
+/** Sell the ticked lots of a Facebook post to one winner from the phone (#2631): into a new sale dated
+ *  today or one of the buyer's open sales, each lot at its own price (`sellPhonePostLots`). */
+export async function sellPhonePostLotsAction(
+  collectionId: string,
+  postId: string,
+  offerIds: string[],
+  input: PhonePostSaleInput
+): Promise<Extract<PhonePostSaleResult, { ok: true }> | { ok: false; message: string }> {
+  const session = await getSession();
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    return await sellPhonePostLots(session.user.id, collectionId, postId, offerIds, input, today);
+  } catch (e) {
+    return { ok: false, message: fail(e, "Failed to record this sale. Please try again.").message };
   }
 }
 

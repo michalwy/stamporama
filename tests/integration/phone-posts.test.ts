@@ -120,6 +120,7 @@ describe("a Facebook post on the phone (#2626)", () => {
     assert.equal(post.postNo, postNo);
     assert.equal(post.title, "Merkury 1950");
     assert.deepEqual(post.group, { name: "Znaczki — aukcje", archived: false });
+    assert.equal(post.platformId, facebookId, "the platform its sales go on, from its group (#2631)");
     assert.equal(post.stage, "up");
     // The withdrawn lot no longer runs, so it does not count towards the close.
     assert.deepEqual(post.closes, { from: endsAt.toISOString(), to: endsAt.toISOString() });

@@ -281,7 +281,7 @@ desktop-only.
   bid is recorded, then *Bid*; a quick buy's *Price*. A post of one numbers its lot 1.
 - **A tap on a lot opens its phone offer screen** (`phoneOfferPath`), where the bid (#2010), *Sell*
   (#2009) and *Withdraw* (#2008) already are. The post's own moves are added here: publishing
-  (#2629), bids lot by lot (#2630), both below; the rest by #2631–#2632. A proposal made from the post links to `phoneProposalPath` —
+  (#2629), bids lot by lot (#2630) and closing it (#2631), all below; the rest by #2632. A proposal made from the post links to `phoneProposalPath` —
   #2625's screen.
 
 ## Publishing a Facebook post (#2629)
@@ -333,6 +333,37 @@ desktop-only.
   bid is the lot's price dated by `priceCheckedAt` and the desk cannot tell where it was typed. **Each
   row saves on its own** (decided in writing the issue): one hook per lot, so a bid typed in one row
   is kept while another row's is recorded and the screen re-reads.
+
+## Closing a Facebook post (#2631)
+
+- **The post is closed from the phone** (settled with the collector on 2026-11-21) **as the desk's post
+  screen closes it**: one winner's lots ticked and sold into one sale, repeated per winner, then the
+  lots left ticked and withdrawn. It does not read winners from Facebook, which the app does nowhere,
+  and a lot without a bid is never withdrawn by itself (both decided in writing the issue).
+- **Which lots take a tick** is `isPhoneClosingLot` (`src/lib/phone-post-close-rules.ts`, pure): a lot
+  still up, `active` or `paused`. A post waiting for approval has none — withdrawing one of its lots
+  takes the whole post back (#1779), the desk's *Withdraw post…* — nor one not yet up, whose early sales
+  (#2560) are the desk's. A lot sold or withdrawn since it was ticked drops out (`phoneClosingTicks`).
+  The ticks sit beside the rows, which keep opening the lot's screen; while any is ticked a bar pinned to
+  the bottom (`PhonePostClosing`, `phone/posts/[postNo]/phone-post-closing.tsx`) offers *Sell…* and
+  *Withdraw…*, and each asks inline under the lots, as the phone's other moves.
+- **Selling is the desk's *Sell…* over ticked lots** (#2050): `sellPhonePostLots`
+  (`src/lib/phone-post-close.ts`) plans the lines with the desk's `planOfferSale`, every set each lot
+  still has at the price `facebookLotSalePrice` gives — the lot's price, so its last recorded bid
+  (#1545) — and names a lot left out with the desk's reason. **A new sale** is the phone's *Sell* (#2009):
+  `resolveSaleHeader` with the buyer by their Facebook profile, dated today, written with its lines in
+  one transaction (`createSaleWithLines`). **The buyer's open sale** (the collector's choice, 2026-11-21)
+  is the desk's `addSaleLines`, never to a sent sale; the choices are the sales list's own read narrowed
+  to the contact `useFacebookBuyerLookup` found, on the post's platform (`PhonePost.platformId`, its
+  group's), *Ordered*/*Paid*/*Packed* (#1950), in the lots' currency. A buyer not found yet has only a
+  new sale. The prices are not edited on the phone: a winning bid is recorded first (#2630).
+- **Withdrawing** is `withdrawPhonePostLots`: each ticked lot through `setOfferState`, as its own
+  *Withdraw*, after the desk's confirmation — `facebookLotWithdrawMessage`, which the desk's lot `⋮`
+  *Withdraw* now asks with too. A lot not up is refused by name, so a stale tick cannot take a pending
+  post with it.
+- **Afterwards the phone stays on the post** (`router.refresh()`), so the next winner can be handled,
+  where the phone's other sales go to *Sales to do*; the toast names the lots and the sale
+  (`phoneLotsSoldMessage`) and links there.
 
 ## Start a purchase (#2006)
 
@@ -452,6 +483,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Proposals: convert to a sale, decline, reopen | #2627 |
 | Publishing a Facebook post: copy text and captions, share or save photos, paste the link, approve | #2629 |
 | A Facebook post's bids, lot by lot on the post's screen | #2630 |
+| Closing a Facebook post: sell each winner's ticked lots, withdraw the rest | #2631 |
 
 **Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
 editing and publishing offers — bar a Facebook post's publishing (#2629); intake, lots and the cost split; everything not in the table.

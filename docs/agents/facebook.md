@@ -1020,6 +1020,11 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   are exported from `activate-offer-dialog.tsx` (`publishLinkLabel`, `publishLinkHint`, `closingHint`,
   `useApprovalEndsAt`). The open-proposal question is `postProposalPublishConfirm` (#2602).
 
+- **A post is closed from the phone too** (#2631, [`phone.md`](phone.md)): one winner's ticked lots
+  sold through the desk's `planOfferSale` into a new sale or the buyer's open one, the lots left
+  withdrawn one by one as the lot `⋮` *Withdraw* does, after the same sentence
+  (`facebookLotWithdrawMessage`, `facebook-post-rules.ts`, shared with the desk).
+
 - **The kit's text is rendered in the browser** (`renderFacebookPostText`, pure): `{closesAt}` is a
   local time and the browser is the only place the zone is known (#490's rule). **A post is only what
   its template places** (#1692, decided with the collector on 2026-10-09): nothing is substituted,

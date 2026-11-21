@@ -94,6 +94,8 @@ guide's phone page states the requirement.
   approval approved or rejected.
 - **#2630** (added 2026-11-21) — a Facebook post's bids recorded lot by lot on the post's screen, the
   same bid #2010 records on each lot's own screen.
+- **#2631** (added 2026-11-21) — closing a Facebook post: one winner's ticked lots sold into a new sale
+  or that buyer's open sale, each at its recorded bid, and the ticked lots left withdrawn.
 
 **#2002** is the shell all of them stand on: the path, the manifest and icon, the phone frame, the
 links both ways and a sign-in screen usable at phone width.
