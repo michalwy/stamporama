@@ -1011,6 +1011,15 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   `canWait`: a post half up after a refusal can only finish going live. Other platforms keep
   *Activate* and *Submit for approval…*.
 
+- **A post is published from the phone too** (#2629, [`phone.md`](phone.md)), through the same
+  action and the same questions. What the two screens share is pure in `facebook-post-publish-rules.ts`
+  — the lot a publish is asked through (`facebookPostPublishVia`), the toast
+  (`facebookPostPublishedMessage`), the photos the post puts up in lot order under the ZIP's names
+  (`facebookPostPhotoFiles`, which the kit's lightbox and one-photo downloads read) and when they
+  cannot be taken yet (`facebookPostPhotosHeld`) — and the dialog's words and closing-time question
+  are exported from `activate-offer-dialog.tsx` (`publishLinkLabel`, `publishLinkHint`, `closingHint`,
+  `useApprovalEndsAt`). The open-proposal question is `postProposalPublishConfirm` (#2602).
+
 - **The kit's text is rendered in the browser** (`renderFacebookPostText`, pure): `{closesAt}` is a
   local time and the browser is the only place the zone is known (#490's rule). **A post is only what
   its template places** (#1692, decided with the collector on 2026-10-09): nothing is substituted,

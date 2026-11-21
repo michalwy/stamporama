@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { facebookPostMoves, isFacebookLotLeftOut } from "@/lib/facebook-post-rules";
 import { phoneOfferPath, phoneProposalPath } from "@/lib/phone";
 import type { PhonePost } from "@/lib/phone-posts";
 import type { PhonePostLot } from "@/lib/phone-post-view";
@@ -12,12 +13,15 @@ import { auctionsEndWhen } from "@/app/c/[collectionSlug]/offers/posts/post-list
 import { useHydrated } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { PhoneStampThumb } from "../../phone-stamp-thumb";
 import { PhonePostStageChip } from "../phone-post-stage-chip";
+import { PhonePostPublishing } from "./phone-post-publishing";
+import { CopyCaption } from "./phone-post-caption";
 
 /**
  * The post's phone screen's body (#2626): what the post is — its title, group, stage and, while it is
  * up, when its auctions close — the proposal made from it, and every lot in lot order. A tap on a lot
  * opens its phone offer screen, where a bid is recorded (#2010) and the lot sold (#2009) or withdrawn
- * (#2008); this screen only reads.
+ * (#2008). A post ready to go up is published from here, and one waiting for the group's approval is
+ * approved or rejected (#2629, `PhonePostPublishing`); a captioned post's lots then carry *Copy caption*.
  *
  * A client module for the closing time, which is the collector's own zone and drawn once mounted (#490),
  * and for the photo address the lot's thumbnail is drawn from.
@@ -33,6 +37,8 @@ export function PhonePostPanel({
 }) {
   const hydrated = useHydrated();
   const title = post.title?.trim();
+  // A captioned post's lots each carry their caption to paste under their photo, while it can go up.
+  const captioned = post.photos.layout === "captions" && facebookPostMoves(post.kit.lots).activate;
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
@@ -62,18 +68,30 @@ export function PhonePostPanel({
         )}
       </div>
 
+      <PhonePostPublishing collectionId={collectionId} post={post} />
+
       {post.lots.length === 0 ? (
         <p style={{ ...LINE, color: "var(--color-text-muted)" }}>No lots yet — they are added at the desk.</p>
       ) : (
         <nav aria-label="Lots" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {post.lots.map((lot) => (
-            <PhonePostLotRow
-              key={lot.offerId}
-              collectionId={collectionId}
-              href={phoneOfferPath(collectionSlug, lot.offerId)}
-              lot={lot}
-            />
-          ))}
+          {post.lots.map((lot) => {
+            const kitLot = post.kit.lots.find((l) => l.offerId === lot.offerId);
+            const row = (
+              <PhonePostLotRow
+                key={lot.offerId}
+                collectionId={collectionId}
+                href={phoneOfferPath(collectionSlug, lot.offerId)}
+                lot={lot}
+              />
+            );
+            if (!captioned || !kitLot || isFacebookLotLeftOut(kitLot)) return row;
+            return (
+              <div key={lot.offerId} style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                {row}
+                <CopyCaption kit={post.kit} offerId={lot.offerId} lotNo={lot.lotNo} />
+              </div>
+            );
+          })}
         </nav>
       )}
     </>

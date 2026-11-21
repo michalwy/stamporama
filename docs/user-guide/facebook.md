@@ -489,6 +489,12 @@ posted**, or type another; what the field holds is the auction's closing time fr
 quick buy closes at no time and is not asked. A
 quick buy's **refresh** count starts on the day it is approved, not the day it was sent.
 
+**Posting from the phone.** A post can also be put up from the phone, where the Facebook app is: the
+post's phone screen copies its text and its captions, hands its photos to the phone's share menu or
+saves them to the phone in lot order, and takes the link for **Published** — or, for a group that
+approves posts, **Submitted for approval**, then **Approved** or **Rejected** — asking what the
+desk asks. See [Stamporama on a phone](phone.md#publishing-a-post).
+
 ## A post with several lots
 
 A post can hold several offers as **lots** — an album, each photo a lot of its own. On the
@@ -1011,8 +1017,8 @@ Away from the desk, record it on the phone: the auction's offer screen there has
 **Bidding** part — see [Stamporama on a phone](phone.md#a-facebook-group-auction). A bid recorded on
 the phone is the same bid, and the desk shows it exactly as if you had typed it there. The phone also
 has **Facebook posts**: a list of your posts and each post's screen with all its lots, their prices
-and states and when the post closes, a tap on a lot opening its offer screen — see
-[Stamporama on a phone](phone.md#facebook-posts).
+and states and when the post closes, a tap on a lot opening its offer screen — and a post ready to go
+up is published from there — see [Stamporama on a phone](phone.md#facebook-posts).
 
 ## When an auction ends
 

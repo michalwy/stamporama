@@ -164,8 +164,9 @@ Below are the moves you can make on the phone, each only where the desk would al
   with it, as at the desk.
 
 These change the offer in Stamporama only — pausing or ending the listing on the platform itself is
-done there, as from the desk. Preparing, publishing and editing an offer stay at the desk: **Full
-app** opens the same offer there.
+done there, as from the desk. Preparing, publishing and editing an offer stay at the desk — except
+publishing a Facebook post, which its post's screen does (see [Publishing a post](#publishing-a-post)):
+**Full app** opens the same offer there.
 
 ### A Facebook group auction
 
@@ -204,6 +205,34 @@ post, the screen names it and links to it.
 
 Tap a lot to open its offer screen, where you record bids and sell or withdraw it, as for
 [a Facebook group auction](#a-facebook-group-auction). **Full app** opens the same post at the desk.
+
+### Publishing a post
+
+A post that is **Ready to post** can be put up from the phone, where the Facebook app is. Its screen
+has a **Publish** part above the lots:
+
+1. **Copy text** puts the post's text on the clipboard — exactly what the desk's **Copy** gives,
+   formatted for Facebook's editor. Paste it into a new post in the group.
+2. **Share photos** hands every photo of the post to the phone's share menu, in lot order — pick the
+   Facebook app there. **Save photos** saves them instead, one by one in lot order, into the phone's
+   downloads, which the gallery shows; each file is named `lot-01-…`, as in the desk's ZIP. They are
+   separate pictures, not a ZIP, because the Facebook app takes pictures. If the phone asks whether
+   the site may download several files, allow it. While a lot's photos are still being made, both
+   buttons wait and say which lots — the screen checks again by itself.
+3. In a post laid out in **captions**, each lot has **Copy caption of lot N** under it: paste it under
+   that lot's photo.
+4. Once the post is up, copy its link in the Facebook app, paste it into the field and tap
+   **Published**. Every lot goes up, the same as **Publish…** at the desk. If the group approves posts
+   first, tick **Waiting for approval** and paste the pending post's link — a link with
+   `pending_posts` in it ticks it for you — and tap **Submitted for approval**.
+
+If a proposal made from the post is still open, the phone asks first, as the desk does.
+
+A post **waiting for approval** shows **Approved** and **Rejected — back to Ready** instead. Once the
+group approves it, give the final link (it starts from the pending one) and tap **Approved**; for an
+auction the phone asks when it closes, as the desk's **Approve** does — **Proposed** counts the
+group's auction length from today, **As posted** is the time the post was written with. **Rejected —
+back to Ready** clears the pending link and takes the lots back to Ready, ready to post again.
 
 ## Proposals
 

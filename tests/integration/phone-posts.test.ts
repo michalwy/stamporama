@@ -9,8 +9,10 @@ import { createItem } from "../../src/lib/items";
 import { createOffer, patchOffer, setOfferState } from "../../src/lib/offers";
 import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
-import { createFacebookPost, publishOfferOrPost } from "../../src/lib/facebook-posts";
+import { createFacebookPost, publishOfferOrPost, rejectOfferOrPost } from "../../src/lib/facebook-posts";
 import { getPhonePost } from "../../src/lib/phone-posts";
+import { facebookPostMoves, facebookPostLink } from "../../src/lib/facebook-post-rules";
+import { facebookPostPublishVia } from "../../src/lib/facebook-post-publish-rules";
 
 // The post's photos are read with it, through the photo store.
 const DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-phone-posts-"));
@@ -137,6 +139,57 @@ describe("a Facebook post on the phone (#2626)", () => {
     assert.equal(post?.stage, "ready");
     assert.equal(post?.closes, null);
     assert.deepEqual(post?.lots.map((l) => l.lotNo), [1, 2]);
+  });
+
+  // Publishing from the phone (#2629): the moves read off the kit the phone is given, the lot the
+  // publish is asked through, and the desk's own publish — so the desk sees the post up with that link.
+  it("publishes a Ready post from the phone: submitted for approval, then approved with its closing time", async () => {
+    const lots = [await auction(), await auction()];
+    const { postNo } = await createFacebookPost(userId, collectionId, lots, "From the phone");
+    const ready = await getPhonePost(userId, collectionId, postNo);
+    assert.ok(ready);
+    assert.deepEqual(ready.kit.lots.map((l) => l.offerId), lots);
+    assert.equal(ready.photos.layout, "text");
+    const moves = facebookPostMoves(ready.kit.lots);
+    assert.ok(moves.activate && moves.submit && !moves.approve);
+
+    const pendingLink = "https://www.facebook.com/groups/2626/pending_posts/77";
+    await publishOfferOrPost(userId, facebookPostPublishVia(ready.kit.lots, false)!, pendingLink, "pending");
+    const waiting = await getPhonePost(userId, collectionId, postNo);
+    assert.equal(waiting?.stage, "pending");
+    const waitingMoves = facebookPostMoves(waiting!.kit.lots);
+    assert.ok(waitingMoves.approve && waitingMoves.reject && !waitingMoves.activate);
+    // *Approved* starts from the pending post's link, as the desk's dialog does.
+    assert.equal(facebookPostLink(waiting!.kit.lots), pendingLink);
+
+    const endsAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    const finalLink = "https://www.facebook.com/groups/2626/posts/78";
+    await publishOfferOrPost(userId, facebookPostPublishVia(waiting!.kit.lots, true)!, finalLink, "active", endsAt);
+    const up = await getPhonePost(userId, collectionId, postNo);
+    assert.equal(up?.stage, "up");
+    assert.deepEqual(up?.closes, { from: endsAt.toISOString(), to: endsAt.toISOString() });
+    const rows = await prisma.offer.findMany({ where: { id: { in: lots } }, select: { state: true, url: true } });
+    assert.deepEqual(
+      rows.map((r) => [r.state, r.url]),
+      [
+        ["active", finalLink],
+        ["active", finalLink],
+      ]
+    );
+  });
+
+  it("takes a post the group rejected back to Ready from the phone, its pending link cleared", async () => {
+    const lots = [await auction(), await auction()];
+    const { postNo } = await createFacebookPost(userId, collectionId, lots, "Rejected");
+    await publishOfferOrPost(userId, lots[0], "https://www.facebook.com/groups/2626/pending_posts/79", "pending");
+    const waiting = await getPhonePost(userId, collectionId, postNo);
+    const pendingLot = waiting!.kit.lots.find((l) => l.state === "pending");
+    assert.ok(pendingLot);
+    await rejectOfferOrPost(userId, pendingLot.offerId);
+    const back = await getPhonePost(userId, collectionId, postNo);
+    assert.equal(back?.stage, "ready");
+    assert.ok(facebookPostMoves(back!.kit.lots).activate);
+    assert.equal(facebookPostLink(back!.kit.lots), null);
   });
 
   it("finds no post the collection does not number, and none for somebody else", async () => {

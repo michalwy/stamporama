@@ -9,6 +9,7 @@ import {
 } from "@/lib/description-format";
 import { sanitizeDescriptionHtml } from "./rendered-description";
 import { Tooltip } from "./tooltip";
+import { writeClipboardText } from "./clipboard";
 import { Icon, type IconName } from "@/app/icons";
 import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 
@@ -157,40 +158,20 @@ export function CopyButton({
   const hasChoice = resolved !== "plain";
 
   function copy(mode: CopyMode) {
-    // `navigator.clipboard` is absent over plain HTTP on a non-localhost origin, which a
-    // self-hosted instance may well be. Saying so beats a button that silently does nothing.
-    const clipboard = navigator.clipboard;
-    if (!clipboard) {
-      flash(false);
-      return;
-    }
     const source = value ?? "";
     const done = () => {
       flash(true);
       onCopied?.();
     };
     const oops = () => flash(false);
-
-    if (formattedHtml === undefined && (mode === "source" || !hasChoice)) {
-      clipboard.writeText(source).then(done, oops);
-      return;
-    }
     // Formatted: the same sanitised markup the screen shows, on `text/html` so a rich-text field
     // pastes it with its formatting — with the source on `text/plain` for anything that only reads
-    // that flavour.
-    const html = formattedHtml ?? sanitizeDescriptionHtml(descriptionToUnsafeHtml(source, resolved));
-    if (typeof ClipboardItem === "undefined" || !clipboard.write) {
-      clipboard.writeText(source).then(done, oops);
-      return;
-    }
-    clipboard
-      .write([
-        new ClipboardItem({
-          "text/html": new Blob([html], { type: "text/html" }),
-          "text/plain": new Blob([source], { type: "text/plain" }),
-        }),
-      ])
-      .then(done, oops);
+    // that flavour. A missing clipboard (plain HTTP) is said as a failure, not a silent button.
+    const html =
+      formattedHtml === undefined && (mode === "source" || !hasChoice)
+        ? undefined
+        : (formattedHtml ?? sanitizeDescriptionHtml(descriptionToUnsafeHtml(source, resolved)));
+    writeClipboardText(source, html).then(done, oops);
   }
 
   const empty = !value;
