@@ -244,15 +244,23 @@ buyer who asked for more. It can:
   does — **price** a lot, and **take one out**. Each is refused wherever the proposal's screen would
   refuse it, with the same reason — a [sent proposal](offers.md#sent-reopened-declined) among them,
   which only you can reopen;
+- **make a Facebook post into a proposal** for a contact, as the post's
+  [**Make a proposal…**](offers.md#a-proposal-made-from-a-facebook-post) does — *send post #12 to Jan
+  first*. It reads the post first: its group, where it stands, and each lot by its number in the post
+  with the proposal it is in. The proposal shares the post's lots under the post's numbers, so its lots
+  are changed on the post, not on the proposal. It is refused, with the post's own reason, once the post
+  is up or while the post already has an open proposal;
 - **turn it into a sale** with the lots the buyer took, named by their lot numbers — at each lot's
   price or at a price agreed — or simply **as the buyer picked them**, so *sell Jan what he picked*
   needs no lot numbers from you, into a new Direct sale or one of the buyer's open sales, as
   [**Convert to sale…**](offers.md#selling-it) does. The other lots are withdrawn and the proposal is
-  *Sold*; the sale is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
+  *Sold* — except on a proposal made from a Facebook post, whose lots not taken stay in the post and
+  whose new sale is on Facebook; the sale is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
   until you confirm it.
 
 **It does not mark a proposal sent, decline it, or make its link or document for the buyer** — what
-reaches the buyer stays on the proposal's screen. **Nor does it tick or untick a lot**: the picks are
+reaches the buyer stays on the proposal's screen — **nor does it publish the post** a proposal was
+made from: putting it up in the group stays yours. **Nor does it tick or untick a lot**: the picks are
 the buyer's.
 
 On the **conversations with your buyers**, it can keep the

@@ -190,6 +190,14 @@ buyer takes is sold in the post, and does not go up with it (#2560).
 The message the buyer is sent is still Direct's template (§8); the post's own preview link is
 unchanged.
 
+*Amended by #2608 (2026-11-21):* the agent API makes one too — `create_proposal_from_post`, the post's
+*Make a proposal…* (`createProposalFromPost`), refused with the same sentences — after reading the post
+with `get_facebook_post`, whose lots each name the proposal they are in. `get_proposal` names the post a
+proposal was made from, and converting one through the API sells in the post and withdraws nothing, as
+above. Publishing the post stays the collector's (settled with the collector that day as part of *what
+makes sense of #2602 is covered in the API too*; the issue's *to be confirmed* point implemented as
+written).
+
 ### 12. It is sent in the buyer's language (#2603)
 
 Added by #2603, which built it on 2026-11-21, settled with the collector that day; its *to be

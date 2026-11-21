@@ -21,6 +21,8 @@
 //    (#2601) is theirs: `get_proposal` reads it, `list_proposals` narrows to it, and
 //    `convert_proposal_to_sale` takes the word `picked` for *every lot the buyer picked that can
 //    still be sold* — as *Convert to sale…* opens with them ticked. Nothing here ticks or unticks.
+//  - **A proposal made from a Facebook post names its post** (#2608): its lots are the post's own,
+//    numbered as the post numbers them (#2602), so `post` says which post and group they stay in.
 
 import { OPEN_OFFER_STATES } from "../offer-rules";
 import { PROPOSAL_LOT_PACKINGS, PROPOSAL_STATUSES } from "../proposal-rules";
@@ -255,6 +257,8 @@ export interface ProposalScreenFacts {
   sentOn: string | null;
   closedOn: string | null;
   platform: { id: string; name: string };
+  /** The Facebook post it was made from (#2602), or null. */
+  post: { postId: string; postNo: number; title: string | null; groupName: string } | null;
   sale: { saleId: string; saleNo: number; platformName: string } | null;
   lots: readonly ProposalLotFacts[];
   total: string;
@@ -288,6 +292,15 @@ export interface AgentProposalBuyerPicks {
   readonly changedAt: string | null;
 }
 
+/** The Facebook post a proposal was made from (#2602, #2608): its lots are the post's own, in the
+ *  post's `group`, numbered as the post numbers them. */
+export interface AgentProposalPost {
+  readonly id: string;
+  readonly postNo: number;
+  readonly title: string | null;
+  readonly group: string;
+}
+
 /** One proposal in full, as `get_proposal` and every proposal write answer. */
 export interface AgentProposal {
   readonly id: string;
@@ -295,6 +308,8 @@ export interface AgentProposal {
   readonly status: string;
   readonly contact: { readonly id: string; readonly name: string };
   readonly platform: { readonly id: string; readonly name: string };
+  /** The Facebook post it was made from (#2608), or null for a proposal of Direct offers. */
+  readonly post: AgentProposalPost | null;
   readonly createdOn: string;
   readonly sentOn: string | null;
   readonly closedOn: string | null;
@@ -322,6 +337,12 @@ export function proposalRecord(
     status: screen.status,
     contact: { id: screen.contact.id, name: screen.contact.name },
     platform: { id: screen.platform.id, name: screen.platform.name },
+    post: screen.post && {
+      id: screen.post.postId,
+      postNo: screen.post.postNo,
+      title: screen.post.title,
+      group: screen.post.groupName,
+    },
     createdOn: screen.createdOn,
     sentOn: screen.sentOn,
     closedOn: screen.closedOn,
@@ -376,6 +397,9 @@ export interface ProposalSaleOptionsFacts {
     lineCount: number;
   }[];
   platformName: string;
+  /** For a proposal made from a post (#2602): the post and its group — a new sale is made there, and
+   *  the lots not taken stay in the post. Null for any other proposal. */
+  post: { postNo: number; groupName: string } | null;
 }
 
 const isOpenLot = (lot: { state: string }) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state);
@@ -402,8 +426,11 @@ export interface AgentProposalSaleOptions {
     readonly currency: string;
     readonly lines: number;
   }[];
-  /** The platform a new sale is on. */
+  /** The platform a new sale is on: Direct, or the post's for a proposal made from one. */
   readonly newSalePlatform: string;
+  /** For a proposal made from a Facebook post (#2608): the post, whose lots not taken stay in it rather
+   *  than being withdrawn, and its group. Null for any other proposal. */
+  readonly post: { readonly postNo: number; readonly group: string } | null;
 }
 
 export function proposalSaleOptions(options: ProposalSaleOptionsFacts): AgentProposalSaleOptions {
@@ -429,5 +456,6 @@ export function proposalSaleOptions(options: ProposalSaleOptionsFacts): AgentPro
       lines: sale.lineCount,
     })),
     newSalePlatform: options.platformName,
+    post: options.post && { postNo: options.post.postNo, group: options.post.groupName },
   };
 }
