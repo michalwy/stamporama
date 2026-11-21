@@ -5,6 +5,7 @@
 Accepted (#531). Supersedes the `IssueMember.requiredForCompleteness` flag, which is dropped.
 Amended by #1617: a checklist is standard or specialised (§11).
 Amended by #2659: an issue has one catalogue value too, its checklists' union (§6, §7).
+Amended by #2660: a checklist's branch heading shows that checklist's total (§7).
 
 ## Context
 
@@ -124,6 +125,12 @@ card and one catalog-value card each.
 > headline figure: the row's price chip shows §6's union value, one chip still, and the per-checklist
 > totals stay in the badge's tooltip. The detail page's Details card puts the same figure first, as
 > *Catalog value*, above the per-checklist lines.
+
+> **Amended by #2660: each checklist's own total also sits on its branch.** In tree mode a
+> checklist's branch heading ends on that checklist's total, after its completeness — the figure the
+> detail page's per-checklist line gives, with the row chip's `~` and warning. The collapsed row is
+> unchanged: one chip, the union; the branches are where the issue is already opened up per
+> checklist, so a figure per checklist there does not make the row harder to scan.
 
 ### 8. The badge counts; the tree filters
 

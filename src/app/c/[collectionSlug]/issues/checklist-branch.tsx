@@ -27,11 +27,13 @@ import {
 import { useAddIssueWantsAction } from "@/app/c/[collectionSlug]/wants/use-add-issue-wants-action";
 import { useInvalidateIssues } from "./use-issues-query";
 import { SpecialisedMark } from "@/app/c/[collectionSlug]/shared/specialised-checklists";
+import { CatalogValueChip } from "./catalog-value-chip";
 
 // One checklist of an expanded issue as a branch of the Issues list's tree (#1520): a heading that
-// names it in its colour (#1519) with its stamp count and how complete it is, and under it — once
-// opened — the stamps it lists. The stamps on none of the issue's checklists get a branch of the
-// same shape, without the actions: there is no checklist for them to act on.
+// names it in its colour (#1519) with its stamp count, how complete it is and what it is worth by the
+// catalogue (#2660), and under it — once opened — the stamps it lists. The stamps on none of the
+// issue's checklists get a branch of the same shape, without the actions or a value: there is no
+// checklist for them to act on or to price.
 //
 // The stamp picker draws an issue's checklists with the same branch (#1585). What sits at the end of
 // the heading is the caller's: the list's `⋮` (`ChecklistBranchMenu`), or the picker's own checklist
@@ -174,6 +176,17 @@ export function ChecklistBranch({
               {headline.completeSets > 0 && ` ×${headline.completeSets}`}
             </span>
           </Tooltip>
+        )}
+
+        {/* What the checklist is worth by the catalogue (#2660), after its progress at the heading's
+            right end, where a stamp row carries its price: the checklist's own total, as the issue
+            page states it — the branch's stamps, not what the list's search leaves showing. None for
+            a checklist with nothing priced, and none for the stamps on no checklist. */}
+        {checklist?.priceTotal && (
+          <CatalogValueChip
+            total={checklist.priceTotal}
+            summary={`Total of "${checklist.name}" (main catalog)`}
+          />
         )}
 
         {actions}
