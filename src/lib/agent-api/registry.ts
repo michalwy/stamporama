@@ -56,9 +56,9 @@
 // catalogue prices (#1540), in the order a page of them is entered: the editions, what the tree
 // already records, the figures, and the clear that undoes one — then
 // checklists (#1512), in the order a set is put together: the checklists already kept, one's stamps
-// in order, a new one, its name, its stamps added, taken off and put in order, and last deleting
-// one — then stamp sizes (#1415), in the order a size read off a catalogue is put on a series: the presets already
-// kept, one stamp's size and where it comes from, a new or corrected preset, one stamp, and the
+// in order, a new one, its name, its stamps added, taken off and put in order, the checklists
+// themselves put in order (#2679), and last deleting one — then stamp sizes (#1415), in the order a
+// size read off a catalogue is put on a series: the presets already kept, one stamp's size and where it comes from, a new or corrected preset, one stamp, and the
 // apply, previewed before it is run — then translations (#1452), what a language is missing before
 // what fills it. **`recommend_bid` is last because it is the
 // one operation that is not about the collection at all** (#1168): it answers *is this auction worth
@@ -239,6 +239,7 @@ import {
   followIssueOrderOperation,
   listChecklistsOperation,
   listChecklistStampsOperation,
+  orderChecklistsOperation,
   removeChecklistStampsOperation,
   setChecklistOrderOperation,
   updateChecklistOperation,
@@ -441,6 +442,7 @@ export const OPERATIONS: readonly Operation[] = [
   removeChecklistStampsOperation,
   setChecklistOrderOperation,
   followIssueOrderOperation,
+  orderChecklistsOperation,
   deleteChecklistOperation,
   listSizePresetsOperation,
   getStampSizeOperation,

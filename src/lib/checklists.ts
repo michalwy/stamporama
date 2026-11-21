@@ -10,6 +10,7 @@ import {
 } from "./checklist-kind";
 import type { RunChecklist } from "./issue-run";
 import { checklistInIssueOrder, flattenMemberTree } from "./issue-member-order";
+import { placeAmongThemselves } from "./checklist-order";
 import {
   syncEntityTranslations,
   translationsByLanguage,
@@ -220,7 +221,7 @@ export const CHECKLIST_STAMP_ORDER = [{ sortOrder: "asc" }, { stampId: "asc" }] 
 
 /** Ordering is `sortOrder` then `createdAt`, everywhere — the first checklist of an issue is the
  *  one a badge falls back to and the one a new stamp joins by default, so it must be stable. */
-const CHECKLIST_ORDER = [{ sortOrder: "asc" }, { createdAt: "asc" }] as const;
+export const CHECKLIST_ORDER = [{ sortOrder: "asc" }, { createdAt: "asc" }] as const;
 
 /** The checklists anchored to one issue, in display order — the specialised ones only when
  *  `includeSpecialised` (#1617). */
@@ -525,11 +526,12 @@ export async function deleteChecklist(ownerId: string, checklistId: string): Pro
  * collector's to set. Ids not belonging to the issue are ignored rather than rejected — a stale
  * client list must not be able to renumber somebody else's rows.
  *
- * **The ids sent take the places they held among themselves** (#1617): an editor with specialised
- * checklists switched off sends only the standard ones, and the hidden ones must keep their places
- * rather than be pushed to whichever end a renumbering of the visible ones leaves them. So the
- * current order is read, the positions the sent ids occupy are refilled in the order sent, and the
- * whole list is renumbered densely.
+ * **The ids sent take the places they held among themselves** (#1617, `placeAmongThemselves`): an
+ * editor with specialised checklists switched off sends only the standard ones, and the hidden ones
+ * must keep their places rather than be pushed to whichever end a renumbering of the visible ones
+ * leaves them. So the current order is read, the positions the sent ids occupy are refilled in the
+ * order sent, and the whole list is renumbered densely. The agent API's `order_checklists` (#2679)
+ * is this write too.
  */
 export async function reorderChecklists(
   ownerId: string,
@@ -544,12 +546,10 @@ export async function reorderChecklists(
     orderBy: [...CHECKLIST_ORDER],
     select: { id: true },
   });
-  const current = rows.map((r) => r.id);
-  const own = new Set(current);
-  const sent = checklistIds.filter((id, i) => own.has(id) && checklistIds.indexOf(id) === i);
-  const sentSet = new Set(sent);
-  let next = 0;
-  const ordered = current.map((id) => (sentSet.has(id) ? sent[next++] : id));
+  const ordered = placeAmongThemselves(
+    rows.map((r) => r.id),
+    checklistIds
+  );
   await prisma.$transaction(
     ordered.map((id, index) =>
       prisma.checklist.update({ where: { id }, data: { sortOrder: index } })

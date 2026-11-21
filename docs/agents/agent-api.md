@@ -9,10 +9,10 @@ hand-written rather than built on the reference SDK.
 The track is #706 (the foundation), #707 (token scopes), #708 (vocabulary), #709 (the MCP wrapper),
 #710/#711/#712 (the operations), and #1036/#1037 (two gaps filed against it later). **The whole
 track has landed**, #1036 last, #1390 has since added purchases, #1415 stamp sizes, #1438 the
-catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras, #2551 a purchase lot's copies, #2610 a contact read in full, #2607 a proposal's buyer picks (no operation of its own), #2611 a contact made and edited in full, #2608 a proposal made from a Facebook post, #2612 two contacts merged and an empty one deleted and #2642 a proposal deleted; both wrappers exist and the registry carries **one hundred and sixty-four operations** (measured off `OPERATIONS` when #2642 landed and added `preview_proposal_delete` and `delete_proposal`; one hundred and sixty-two when #2612 landed and added `preview_contact_merge`, `merge_contacts` and `delete_contact`; one hundred and fifty-nine when #2608 landed and added `get_facebook_post` and `create_proposal_from_post`; one hundred and fifty-seven when #2611 landed and added `create_contact` and `update_contact`; one hundred and fifty-five when #2610 landed and added `find_contacts` and `get_contact`; one hundred and fifty-three when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
+catalogue writes, #1445 a stamp's Colnect ID, #1452 translations, #1512 checklists, #1540 catalogue prices, #1539 areas, #1627 the auction register, #1628 auction outcomes, #1635 price observations, #1651 a copy that is one of several stamps, #1910 the shipping and packing data, #1949 sales, #2110 the catalogue's missing prices, #2139 the subtype dictionary, #2140 the variant tree, #2149 the conversation log, #2150 its files, #2167 an area's issues, #2173/#2174/#2175 three batch forms of single writes, #2169 a stamp moved to another issue, #2171 a base stamp deleted, #2172 an empty issue deleted, #2198 a sale's own files, #2204 sold sets moved between sales, #2303 proposals, #2379 a sale's note, #2445 the issue format, #2500 a sale's cancellation, #2511 withdrawing offers, #2531 copies sold on no offer, #2532 a sale's free extras, #2551 a purchase lot's copies, #2610 a contact read in full, #2607 a proposal's buyer picks (no operation of its own), #2611 a contact made and edited in full, #2608 a proposal made from a Facebook post, #2612 two contacts merged and an empty one deleted, #2642 a proposal deleted and #2679 the order of an issue's checklists; both wrappers exist and the registry carries **one hundred and sixty-five operations** (measured off `OPERATIONS` when #2679 landed and added `order_checklists`; one hundred and sixty-four when #2642 landed and added `preview_proposal_delete` and `delete_proposal`; one hundred and sixty-two when #2612 landed and added `preview_contact_merge`, `merge_contacts` and `delete_contact`; one hundred and fifty-nine when #2608 landed and added `get_facebook_post` and `create_proposal_from_post`; one hundred and fifty-seven when #2611 landed and added `create_contact` and `update_contact`; one hundred and fifty-five when #2610 landed and added `find_contacts` and `get_contact`; one hundred and fifty-three when #2551 landed and added `add_purchase_lot_copies`, `update_purchase_lot_copy` and `remove_purchase_lot_copy`; one hundred and fifty when #2532 landed and added `find_free_extras` and `add_free_extras`; one hundred and forty-eight when #2531 landed and added `sell_copies`; one hundred and forty-seven when #2511 landed and added `withdraw_offer`; one hundred and forty-six when #2500 landed and added `cancel_sale`; one hundred and forty-five when #2445 landed: the count here said one hundred and thirty-seven while the registry held one hundred and forty-one, and #2445 added four) — #708's vocabulary read, #710's
 six reads over the collection, #711's six offer verbs, #712's two want reads, checklist gap and nine
 trade verbs, #1036's three auction reads, #1390's eleven purchase operations, #1415's seven size
-operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2303's nine proposal operations, #2608's `get_facebook_post` and `create_proposal_from_post`, #2642's `preview_proposal_delete` and `delete_proposal`, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #2511's `withdraw_offer`, #2531's `sell_copies`, #2532's `find_free_extras` and `add_free_extras`, #2551's three lot-copy writes, #1168's bid recommendation, and #1037's catalog-number
+operations, #1438's five catalogue writes, #2139's two subtype writes, #2140's two variant-tree writes, #2169's `move_stamp_to_issue`, #2171's `delete_stamp`, #2172's `delete_issue`, #1445's `set_stamp_colnect_id`, #1452's two translation operations, #1512's eight checklist operations, #1540's four catalogue-price operations, #2110's `find_missing_catalogue_prices`, #1539's six area operations, #1627's five auction writes, #1628's `record_auction_lot_outcome`, #1635's four price-observation operations, #1651's `set_copy_stamp`, #1910's fifteen shipping and packing operations, #1949's five sale operations, #2149's five conversation-log operations, #2150's two attachment operations, #2167's `list_issues`, #2173's `set_stamp_colnect_ids`, #2174's `update_stamps`, #2175's `create_issues`, #2198's two sale-file operations, #2204's `move_sale_sets`, #2208's `follow_issue_order`, #2679's `order_checklists`, #2303's nine proposal operations, #2608's `get_facebook_post` and `create_proposal_from_post`, #2642's `preview_proposal_delete` and `delete_proposal`, #2379's `set_sale_note`, #2445's three issue-format writes and `list_stamps`, #2511's `withdraw_offer`, #2531's `sell_copies`, #2532's `find_free_extras` and `add_free_extras`, #2551's three lot-copy writes, #1168's bid recommendation, and #1037's catalog-number
 resolver. Twenty-one counts are quoted
 rather than deleted, because each was true when it was written: *the registry carries twenty-five
 operations* (from #712 until #1168), *the registry carries twenty-six operations* (from #1168 until
@@ -2720,9 +2720,9 @@ ignores them).
 **Nothing is deleted, moved or reordered**, and it is held the way the other boundaries are.
 `CATALOG_BOUNDARY` in `tests/unit/agent-api-operation-boundary.test.ts` keeps
 `deleteStampCatalogNumber`, `removeStampFromIssue`, `mergeIssues`,
-`reorderIssueMembers`, `reorderChecklists` and `deleteCollectionArea` out of every
+`reorderIssueMembers` and `deleteCollectionArea` out of every
 operation module — until #2140 it held `deleteStamp` and `reparentStampNode` too, and until #2169 and
-#2172 `moveStampNode` and `deleteIssue` —, and `tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of
+#2172 `moveStampNode` and `deleteIssue`, and until #2679 `reorderChecklists` —, and `tests/integration/agent-api-catalog-edits.test.ts` pins the exact list of
 writes under `/issues` and `/stamps` and fails on a delete-, move- or reorder-shaped name. New stamps
 take the issue's order as the dialogs' generation gives it (#549).
 
@@ -2759,7 +2759,8 @@ below. **#1540 lifted it for one catalogue price at a time** — see *Pricing th
 added the three Settings deletes of a catalogue, a book and an edition to the map, since each takes
 every price recorded under it. Until then the map also held `deleteChecklist` and `reorderChecklistStamps`; both moved to
 `CHECKLIST_WRITES`, and `reorderChecklists` — the order of an issue's checklists among themselves,
-which nobody asked for — joined the map instead. `remove_checklist_stamps` is exempted **by name,
+which nobody asked for — joined the map instead, until #2679 asked for it and it moved to
+`CHECKLIST_WRITES` too. `remove_checklist_stamps` is exempted **by name,
 with its reason**, from the catalogue test's name guard, which it would otherwise trip on
 `remove_…stamp`.
 
@@ -3242,9 +3243,10 @@ no row showed. Settled with the collector on 2026-10-25:
 
 ## Changing checklists
 
-**Nine operations, seven of which write** (#1512, #2208): a checklist created on an issue or spanning
+**Ten operations, eight of which write** (#1512, #2208, #2679): a checklist created on an issue or spanning
 several (#1416), renamed and translated, its stamps added, taken off and put in order (#764), an
-issue's checklist put back to following the issue's order (#2208), and one no album prints deleted — *make a checklist of the watermark Y stamps of this issue*, *take the reprints out of
+issue's checklist put back to following the issue's order (#2208), an issue's checklists — or the
+spanning ones — put in order among themselves (#2679), and one no album prints deleted — *make a checklist of the watermark Y stamps of this issue*, *take the reprints out of
 this one*. What a checklist is, and how completeness and gaps are computed, did not change.
 
 | operation | writes | what it is for |
@@ -3257,6 +3259,7 @@ this one*. What a checklist is, and how completeness and gaps are computed, did 
 | `remove_checklist_stamps` | yes | stamps taken off, the stamps kept (`POST …/stamps/remove`) |
 | `set_checklist_order` | yes | the stamps sent first, the rest after them as they were; an issue's checklist then has an order of its own (`POST …/order`) |
 | `follow_issue_order` | yes | an issue's checklist back to following the issue's stamp order (`POST …/order/follow-issue`) |
+| `order_checklists` | yes | an issue's checklists, or the spanning ones, among themselves: those sent take the places they held, in the order sent (`POST /checklists/order`) |
 | `delete_checklist` | yes | a checklist no album prints |
 
 **The reads answer what `get_issue` and `find_checklist_gaps` did not**: `get_issue` names an issue's
@@ -3267,7 +3270,7 @@ run to hundreds, and `list_checklist_stamps` carries the checklist row beside th
 
 **Every write is the editors' own.** `createChecklist`, `renameChecklist`, `setChecklistStamps` (the
 remove, which is the editor's *save the set* with the survivors keeping their order),
-`reorderChecklistStamps` and `deleteChecklist`, and for an add `addStampsToSpanningChecklist` — the
+`reorderChecklistStamps`, `reorderChecklists` and `deleteChecklist`, and for an add `addStampsToSpanningChecklist` — the
 Issues list's selection bar — or `addStampsToIssueChecklist`, which #1512 added beside it for an
 issue's own checklist. **That one function is where the screens' rule for an issue's checklist now
 lives**: the editor on the issue offers only the issue's members (`useIssueMembers`), so nothing on the
@@ -3318,6 +3321,37 @@ move of a stamp into the issue (`move_stamp_to_issue`) or out of its parent (`mo
 reorders the following checklists it touches — all through `syncChecklistsToIssueOrder`, so nothing
 in the operation modules knows the rule.
 
+### The order of the checklists themselves (#2679)
+
+**`order_checklists` is `reorderChecklists`, the checklists editor's drag of its left column**, which
+the collector asked to have through the API on 2026-11-21 — lifting #1512's choice to leave it out
+(*Nothing is deleted, moved or reordered* above). The order is load-bearing rather than cosmetic: the
+issue's first standard checklist is the one a single-checklist badge shows and the one a new stamp
+joins by default (`ensureDefaultChecklist`), so an agent that created checklists had otherwise to
+leave the collector to finish on the screen.
+
+**The scope is stated, never inferred**: `issue_id` for one issue's own checklists, or `spanning:
+true` for the ones spanning issues — `reorderChecklists`' `issueId` and its `null`. One of the two is
+required and both together are refused, because an entry of the wrong kind is reported rather than
+refused (below), and a scope guessed from the first entry would turn a slip into a silent reorder of
+the wrong list.
+
+**The rule is the screen's for a list shown with the specialised checklists hidden** (#1617): the
+checklists sent take the places they held among themselves, in the order sent, and every one not sent
+keeps its place. It lives in the pure `src/lib/checklist-order.ts` (`placeAmongThemselves`), which
+`reorderChecklists` writes and the operation reads beforehand, so the two cannot disagree. Sending only
+the standard ones therefore leaves each specialised one where it stood; send every one to set the
+whole order.
+
+**An entry is a checklist's id or its name** — as `set_area_order` takes an area — compared trimmed
+and case-folded within the scope, the id winning; a name two of them share is reported with both ids.
+**An entry that is not one of them is reported, never refused**, like the API's other orders: a
+checklist of another issue, or of the other kind, under `elsewhere` with where it belongs, and one
+naming nothing under `notFound`; the rest are still placed. **The order the checklists already have is
+answered with `changed: false` and nothing is written** — the renumbering `reorderChecklists` would do
+is skipped, so the same call twice touches no row. The answer states every checklist of the scope,
+the specialised included, in the new order as `list_checklists` states each row.
+
 ### A checklist's type (#1617)
 
 **Every checklist an operation returns carries its `type`, `standard` or `specialised`** — ADR-0031
@@ -3355,7 +3389,7 @@ specialised, which is the collector's decision about their own data rather than 
 `tests/unit/agent-api-operation-boundary.test.ts` pins the checklist writes `operations/checklists.ts`
 imports and fails if any other operation module imports one — `followIssueOrder` joined it with #2208,
 and its name pattern learned `follow`; `reorderChecklists` joined
-`CATALOG_BOUNDARY`. `tests/integration/agent-api-checklists.test.ts` pins the exact list of operations
+`CATALOG_BOUNDARY`, and left it for `CHECKLIST_WRITES` with #2679. `tests/integration/agent-api-checklists.test.ts` pins the exact list of operations
 under `/checklists`.
 
 ## Organising the area tree
