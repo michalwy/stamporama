@@ -96,13 +96,19 @@ export async function removeProposalLotAction(proposalId: string, offerId: strin
   }
 }
 
+const MOVE_FAILED: Record<ProposalMove, string> = {
+  send: "Failed to mark the proposal sent.",
+  reopen: "Failed to reopen the proposal.",
+  decline: "Failed to decline the proposal.",
+};
+
 export async function moveProposalAction(proposalId: string, move: ProposalMove): Promise<ProposalActionState> {
   const session = await getSession();
   try {
     await moveProposal(session.user.id, proposalId, move);
     return { status: "success" };
   } catch (err) {
-    return failure(err, move === "send" ? "Failed to mark the proposal sent." : "Failed to decline the proposal.");
+    return failure(err, MOVE_FAILED[move]);
   }
 }
 

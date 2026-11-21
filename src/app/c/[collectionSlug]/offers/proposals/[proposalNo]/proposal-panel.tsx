@@ -11,15 +11,16 @@ import { showLineAt } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   DEFAULT_PROPOSAL_LOT_PACKING,
+  declineProposalMessage,
   isProposalOpen,
   parseProposalLotPacking,
+  proposalHasOpenLot,
   proposalMoveRefusal,
   proposalTakesLots,
   type ProposalLotPacking,
 } from "@/lib/proposal-rules";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
-import { OPEN_OFFER_STATES } from "@/lib/offer-rules";
 import { lotGroupName } from "@/lib/offer-lot-group-rules";
 import type { ProposalLot } from "@/lib/proposals";
 import { useInvalidateOffers } from "../../use-offers-query";
@@ -168,7 +169,7 @@ export function ProposalPanel({
   const open = isProposalOpen(screen.status);
   const reopened = screen.status === "preparing" && screen.sentOn !== null;
   const sendRefusal = proposalMoveRefusal(screen.status, "send", screen.lots.length);
-  const hasOpenLot = screen.lots.some((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state));
+  const hasOpenLot = proposalHasOpenLot(screen.lots);
   const refresh = () => void invalidateAll(collectionId);
 
   function run(action: () => Promise<{ status: "success" } | { status: "error"; message: string }>, done: string) {
@@ -585,11 +586,7 @@ export function ProposalPanel({
       {dialog === "decline" && (
         <ConfirmDialog
           title="Decline the proposal?"
-          message={
-            screen.post
-              ? `Proposal #${screen.proposalNo} is closed as declined. Its lots stay in post #${screen.post.postNo} as they are. This cannot be undone.`
-              : `Proposal #${screen.proposalNo} is closed as declined, and every lot still open is withdrawn. The copies stay in your inventory. This cannot be undone.`
-          }
+          message={declineProposalMessage(screen.proposalNo, screen.post)}
           actionLabel="Decline"
           pendingLabel="Declining…"
           isPending={isPending}

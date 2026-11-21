@@ -4,7 +4,7 @@
 // collection's Direct platform, sent to them, and then sold as whichever lots they take (#2289) or
 // declined. The lots are ordinary offers; what is a proposal's own is its status, here.
 
-import { CLOSED_OFFER_STATES, type OfferListingType, type OfferState } from "./offer-rules";
+import { CLOSED_OFFER_STATES, OPEN_OFFER_STATES, type OfferListingType, type OfferState } from "./offer-rules";
 import { priceMargin, type PriceMargin } from "./offer-price-table";
 import { parsePrice as parseSalePrice } from "./sale-rules";
 
@@ -241,6 +241,62 @@ export function proposalLotCurrency(currencies: readonly string[]): { ok: true; 
   if (distinct.length === 1) return { ok: true, currency: distinct[0]! };
   if (distinct.length === 0) return { ok: false, message: "Tick the lots the buyer took." };
   return { ok: false, message: `The ticked lots are in ${distinct.join(" and ")} — a sale is in one currency.` };
+}
+
+/** Whether a proposal has a lot still open — *Convert to sale…* needs one: with none, there is nothing
+ *  left to sell and the proposal can only be declined. The desk's screen and the phone's ask it alike. */
+export function proposalHasOpenLot(lots: readonly { state: OfferState }[]): boolean {
+  return lots.some((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state));
+}
+
+/** The ticks *Convert to sale…* opens with (#2601): the lots the buyer picked on the live page that can
+ *  still be sold, each at its proposal price. A pick that can no longer be sold stays unticked. */
+export function proposalBuyerPickTicks(
+  lots: readonly { offerId: string; price: string | null; picked: boolean; unsellable: string | null }[]
+): Record<string, string> {
+  return Object.fromEntries(
+    lots.filter((lot) => lot.picked && lot.unsellable === null).map((lot) => [lot.offerId, lot.price ?? ""])
+  );
+}
+
+/** How many lots the conversion withdraws: every lot still open that is not ticked, one with nothing
+ *  left to sell included. A proposal made from a post withdraws none (#2602) — the caller says so. */
+export function proposalConversionWithdrawn(
+  lots: readonly { offerId: string; state: OfferState }[],
+  ticked: ReadonlySet<string>
+): number {
+  return lots.filter((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state) && !ticked.has(lot.offerId))
+    .length;
+}
+
+/** The sentence under the ticks: what happens to the lots not taken, and that the proposal closes. */
+export function proposalConversionOutcomeText(post: { postNo: number } | null, withdrawn: number): string {
+  if (post) return `The lots not taken stay in post #${post.postNo}, and the proposal closes as Sold.`;
+  const lots = withdrawn === 1 ? "1 lot withdrawn" : `${withdrawn} lots withdrawn`;
+  return `${withdrawn > 0 ? lots : "No lot withdrawn"}, and the proposal closes as Sold.`;
+}
+
+/**
+ * Why the ticked lots cannot be sent to the conversion, or null when they can — asked before the
+ * server is, which asks again: a lot ticked, each one's price a price, and one currency among them.
+ */
+export function proposalTicksRefusal(
+  ticked: readonly { offerNo: number; price: string; currency: string }[]
+): string | null {
+  if (ticked.length === 0) return "Tick the lots the buyer took. If they took none, decline the proposal instead.";
+  for (const lot of ticked) {
+    const price = parseSalePrice(lot.price);
+    if (!price.ok) return `Offer #${lot.offerNo}: ${price.message}`;
+  }
+  const currency = proposalLotCurrency(ticked.map((lot) => lot.currency));
+  return currency.ok ? null : currency.message;
+}
+
+/** What *Decline* asks before it declines (#2289, #2602): the desk's confirmation and the phone's. */
+export function declineProposalMessage(proposalNo: number, post: { postNo: number } | null): string {
+  return post
+    ? `Proposal #${proposalNo} is closed as declined. Its lots stay in post #${post.postNo} as they are. This cannot be undone.`
+    : `Proposal #${proposalNo} is closed as declined, and every lot still open is withdrawn. The copies stay in your inventory. This cannot be undone.`;
 }
 
 /** Why a lot cannot be ticked in *Convert to sale…* (#2336), said on its greyed row, or null when it

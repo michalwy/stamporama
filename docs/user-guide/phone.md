@@ -232,7 +232,25 @@ A proposal with no live link yet gets one the first time you share it or copy it
 Direct platform has no message template in the chosen language, there is no message and **Share**
 sends the link alone; the template is written at the desk, in Settings → Direct.
 
-Making a proposal, adding or taking out lots, changing their prices, the printable document and the
+### When the buyer answers
+
+Under **The buyer answered**, the proposal's screen closes it the way the desk does — each move only
+in the state the desk allows it:
+
+- **Convert to sale…** (while the proposal is open and has a lot still open) asks right on the
+  screen: tick the lots the buyer took — the lots they picked on the live link start ticked — and
+  change a lot's price if the buyer haggled. Under **Into**, choose a new sale to the contact, dated
+  today, or one of their sales not yet sent; a sale in another currency than the lots cannot be
+  chosen, and says why. **Sell the lot** (or **Sell 2 lots**, …) sells the ticked lots and withdraws the others, as at the desk, and
+  the proposal closes as Sold. The phone then opens **Sales to do**, where the new sale waits for
+  payment. A proposal made from a Facebook post withdraws nothing — the lots not taken stay in the
+  post — and its new sale is in the post's group.
+- **Reopen** (a Sent proposal) takes it back to Preparing, to change its lots or prices at the desk
+  and send it again.
+- **Decline…** asks first, then closes the proposal as declined and withdraws its open lots. A
+  proposal made from a post withdraws nothing.
+
+Swapping a lot's copy for a twin listed nowhere, making a proposal, adding or taking out lots, changing their prices, the printable document and the
 lots' photos stay at the desk: **Full app** opens the same proposal there.
 
 ## Browse by area

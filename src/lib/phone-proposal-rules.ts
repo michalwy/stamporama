@@ -1,10 +1,17 @@
 // Proposals on the phone (#2625, ADR-0072) — pure, no Prisma, so the unit suite holds it.
 //
-// The phone lists proposals and hands one to its buyer through the phone's own share menu. What is a
+// The phone lists proposals, hands one to its buyer through the phone's own share menu, and closes it
+// when the buyer answers (#2627). What is a
 // proposal's rule stays in `proposal-rules.ts`; what is here is only what the phone decides: which
 // proposals its list shows, what one share carries, and when a share marks the proposal Sent.
 
-import { OPEN_PROPOSAL_STATUSES, proposalMoveRefusal, type ProposalStatus } from "./proposal-rules";
+import type { OfferState } from "./offer-rules";
+import {
+  OPEN_PROPOSAL_STATUSES,
+  proposalHasOpenLot,
+  proposalMoveRefusal,
+  type ProposalStatus,
+} from "./proposal-rules";
 
 /** The list's one narrowing, kept in the URL as `show`: the open proposals (the default) or every one. */
 export type PhoneProposalShow = "open" | "all";
@@ -68,4 +75,28 @@ export function phoneProposalLotPicture(
   const first = images?.[0];
   if (first) return { photoId: first.photoId, copy: false };
   return copyPhotoId ? { photoId: copyPhotoId, copy: true } : null;
+}
+
+/**
+ * The moves a proposal's phone screen offers once the buyer has answered (#2627) — exactly the desk's
+ * in each state, never more, read off the desk's own rules rather than listed: *Convert to sale* while
+ * it is open with a lot still open (`proposalHasOpenLot`), *Reopen* when Sent and *Decline* while open
+ * (`proposalMoveRefusal`). *Mark sent* is the handover's, not one of these.
+ */
+export interface PhoneProposalMoves {
+  convert: boolean;
+  reopen: boolean;
+  decline: boolean;
+}
+
+export function phoneProposalMoves(
+  status: ProposalStatus,
+  lots: readonly { state: OfferState }[]
+): PhoneProposalMoves {
+  const decline = proposalMoveRefusal(status, "decline", lots.length) === null;
+  return {
+    convert: decline && proposalHasOpenLot(lots),
+    reopen: proposalMoveRefusal(status, "reopen", lots.length) === null,
+    decline,
+  };
 }
