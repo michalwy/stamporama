@@ -766,6 +766,8 @@ export async function addVariantRangeAction(
     catalogVendorId
   );
   const parsed = parseVariantNumberSpec(raw, baseNumber ?? "", {
+    // Suffixes unless the collector chose full numbers (#2671).
+    mode: formData.get("variantMode") === "full" ? "full" : "suffixes",
     // *Separate with a space* (#2652): `88B T.I` rather than `88BT.I`.
     separateWithSpace: formData.get("separateWithSpace") === "1",
   });

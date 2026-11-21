@@ -619,36 +619,57 @@ export function parseCatalogNumberSpec(input: string): CatalogNumberSpec | { err
 // number twice for no reason, so the same spec may be typed as the **suffixes alone** — `a-f`,
 // `a, b, c`, `I-III` — and the base number is understood.
 //
-// The two forms are decided per comma-separated segment, on whether it carries a digit: a segment
-// with digits is an ordinary catalog number and goes through `parseCatalogNumberSpec`'s own
-// resolution, a segment without is a suffix sequence hung off the base. Nothing in between is
-// guessed — `240a-c` is read as a full number against a suffix and rejected as such — because the
-// two halves of a range have to agree about which axis they are on.
+// Which of the two a spec is written in is **the collector's choice**, not a guess (#2671). It used
+// to be decided per segment on whether it carried a digit, which made a suffix with a digit in it
+// (`x2` under `88B`) impossible to enter: it became a stamp numbered `x2`. So the spec is read in
+// one of two modes, for every segment alike:
 //
-// A suffix *range* goes through `resolveSuffixRange`, the same resolution the issue-level range
-// field uses, so it runs over the sequences the app already knows: lowercase letters, uppercase
-// letters and Roman numerals. A **lone** suffix is taken literally instead, so a base that is
-// itself a variant takes the suffixes its catalogue actually prints: `309A` + `P` is `309AP`,
-// which no sequence would have produced.
+// - **Suffixes** — every piece hangs off the base number, digits or not. A suffix *range* goes
+//   through `resolveSuffixRange`, the same resolution the issue-level range field uses (lowercase
+//   letters, uppercase letters, Roman numerals), and failing that a run whose ends differ only in
+//   a trailing number (`x2-x5`). A **lone** suffix is taken literally, so a base that is itself a
+//   variant takes the suffixes its catalogue actually prints: `309A` + `P` is `309AP`, which no
+//   sequence would have produced.
+// - **Full numbers** — every piece is a catalog number in full, resolved exactly as in an issue's
+//   range field (`240a-240f`), and needs no base number at all.
 //
 // Some catalogues print such variants with a space between the base and the suffix — `88B T.I`
 // rather than `88BT.I` — so the collector may ask for one (#2652). It is one ordinary space, for
-// every suffix the spec hangs off the base and only those: a number typed in full is written as
-// typed, because the collector has already said exactly what it is.
+// every suffix the spec hangs off the base; it means nothing for full numbers, which are written as
+// typed because the collector has already said exactly what each one is.
+
+/** How a variant spec's pieces are read (#2671): hung off the base number, or taken as written. */
+export type VariantNumberMode = "suffixes" | "full";
+
+/** A suffix run whose ends differ only in a trailing number — `x2-x5`, `T.1-T.3`, `1-4` — as the
+ *  numbers it spans, or null when the ends are not such a pair. A leading zero on a first end as
+ *  long as the last keeps every number that wide (`x08-x11`). */
+function trailingNumberRun(fromSuffix: string, toSuffix: string): string[] | { error: string } | null {
+  const from = /^(.*?)(\d+)$/.exec(fromSuffix);
+  const to = /^(.*?)(\d+)$/.exec(toSuffix);
+  if (!from || !to || from[1] !== to[1]) return null;
+  const first = parseInt(from[2], 10);
+  const last = parseInt(to[2], 10);
+  if (first > last) return { error: "First suffix must be ≤ Last suffix." };
+  const width = from[2].startsWith("0") && from[2].length === to[2].length ? from[2].length : 0;
+  const out: string[] = [];
+  for (let n = first; n <= last; n++) out.push(`${from[1]}${String(n).padStart(width, "0")}`);
+  return out;
+}
 
 /** Expand a variant spec typed under `baseNumber` — the base stamp's number in the catalogue the
  *  variants are being numbered in — into the catalog numbers it generates, in the order typed.
  *
- *  `baseNumber` may be empty, which is the state of a base stamp carrying no number in that
- *  catalogue: the full-number form still works, and a bare suffix says so rather than silently
- *  generating a number with nothing in front of it. */
+ *  `mode` says how every piece is read (#2671). `baseNumber` may be empty, which is the state of a
+ *  base stamp carrying no number in that catalogue: full numbers still work, and suffixes say so
+ *  rather than silently generating a number with nothing in front of it. */
 export function parseVariantNumberSpec(
   input: string,
   baseNumber: string,
-  options: { separateWithSpace?: boolean } = {}
+  options: { mode: VariantNumberMode; separateWithSpace?: boolean }
 ): { numbers: string[] } | { error: string } {
   const base = baseNumber.trim();
-  // What a bare suffix is hung off: the base itself, or the base and one space (#2652).
+  // What a suffix is hung off: the base itself, or the base and one space (#2652).
   const head = options.separateWithSpace ? `${base} ` : base;
   const numbers: string[] = [];
 
@@ -659,9 +680,7 @@ export function parseVariantNumberSpec(
       return { error: "Use one dash per range, and a comma between ranges (e.g. a-f, h)." };
     }
 
-    // A segment carrying digits is a catalog number in full, resolved exactly as it would be in
-    // an issue's range field.
-    if (/\d/.test(piece)) {
+    if (options.mode === "full") {
       const range = resolveCatalogRange(parts[0], parts[1] ?? null);
       if ("error" in range) return range;
       numbers.push(...generateCatalogNumbers(range.scheme, range.span ?? 1));
@@ -670,19 +689,32 @@ export function parseVariantNumberSpec(
 
     if (!base) {
       return {
-        error: "This stamp has no number in that catalogue — write the variants' numbers in full.",
+        error:
+          "This stamp has no number in that catalogue — choose Full numbers and write each variant's number in full.",
       };
     }
 
-    // Suffixes alone, against the base number.
-    if (parts.length === 1) {
+    if (parts.length === 1 || !parts[1]) {
       numbers.push(`${head}${parts[0]}`);
       continue;
     }
     const range = resolveSuffixRange(parts[0], parts[1]);
-    if ("error" in range) return range;
-    const scheme: CatalogRangeScheme = { kind: range.kind, prefix: "", base: head, from: range.from };
-    numbers.push(...generateCatalogNumbers(scheme, range.span));
+    if (!("error" in range)) {
+      const scheme: CatalogRangeScheme = { kind: range.kind, prefix: "", base: head, from: range.from };
+      numbers.push(...generateCatalogNumbers(scheme, range.span));
+      continue;
+    }
+    const run = trailingNumberRun(parts[0], parts[1]);
+    if (run === null) {
+      // A descending letter or numeral run says so in its own words; anything else is unreadable.
+      if (range.error.startsWith("First suffix")) return range;
+      return {
+        error:
+          "Unrecognized suffix sequence (use letters a–z, A–Z, Roman numerals, or a trailing number such as x2-x5).",
+      };
+    }
+    if ("error" in run) return run;
+    numbers.push(...run.map((suffix) => `${head}${suffix}`));
   }
 
   if (numbers.length === 0) return { error: "Enter at least one variant number." };

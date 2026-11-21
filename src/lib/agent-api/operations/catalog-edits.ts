@@ -782,7 +782,11 @@ export async function addStampVariantsFromParams(
 
   const raw = requiredString(params, "numbers");
   const baseNumber = await getStampCatalogNumber(context.ownerId, context.collectionId, stamp.id, catalogVendorId);
-  const parsed = parseVariantNumberSpec(raw, baseNumber ?? "");
+  // Until #2672 gives the operation the dialog's choice (#2671), a spec carrying any digit is read
+  // as full numbers and one without as suffixes — the reading the operation has always documented.
+  const parsed = parseVariantNumberSpec(raw, baseNumber ?? "", {
+    mode: /\d/.test(raw) ? "full" : "suffixes",
+  });
   if ("error" in parsed) {
     throw invalidRequest(
       `"numbers" cannot be read: ${parsed.error}${baseNumber === null ? " The base stamp has no number in this catalogue, so write each variant's full number." : ""}`

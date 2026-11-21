@@ -612,16 +612,22 @@ When the catalogue splits one stamp into a lettered run — `240a` through `240f
 
 There is one field of numbers, and it is for your area's **primary catalog** only: a second catalogue's variant lettering rarely runs alongside the first's, so filling it in from a range would be guesswork. Fill the other catalogues in per stamp afterwards, the way you always did.
 
-You can write the numbers in full — `240a-240f`, or `240a, 240c` — but you do not have to. A piece with no digits in it is read against the base stamp's own number, so under `240`:
+Beside the field, choose how the numbers are read. The dialog always opens on **Suffixes**:
 
-- `a-f` → `240a` … `240f`
-- `a, c, e` → `240a`, `240c`, `240e`
-- `A-F` → `240A` … `240F`
-- `I-III` → `240I`, `240II`, `240III`
+- **Suffixes** — every piece is added to the base stamp's own number, digits or not. Under `240`:
+  - `a-f` → `240a` … `240f`
+  - `a, c, e` → `240a`, `240c`, `240e`
+  - `A-F` → `240A` … `240F`
+  - `I-III` → `240I`, `240II`, `240III`
 
-Ranges run over the same sequences the rest of the app knows — lowercase letters, uppercase letters and Roman numerals — under [the same rules](#writing-the-numbers) the issue's own range field follows, so `A-F` under `240` is `240A` … `240F`. A **single** suffix is taken literally instead of enumerated, so a base that is itself a variant takes whatever its catalogue prints: `P` under `309A` is `309AP`.
+  and under `88B`, `x2, z2, y3` → `88Bx2`, `88Bz2`, `88By3`.
+- **Full numbers** — every piece is a whole catalogue number, taken as written: `240a-240f`, or `240a, 240c`. Use this when the base stamp has no number in the primary catalogue; under **Suffixes** such a stamp has nothing to add the suffixes to, and the dialog says so.
 
-Some catalogues print the suffix apart from the base number — `88B T.I` rather than `88BT.I`. Tick **Separate with a space** under the field and every suffix in the run is joined to the base number with one space: `T.I, T.II, T.III` under `88B` gives `88B T.I`, `88B T.II`, `88B T.III`, and `a-c` gives `88B a`, `88B b`, `88B c`. The preview shows the numbers with the space before you save. Numbers you type in full are written exactly as typed, ticked or not, and the box starts the way you last left it.
+Suffix ranges run over the same sequences the rest of the app knows — lowercase letters, uppercase letters and Roman numerals — under [the same rules](#writing-the-numbers) the issue's own range field follows, so `A-F` under `240` is `240A` … `240F`. A range whose ends differ only in a trailing number runs that number: `x2-x4` under `88B` is `88Bx2`, `88Bx3`, `88Bx4`. Any other range is refused. A **single** suffix is taken literally instead of enumerated, so a base that is itself a variant takes whatever its catalogue prints: `P` under `309A` is `309AP`.
+
+Some catalogues print the suffix apart from the base number — `88B T.I` rather than `88BT.I`. Under **Suffixes**, tick **Separate with a space** under the field and every suffix in the run is joined to the base number with one space: `T.I, T.II, T.III` under `88B` gives `88B T.I`, `88B T.II`, `88B T.III`, and `a-c` gives `88B a`, `88B b`, `88B c`. The box starts the way you last left it. **Full numbers** are written exactly as typed, so the box is not offered there.
+
+The preview shows the numbers exactly as they will be saved, for the choice you made.
 
 Pick the **Subtype** every stamp in the run should carry — it starts on the one you used last, exactly as the single add dialog does — and the dialog shows how many stamps it will create, with a preview of the numbers and the same [duplicate check](duplicate-catalog-numbers.md) the other range dialog runs.
 
