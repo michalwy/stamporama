@@ -330,6 +330,25 @@ describe("the catalogue writes (#1438)", () => {
       }
     });
 
+    it("reads numbers as suffixes by default, digits or not, and as full numbers when told (#2672)", async () => {
+      const added = await ok<Created>(token, "POST", `/issues/${issue.issueId}/stamps`, { catalog_numbers: ["Mi: 320-321"] });
+      const [suffixBase, fullBase] = added.createdStamps.map((stamp) => stamp.stampId);
+
+      const suffixes = await ok<Created>(token, "POST", `/stamps/${suffixBase}/variants`, { numbers: "x2, y3" });
+      assert.deepEqual(suffixes.createdStamps.map((stamp) => stamp.catalogNumbers), [["Mi·PL 320x2"], ["Mi·PL 320y3"]]);
+
+      const full = await ok<Created>(token, "POST", `/stamps/${fullBase}/variants`, {
+        numbers: "321a-321c",
+        number_mode: "full",
+      });
+      assert.deepEqual(full.createdStamps.map((stamp) => stamp.catalogNumbers), [["Mi·PL 321a"], ["Mi·PL 321b"], ["Mi·PL 321c"]]);
+
+      const unreadable = await refused(token, "POST", `/stamps/${fullBase}/variants`, { numbers: "a-c", number_mode: "full" });
+      assert.match(unreadable.error.message, /cannot be read as full numbers.*"number_mode"/);
+      const badMode = await refused(token, "POST", `/stamps/${fullBase}/variants`, { numbers: "d", number_mode: "guess" });
+      assert.deepEqual(badMode.error.accepted, ["suffixes", "full"]);
+    });
+
     it("refuses a variant number already held, and adds nothing", async () => {
       const base = issue.createdStamps[1].stampId;
       await ok<Created>(token, "POST", `/stamps/${base}/variants`, { numbers: "a" });
