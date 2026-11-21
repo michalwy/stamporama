@@ -36,3 +36,12 @@ export function shortDay(when: Date, now: Date): string {
 export function shortDayTime(when: Date, now: Date): string {
   return `${shortDay(when, now)} ${when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 }
+
+/** When a post's auctions end (#2502), as the list and the post's phone screen (#2626) say it: one
+ *  time with how far off it is — "14 Nov 20:00 (tomorrow)" — or, where they end apart, the earliest
+ *  and the latest. */
+export function auctionsEndWhen(from: Date, to: Date, now: Date): string {
+  return from.getTime() === to.getTime()
+    ? `${shortDayTime(from, now)} (${relativeDay(from, now)})`
+    : `${shortDayTime(from, now)} – ${shortDayTime(to, now)}`;
+}

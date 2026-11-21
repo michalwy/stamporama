@@ -193,6 +193,17 @@ describe("the list of Facebook posts (#1850)", () => {
     );
   });
 
+  // The phone's list by default (#2626): every stage but over.
+  it("keeps the posts not over", async () => {
+    const { items } = await listFacebookPostsPaginated(userId, collectionId, { notOver: true });
+    assert.deepEqual(
+      items.map((i) => i.postId),
+      [posts.up.postId, posts.ready.postId, posts.preparing.postId]
+    );
+    const upOnly = await listFacebookPostsPaginated(userId, collectionId, { notOver: true, stage: "up" });
+    assert.deepEqual(upOnly.items.map((i) => i.postId), [posts.up.postId]);
+  });
+
   it("filters by group, and offers the groups holding posts", async () => {
     const { items } = await listFacebookPostsPaginated(userId, collectionId, { groupIds: [groupB] });
     assert.deepEqual(items.map((i) => i.postId), [posts.up.postId]);

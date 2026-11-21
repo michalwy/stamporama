@@ -152,6 +152,8 @@ export interface FacebookPostFilters {
   untitled?: boolean;
   /** Only the posts not yet up, which still take lots (#1870). */
   notUp?: boolean;
+  /** Only the posts not over (#2626) — the phone's list by default. */
+  notOver?: boolean;
 }
 
 export function useOffersInfinite(collectionId: string, filters: OfferFilters) {
@@ -388,6 +390,7 @@ export function useFacebookPostsInfinite(collectionId: string, filters: Facebook
       if (filters.stage) params.set("stage", filters.stage);
       if (filters.untitled) params.set("untitled", "1");
       if (filters.notUp) params.set("notUp", "1");
+      if (filters.notOver) params.set("notOver", "1");
       const res = await fetch(`/api/collections/${collectionId}/facebook-posts?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch the posts");
       return res.json();

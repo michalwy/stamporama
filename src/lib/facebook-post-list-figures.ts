@@ -106,18 +106,31 @@ export function facebookPostListDates(
     dates.upSince = up?.toISOString().slice(0, 10) ?? null;
   }
   if (stage === "up") {
-    const open = lots.filter((l) => l.auction && OPEN_STATES.has(l.state));
-    const from = extreme(open.map((l) => l.endsAt), "min");
-    const to = extreme(open.map((l) => l.endsAt), "max");
-    if (from && to) {
-      dates.endsFrom = from.toISOString();
-      dates.endsTo = to.toISOString();
+    const ends = facebookPostAuctionsEnd(lots);
+    if (ends) {
+      dates.endsFrom = ends.from;
+      dates.endsTo = ends.to;
     }
   }
   if (stage === "over") {
     dates.endedAt = extreme(posted.map(lotEnded), "max")?.toISOString() ?? null;
   }
   return dates;
+}
+
+/**
+ * When a post that is up closes (#2502, #2626): its auction lots still running — pending, up or
+ * paused — end at one time, then `from === to`, or between the earliest and the latest. Null where no
+ * auction is running or any of them has no end recorded, since the earliest or latest of the others
+ * could be the wrong one. The list of posts and the post's phone screen say it from this one rule.
+ */
+export function facebookPostAuctionsEnd(
+  lots: readonly Pick<PostListLotDates, "state" | "auction" | "endsAt">[]
+): { from: string; to: string } | null {
+  const open = lots.filter((l) => l.auction && OPEN_STATES.has(l.state));
+  const from = extreme(open.map((l) => l.endsAt), "min");
+  const to = extreme(open.map((l) => l.endsAt), "max");
+  return from && to ? { from: from.toISOString(), to: to.toISOString() } : null;
 }
 
 /** One lot's figures, every amount in the base currency. */

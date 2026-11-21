@@ -25,4 +25,6 @@ export const PHONE_ENTRIES: readonly PhoneEntry[] = [
   { label: "Sales to do", path: "sales", icon: "sales" },
   // #2008 — offers that change during the day: pause, resume, withdraw.
   { label: "Offers", path: "offers", icon: "offers" },
+  // #2626 — Facebook group auctions followed during the day: a post and all its lots.
+  { label: "Facebook posts", path: "posts", icon: "bidding" },
 ];

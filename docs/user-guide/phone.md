@@ -42,7 +42,7 @@ The phone remembers this for your account, so it holds after signing in again an
 Working in a collection at the desk does not change where the phone starts.
 
 The start screen lists the phone screens, one row each — **Browse by area**, **Start a purchase**,
-**Sales to do** and **Offers**. New ones arrive with new releases. Above
+**Sales to do**, **Offers** and **Facebook posts**. New ones arrive with new releases. Above
 them is the search for a stamp.
 
 ## Finding a stamp
@@ -184,6 +184,26 @@ auction from the same screen:
 - **Withdraw…** when nobody bid.
 
 See [Facebook](facebook.md#when-an-auction-ends) for what each of these does.
+
+## Facebook posts
+
+**Facebook posts** on the start screen lists your Facebook posts, newest first — of several lots and
+of one, since every Facebook offer is in a post. By default it shows the posts that are not over; the
+select at the top shows one stage instead, or **Every post**.
+
+Each row shows the post's number and title, its stage — *Being prepared*, *Ready to post*, *Waiting
+for approval*, *Up in the group* or *Over* — how many lots it has, and its group. While a post is up,
+the row also says when its auctions close — one time, or the earliest and the latest where they end
+apart.
+
+Tap a post to open it. Its screen shows the post's title, group and stage, when it closes, and every
+lot in lot order: its number, its picture — the photo it goes into the post with, the one the desk's
+post screen shows — its title, its state and its price. An auction's price is its starting price
+until you record a bid, then the bid; a quick buy's is its price. If a proposal was made from the
+post, the screen names it and links to it.
+
+Tap a lot to open its offer screen, where you record bids and sell or withdraw it, as for
+[a Facebook group auction](#a-facebook-group-auction). **Full app** opens the same post at the desk.
 
 ## Browse by area
 

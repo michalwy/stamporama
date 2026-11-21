@@ -665,8 +665,9 @@ export async function getFacebookPostScreen(ownerId: string, postId: string): Pr
   };
 }
 
-/** The proposal made from the post the screen links to (#2602): the open one, else the latest. */
-async function readPostProposal(postId: string): Promise<FacebookPostProposal | null> {
+/** The proposal made from the post the screen links to (#2602): the open one, else the latest — on
+ *  the desk's post screen and the phone's (#2626). */
+export async function readPostProposal(postId: string): Promise<FacebookPostProposal | null> {
   const rows = await prisma.proposal.findMany({
     where: { facebookPostId: postId },
     orderBy: { proposalNo: "desc" },
@@ -864,6 +865,8 @@ export interface FacebookPostListFilters {
   untitled?: boolean;
   /** Only the posts not yet up — being prepared or ready — the ones that still take lots (#1870). */
   notUp?: boolean;
+  /** Only the posts not over — the phone's default list (#2626), every stage but `over`. */
+  notOver?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -942,6 +945,7 @@ export async function listFacebookPostsPaginated(
     AND: [
       ...(filters.stage ? [facebookPostStageWhere(filters.stage)] : []),
       ...(filters.notUp ? [{ lots: { none: GONE_UP_LOT_WHERE } }] : []),
+      ...(filters.notOver ? [{ NOT: facebookPostStageWhere("over") }] : []),
     ],
     ...(filters.untitled ? { OR: [{ title: null }, { title: "" }] } : {}),
   };

@@ -64,6 +64,27 @@ export function phoneSalesPath(collectionSlug: string): string {
   return `${phoneHomePath(collectionSlug)}/sales`;
 }
 
+/** One offer's phone screen (#2008) — what a post's lot opens on the phone (#2626). */
+export function phoneOfferPath(collectionSlug: string, offerId: string): string {
+  return `${phoneHomePath(collectionSlug)}/offers/${offerId}`;
+}
+
+/** The phone's list of Facebook posts (#2626), newest first. */
+export function phonePostsPath(collectionSlug: string): string {
+  return `${phoneHomePath(collectionSlug)}/posts`;
+}
+
+/** One Facebook post's phone screen (#2626), by its short number as the desk's post screen is. */
+export function phonePostPath(collectionSlug: string, postNo: number): string {
+  return `${phonePostsPath(collectionSlug)}/${postNo}`;
+}
+
+/** One proposal's phone screen (#2625), by its short number as the desk's proposal screen is — what a
+ *  post's phone screen links a proposal made from it to (#2626). */
+export function phoneProposalPath(collectionSlug: string, proposalNo: number): string {
+  return `${phoneHomePath(collectionSlug)}/proposals/${proposalNo}`;
+}
+
 /** Starting a purchase on the phone (#2006): the form. */
 export function phonePurchaseNewPath(collectionSlug: string): string {
   return `${phoneHomePath(collectionSlug)}/purchases/new`;
