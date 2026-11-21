@@ -87,6 +87,8 @@ guide's phone page states the requirement.
 - **#2009** — selling an offer to a buyer at a price.
 - **#2010** — a Facebook group auction: recording the current bid, and closing by selling to the
   winner or withdrawing.
+- **#2625** (added 2026-11-21) — proposals: a list and a proposal's screen, and sending one to its
+  buyer through the phone's share menu.
 
 **#2002** is the shell all of them stand on: the path, the manifest and icon, the phone frame, the
 links both ways and a sign-in screen usable at phone width.

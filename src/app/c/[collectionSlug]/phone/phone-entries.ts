@@ -4,7 +4,7 @@ import type { IconName } from "@/app/icons";
  * What the phone start screen offers (#2002, ADR-0072 §5) — one row per phone screen, in the order
  * the collector reaches for them.
  *
- * Each of #2005–#2011 adds its own row here — the stamp screen (#2003) has none, a stamp being
+ * Each of #2005–#2011 and #2625 adds its own row here — the stamp screen (#2003) has none, a stamp being
  * opened from search or browsing, never chosen bare, and the search (#2004) is the start screen's
  * own field above the rows — and a new phone screen is a decision of its own, named in
  * `docs/agents/phone.md` before it is added.
@@ -27,4 +27,6 @@ export const PHONE_ENTRIES: readonly PhoneEntry[] = [
   { label: "Offers", path: "offers", icon: "offers" },
   // #2626 — Facebook group auctions followed during the day: a post and all its lots.
   { label: "Facebook posts", path: "posts", icon: "bidding" },
+  // #2625 — proposals handed to a buyer from the phone, through its share menu.
+  { label: "Proposals", path: "proposals", icon: "share" },
 ];

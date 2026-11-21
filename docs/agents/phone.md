@@ -176,6 +176,40 @@ desktop-only.
 - Afterwards the phone goes to **Sales to do** (`phoneSalesPath`), where the sale waits for payment —
   its further steps are #2007's.
 
+## Proposals (#2625)
+
+- **The list** (`phone/proposals/`) is the desk's own pages of proposals (`useProposalsInfinite`, the
+  proposals route) under one narrowing in the URL, `show=all`, else the open ones
+  (`OPEN_PROPOSAL_STATUSES`) — one select, as the offers list chose over chips. The row's total is the
+  desk's `proposalTotalText`, the state the desk's `ProposalStatusChip`. Pure rules in
+  `src/lib/phone-proposal-rules.ts`, unit-tested.
+- **The screen** (`phone/proposals/[proposalNo]/`, addressed by the short number as the desk's is) is a
+  server page over `getPhoneProposal` (`src/lib/phone-proposals.ts`), which gathers the desk's reads:
+  `getProposalScreen`, `readProposalPhotos`, and — only while the proposal is open, nothing being
+  left to send after — `readProposalMessage` and `readProposalShareState`. A lot's **picture** is the
+  first photo the buyer is sent, else its first copy's front photo (dashed, as the desk's row draws
+  it), `phoneProposalLotPicture`. A lot opens its offer's phone screen (#2008).
+- **Share is the one way the phone differs from the desk** (settled with the collector on
+  2026-11-21): a share through `navigator.share` that resolved marks a Preparing proposal Sent
+  (`phoneShareMarksSent`, which asks `proposalMoveRefusal` — the desk's *Mark sent* rule — through the
+  desk's `moveProposalAction(…, "send")`). A dismissed menu (`AbortError`, `isShareDismissed`) changes
+  nothing. **Copy message / Copy link change nothing**, as at the desk (#2329), so *Mark sent* stands
+  below them. The issue had said *as copying the message at the desk does*; since #2329 it does not,
+  and the collector chose share-only. One share carries `phoneProposalShareText`: the message, a blank
+  line, the link — the link alone when Direct has no template in the language, never words made up
+  for it (#1692). The browser with no share menu gets a sentence instead of the button.
+- **The link** is the desk's `ProposalShareToken`: used when it exists, made by
+  `createProposalShareLinkAction` on the first share or *Copy link* (making a link changes no state,
+  #2329), and when its address cannot be read the phone says to make a new one at the desk rather than
+  replacing the link a buyer may hold. A share after a link was just made can fail because the tap's
+  activation is spent waiting for the server; the error says to tap again, and the second tap has the
+  link at hand.
+- **The language** is the desk card's choice (#2603) at the tap target: `setProposalLanguageAction`,
+  saved on the contact, then `router.refresh()` reads the message in it. Every write is the desk's own
+  server action; afterwards the page is read again and `invalidateAll` marks the offer lists stale.
+- **Stays at the desk**: making a proposal, adding or removing lots, prices, the document (PDF) — the
+  live link shows the buyer everything — and the photos.
+
 ## A Facebook group auction (#2010)
 
 - **The desk card's *Bidding*, on the offer screen above *Sell***: `PhoneOfferBidding`
@@ -331,6 +365,7 @@ The first step, each its own issue (ADR-0072 §5):
 | Sell an offer: buyer and price, one set at a time | #2009 |
 | Facebook group auction: record bid, close | #2010 |
 | Facebook posts: list, a post's screen with all its lots | #2626 |
+| Proposals: list, proposal screen, share to the buyer | #2625 |
 
 **Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
 editing and publishing offers; intake, lots and the cost split; everything not in the table.

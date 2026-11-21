@@ -82,7 +82,12 @@ export function phonePostPath(collectionSlug: string, postNo: number): string {
 /** One proposal's phone screen (#2625), by its short number as the desk's proposal screen is — what a
  *  post's phone screen links a proposal made from it to (#2626). */
 export function phoneProposalPath(collectionSlug: string, proposalNo: number): string {
-  return `${phoneHomePath(collectionSlug)}/proposals/${proposalNo}`;
+  return `${phoneProposalsPath(collectionSlug)}/${proposalNo}`;
+}
+
+/** Proposals on the phone (#2625): the list, the open ones by default. */
+export function phoneProposalsPath(collectionSlug: string): string {
+  return `${phoneHomePath(collectionSlug)}/proposals`;
 }
 
 /** Starting a purchase on the phone (#2006): the form. */

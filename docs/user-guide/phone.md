@@ -42,7 +42,7 @@ The phone remembers this for your account, so it holds after signing in again an
 Working in a collection at the desk does not change where the phone starts.
 
 The start screen lists the phone screens, one row each — **Browse by area**, **Start a purchase**,
-**Sales to do**, **Offers** and **Facebook posts**. New ones arrive with new releases. Above
+**Sales to do**, **Offers**, **Facebook posts** and **Proposals**. New ones arrive with new releases. Above
 them is the search for a stamp.
 
 ## Finding a stamp
@@ -204,6 +204,36 @@ post, the screen names it and links to it.
 
 Tap a lot to open its offer screen, where you record bids and sell or withdraw it, as for
 [a Facebook group auction](#a-facebook-group-auction). **Full app** opens the same post at the desk.
+
+## Proposals
+
+**Proposals** on the start screen lists your proposals, newest first: each one's number, the contact
+it is for, its state, how many lots it has and its total. It shows the **open** ones — Preparing and
+Sent — and the select at the top switches to **Every proposal**, the sold and declined ones included.
+
+Tap a proposal to open it. Its screen shows the contact, the state and the total, and every lot with
+its number, picture, title, price and state — and *Picked by the buyer* on a lot the buyer ticked on
+the live link. A proposal made from a Facebook post names the post. Tap a lot to open its offer.
+
+While the proposal is open, **For the buyer** sends it from the phone:
+
+- **Language** — the language the message and the live link are in. It starts in the contact's
+  language and, as at the desk, a choice is saved on the contact, so their next proposal opens in it.
+- The message, as the buyer will read it.
+- **Share** opens your phone's own share menu with the message and the live link in one text: pick
+  Messenger, WhatsApp, e-mail or anything else the phone offers. Once the share has gone through, a
+  Preparing proposal is marked **Sent** — on the desk too. A Sent proposal can be shared again, and
+  stays Sent.
+- **Copy message** and **Copy link** put the same message and link on the clipboard, for an app the
+  share menu does not list. Copying does not mark the proposal sent — as at the desk — so **Mark
+  sent** is below them, for when the buyer has it.
+
+A proposal with no live link yet gets one the first time you share it or copy its link. If your
+Direct platform has no message template in the chosen language, there is no message and **Share**
+sends the link alone; the template is written at the desk, in Settings → Direct.
+
+Making a proposal, adding or taking out lots, changing their prices, the printable document and the
+lots' photos stay at the desk: **Full app** opens the same proposal there.
 
 ## Browse by area
 
