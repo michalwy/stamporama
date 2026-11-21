@@ -369,6 +369,15 @@ const ISSUE_DETAIL: IssueDetailRow = {
   year: 1919,
   memberCount: 14,
   requiredCount: 8,
+  priceTotal: {
+    amount: "52.00",
+    currency: "EUR",
+    convertedAmount: "221.00",
+    baseCurrency: "PLN",
+    estimatedCount: 1,
+    derivedCount: 0,
+    usesOlderEdition: false,
+  },
   checklists: [
     {
       id: "c1",
@@ -409,6 +418,48 @@ describe("one issue in full", () => {
     assert.equal(row.checklists[0].catalogTotal?.amount, "40.00");
     assert.equal(row.checklists[0].catalogTotal?.baseAmount, "170.00");
     assert.equal("catalogTotal" in row.checklists[1], false);
+  });
+
+  it("states the issue's one catalogue value beside the checklists' own (#2661)", () => {
+    assert.deepEqual(row.catalogValue, {
+      amount: "52.00",
+      currency: "EUR",
+      baseAmount: "221.00",
+      baseCurrency: "PLN",
+      approximate: true,
+    });
+    // The row's counts are not part of the answer: they say how the figure was reached, and the
+    // two markers are what the app's row shows of them.
+    assert.equal("estimatedCount" in (row.catalogValue ?? {}), false);
+  });
+
+  it("marks an older-edition value and states nothing for an issue with no value", () => {
+    const stale = issueDetail("col1", {
+      ...ISSUE_DETAIL,
+      priceTotal: {
+        ...ISSUE_DETAIL.priceTotal!,
+        estimatedCount: 0,
+        derivedCount: 2,
+        usesOlderEdition: true,
+      },
+    }, { catalogRanges: [], catalogues: { own: [], resolved: [] }, area: null, path: "/p" });
+    assert.equal(stale.catalogValue?.approximate, true);
+    assert.equal(stale.catalogValue?.olderEdition, true);
+
+    const plain = issueDetail("col1", {
+      ...ISSUE_DETAIL,
+      priceTotal: { ...ISSUE_DETAIL.priceTotal!, estimatedCount: 0 },
+    }, { catalogRanges: [], catalogues: { own: [], resolved: [] }, area: null, path: "/p" });
+    assert.equal("approximate" in (plain.catalogValue ?? {}), false);
+    assert.equal("olderEdition" in (plain.catalogValue ?? {}), false);
+
+    const none = issueDetail("col1", { ...ISSUE_DETAIL, priceTotal: null }, {
+      catalogRanges: [],
+      catalogues: { own: [], resolved: [] },
+      area: null,
+      path: "/p",
+    });
+    assert.equal("catalogValue" in none, false);
   });
 
   it("states each checklist's type (#1617)", () => {

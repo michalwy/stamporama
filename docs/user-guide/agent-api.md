@@ -114,6 +114,11 @@ app shows on the stamp's row (`#901`), and wherever it has to name a stamp you c
 number as `st 901` — the same thing you would type in **Jump to…** — instead of a catalog number.
 The `st` is needed: a bare `901` is read as a catalog number, because that is what it usually is.
 
+**It reads a series' catalogue value as the Issues list shows it.** Asked what a series is worth, it
+gets the one figure on the series' row — every stamp on its checklists counted once, even one on two
+of them — with the `~` when a price in it is an estimate and a warning when it is summed from an
+older edition, and each checklist's own total beside it.
+
 **A read-and-write token can change things, and there are eleven places where that is now true.**
 
 On **listings**, it can start one around copies you are not offering yet, set what you are asking
