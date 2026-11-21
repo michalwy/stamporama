@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { prisma } from "./db";
-import { buyerMaterialLanguage, normalizeLanguage } from "./languages";
+import { buyerMaterialLanguage, isLanguageCode, languageLabel, normalizeLanguage } from "./languages";
 import { getCollectionLanguageChoices, setContactLanguage } from "./contacts";
 import { offerTitlesInLanguage } from "./offers";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
@@ -102,6 +102,7 @@ async function readProposalHead(proposalId: string) {
   const direct = await prisma.platform.findFirst({
     where: { collectionId: row.collectionId, platformModule: DIRECT_PLATFORM_MODULE },
     select: {
+      name: true,
       titleLanguage: true,
       platformCurrency: true,
       proposalMessages: { select: { language: true, template: true } },
@@ -139,6 +140,8 @@ async function readProposalHead(proposalId: string) {
     buyerName: row.contact.name,
     language,
     currency: lots[0]?.currency ?? direct?.platformCurrency ?? row.collection.baseCurrency,
+    platformName: direct?.name ?? null,
+    templates: direct?.proposalMessages ?? [],
     // The template for the proposal's language and no other (#2603).
     template: proposalMessageTemplateFor(direct?.proposalMessages ?? [], language),
     lots,
@@ -146,6 +149,12 @@ async function readProposalHead(proposalId: string) {
 }
 
 type ProposalHead = NonNullable<Awaited<ReturnType<typeof readProposalHead>>>;
+
+/** The head read in `language` instead of its own (#2609): that language's template and no other.
+ *  Nothing is saved — the contact keeps the language it has. */
+function headInLanguage(head: ProposalHead, language: string): ProposalHead {
+  return { ...head, language, template: proposalMessageTemplateFor(head.templates, language) };
+}
 
 /**
  * The head with each lot's title as the buyer reads it (#2603): rendered in the proposal's language
@@ -285,19 +294,51 @@ function messageOf(head: ProposalHead, languages: string[]): ProposalMessage {
   };
 }
 
+/** A message asked for in a language it cannot be read in (#2609): one the collection does not use,
+ *  or one the Direct platform has no template for. The message says which and why. */
+export class ProposalMessageLanguageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProposalMessageLanguageError";
+  }
+}
+
+/**
+ * The message for the buyer — in the proposal's own language, or, with `language`, in that one
+ * instead (#2609, the Agent API's read). Asking for a language **saves nothing**: unlike the card's
+ * selector (`setProposalLanguage`), the contact keeps the language it has, as reading the message does
+ * not mark the proposal sent. A language asked for must be one the selector would offer, and the
+ * Direct platform must have a template for it — else `ProposalMessageLanguageError`, since a message
+ * asked for by name is not silently empty.
+ */
 export async function readProposalMessage(
   ownerId: string,
   proposalId: string,
-  collectionId?: string
+  collectionId?: string,
+  language?: string
 ): Promise<ProposalMessage> {
   await assertProposalOwner(ownerId, proposalId, collectionId);
-  const head = await readProposalHead(proposalId);
-  if (!head) throw new Error("Proposal not found.");
-  const [titled, languages] = await Promise.all([
-    withBuyerTitles(head),
-    getCollectionLanguageChoices(ownerId, head.collectionId, [head.language]),
-  ]);
-  return messageOf(titled, languages);
+  const own = await readProposalHead(proposalId);
+  if (!own) throw new Error("Proposal not found.");
+  const languages = await getCollectionLanguageChoices(ownerId, own.collectionId, [own.language]);
+  let head = own;
+  if (language !== undefined) {
+    const code = normalizeLanguage(language);
+    if (!isLanguageCode(code) || !languages.includes(code)) {
+      throw new ProposalMessageLanguageError(
+        `${code ? languageLabel(code) : "That"} is not a language this collection uses — it uses ${
+          languages.map(languageLabel).join(", ") || "none yet"
+        }. Add it to a platform or an album first.`
+      );
+    }
+    head = headInLanguage(own, code);
+    if (!head.template) {
+      throw new ProposalMessageLanguageError(
+        `${own.platformName ?? "The Direct platform"} has no proposal message template in ${languageLabel(code)}, so there is no message in it. The collector writes one in the platform's settings.`
+      );
+    }
+  }
+  return messageOf(await withBuyerTitles(head), languages);
 }
 
 /**

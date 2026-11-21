@@ -15,7 +15,7 @@ import {
   makeProposalLots,
   removeProposalLot,
 } from "../../proposals";
-import { readProposalMessage } from "../../proposal-handout";
+import { ProposalMessageLanguageError, readProposalMessage } from "../../proposal-handout";
 import { proposalLotsRefusal, type ProposalLotPacking, type ProposalStatus } from "../../proposal-rules";
 import { invalidRequest, notFound } from "../errors";
 import { listResponse, parseListWindow } from "../list";
@@ -138,12 +138,23 @@ async function refusingDomainGuards<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+/** The message in the proposal's language, or in `language` where one is asked for (#2609) — a
+ *  language it cannot be read in refused with the reason. Nothing is saved on the contact. */
+async function loadProposalMessage(context: OperationContext, proposalId: string, language?: string) {
+  try {
+    return await readProposalMessage(context.ownerId, proposalId, context.collectionId, language);
+  } catch (error) {
+    if (error instanceof ProposalMessageLanguageError) throw invalidRequest(error.message);
+    throw error;
+  }
+}
+
 /** The proposal in `get_proposal`'s shape, read fresh — every write answers with what it left. */
-async function loadProposal(context: OperationContext, proposalId: string): Promise<AgentProposal> {
+async function loadProposal(context: OperationContext, proposalId: string, language?: string): Promise<AgentProposal> {
   const [screen, header, message] = await Promise.all([
     getProposalScreen(context.ownerId, proposalId),
     loadCollectionHeader(context),
-    readProposalMessage(context.ownerId, proposalId, context.collectionId),
+    loadProposalMessage(context, proposalId, language),
   ]);
   if (!screen || screen.collectionId !== context.collectionId) {
     throw notFound("That proposal is not in this token's collection any more. Use `list_proposals` to find it.");
@@ -162,7 +173,7 @@ async function loadProposal(context: OperationContext, proposalId: string): Prom
   return proposalRecord(
     screen,
     copies,
-    message.text,
+    message,
     collectionPath(header, `/offers/proposals/${screen.proposalNo}`)
   );
 }
@@ -261,19 +272,33 @@ export const listProposalsOperation: Operation = {
 // ── get_proposal ─────────────────────────────────────────────────────────────
 
 const PROPOSAL_RESULT_DESCRIPTION =
-  "The proposal: its status, its contact, the Direct platform whose template the message is written from, `post` — the Facebook post it was made from, by number, title and group, whose own lots its lots are (null for a proposal of Direct offers) — and the sale it became once `sold`. Each lot carries its `lotNo` — the number the buyer is sent and answers with — its offer's number and id, title, state, listing type, price (null while it has none), sets, the copies on it by copy number, and `pick` — `picked` where the buyer ticked it on the proposal's link, `unavailable` where they did but it has since sold elsewhere or been withdrawn, null where they did not. `buyerPicks` lists the lots the buyer ticked by number and `changedAt`, when they last ticked or unticked one; it is null while nothing is ticked. Picks are the buyer's: nothing here changes them. `total` is the lots not withdrawn at their prices and `unpriced` counts those with no price. `message` is the text for the buyer from the Direct platform's template in the buyer's language — null when the platform has none for that language, since nothing is generated without one; reading it here does not mark the proposal sent.";
+  "The proposal: its status, its contact, the Direct platform whose template the message is written from, `post` — the Facebook post it was made from, by number, title and group, whose own lots its lots are (null for a proposal of Direct offers) — and the sale it became once `sold`. Each lot carries its `lotNo` — the number the buyer is sent and answers with — its offer's number and id, title, state, listing type, price (null while it has none), sets, the copies on it by copy number, and `pick` — `picked` where the buyer ticked it on the proposal's link, `unavailable` where they did but it has since sold elsewhere or been withdrawn, null where they did not. `buyerPicks` lists the lots the buyer ticked by number and `changedAt`, when they last ticked or unticked one; it is null while nothing is ticked. Picks are the buyer's: nothing here changes them. `total` is the lots not withdrawn at their prices and `unpriced` counts those with no price. `message` is the text for the buyer from the Direct platform's template in `language` — the buyer's (the contact's language, else Direct's listing language, else the collection's), or the one asked for with `language` — null when the platform has none for the buyer's language, since nothing is generated without one; each lot's title in it is rendered in that language too. `languages` lists the ones the message can be asked for in, the collection's. Reading it here does not mark the proposal sent, and asking for a language does not change the contact's.";
 
 export const getProposalOperation: Operation = {
   name: "get_proposal",
   method: "GET",
   path: "/proposals/{proposal}",
   description:
-    "One proposal in full: its contact, status, every lot with its number, offer, copies and price, the lots the buyer picked on the proposal's link and when, the total, the message text for the buyer, and the sale it became.",
+    "One proposal in full: its contact, status, every lot with its number, offer, copies and price, the lots the buyer picked on the proposal's link and when, the total, the message text for the buyer in the buyer's language — or in another language asked for — and the sale it became.",
   writes: false,
-  parameters: [PROPOSAL_PARAMETER],
+  parameters: [
+    PROPOSAL_PARAMETER,
+    {
+      name: "language",
+      in: "query",
+      type: "string",
+      required: false,
+      description:
+        "The message in this language instead of the buyer's, an ISO 639-1 code such as `de` or `pl` — one of the proposal's `languages`. Refused, with the reason, for a language the collection does not use or one the Direct platform has no message template in. Nothing is saved: the contact keeps their language. Left out, the buyer's language.",
+    },
+  ],
   result: { kind: "object", description: PROPOSAL_RESULT_DESCRIPTION },
   handler: async (context, params) =>
-    loadProposal(context, (await resolveProposal(context, requiredString(params, "proposal"))).id),
+    loadProposal(
+      context,
+      (await resolveProposal(context, requiredString(params, "proposal"))).id,
+      optionalString(params, "language") ?? undefined
+    ),
 };
 
 // ── get_proposal_sale_options ────────────────────────────────────────────────

@@ -1243,7 +1243,7 @@ more: put lots together for them, price them, and record which they took.
 | operation | writes | what it is for |
 | --- | --- | --- |
 | `list_proposals` | no | the proposals, by contact, status and `picked` (#2607), with lots, open lots, picked lots and total |
-| `get_proposal` | no | one proposal: contact, Direct platform, lots (lot number, offer, title, state, price, copies, the buyer's pick), the buyer's picks and when they last changed (#2607), total, message, the sale it became |
+| `get_proposal` | no | one proposal: contact, Direct platform, lots (lot number, offer, title, state, price, copies, the buyer's pick), the buyer's picks and when they last changed (#2607), total, message with its `language` — or in the `language` asked for (#2609) — the sale it became |
 | `create_proposal` | yes | *New proposal* for a contact named exactly |
 | `add_proposal_lots` | yes | *Add offers…* — open Direct offers by number or id |
 | `make_proposal_lots` | yes | *New lots…* — copies into new Direct offers, `each` or `together` |
@@ -1264,7 +1264,8 @@ transaction, so a sale the agent records waits for the collector's *Confirm* (#1
 added to — exactly as `sell_offer`'s does. `countProposals` was added beside the list for `total`,
 the two sharing `proposalListWhere`.
 
-**Six things are decisions rather than plumbing** (*four* until #2607 and #2608 added one each).
+**Six things are decisions rather than plumbing** (*four* until #2607 and #2608 added one each;
+#2609 widened the message's rather than adding one).
 
 - **A lot is named by its lot number** — the number the buyer's photos, document and message carry
   (#2288), so *I'll take 2 and 5* is sent as said. An offer not yet a lot is named by its offer
@@ -1276,6 +1277,16 @@ the two sharing `proposalListWhere`.
   buyer's language (#2603), so `get_proposal` carries it, null without a template in that language
   (#1692). **Reading it does not mark the
   proposal sent**, as copying it in the app does: handing it over is the collector's act.
+  **Nor does asking for it in another language change the contact's** (#2609, settled with the
+  collector on 2026-11-21 that what makes sense of #2603's language choice is covered here too):
+  `get_proposal`'s optional `language` renders the message — titles included — in that language
+  through `readProposalMessage(…, language)`, where the card's selector (`setProposalLanguage`)
+  would save it on the contact. The record carries `language`, the one the message is in, and
+  `languages`, the collection's (`getCollectionLanguageChoices`). A language asked for by name is
+  never silently empty: one the collection does not use, or one Direct has no template in, is
+  `ProposalMessageLanguageError` → `invalid_request` with the reason, while the buyer's own language
+  with no template still reads as `message: null`. The contact's language is `get_contact`'s
+  (#2610/#2611); setting it is `update_contact`'s (#2611).
 - **Writes commit at once, as every API write does** — also settled on 2026-11-01. #2303 proposed a
   preview before each commit; nothing on this surface works that way but `preview_stamp_size_apply`,
   and the sale a conversion records carries the *to review* marker instead.
