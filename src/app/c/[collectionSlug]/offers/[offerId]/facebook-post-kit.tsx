@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import type { FacebookKitLot, FacebookOfferKit } from "@/lib/facebook-auctions";
-import { facebookLotPhotoFileName, hasFacebookPostGoneUp, isFacebookLotLeftOut } from "@/lib/facebook-post-rules";
+import { hasFacebookPostGoneUp, isFacebookLotLeftOut } from "@/lib/facebook-post-rules";
+import { facebookPostPhotoFiles } from "@/lib/facebook-post-publish-rules";
 import {
   FACEBOOK_MULTI_LOT_LAYOUT_LABEL,
   FACEBOOK_MULTI_LOT_LAYOUTS,
@@ -452,41 +453,22 @@ function PostLots({
   // its lot. A lot whose photos are still loading — or, captioned, still being drawn (#1861) — joins the
   // run once they are in.
   const postPhotos = useMemo(() => {
-    const photos: PostPhotoEntry[] = [];
     const photoBase = `/api/collections/${collectionId}/photos/`;
-    lots.forEach((lot, index) => {
-      // A lot sold or withdrawn before the post went up puts nothing up (#2560).
-      if (isFacebookLotLeftOut(lot)) return;
-      const lotNo = lot.lotNo ?? index + 1;
-      if (captioned) {
-        const stored = lotPhotos?.find((l) => l.offerId === lot.offerId);
-        if (stored?.state.status !== "ready") return;
-        const src = `${photoBase}${stored.state.photoId}/full`;
-        photos.push({
-          key: lot.offerId,
-          src,
-          label: `Lot ${stored.lotNo}`,
-          name: `lot ${stored.lotNo}'s photo`,
-          href: `${src}?download=${encodeURIComponent(stored.fileName)}`,
-          fileName: stored.fileName,
-        });
-        return;
-      }
-      const images = textPhotos?.find((l) => l.offerId === lot.offerId)?.images ?? [];
-      images.forEach((image, i) => {
-        const fileName = facebookLotPhotoFileName(lotNo, image.fileName);
-        const of = images.length > 1 ? ` ${i + 1}` : "";
-        photos.push({
-          key: `${lot.offerId}:${image.photoId}`,
-          src: `${photoBase}${image.photoId}/full`,
-          label: images.length > 1 ? `Lot ${lotNo} · photo ${i + 1} of ${images.length}` : `Lot ${lotNo}`,
-          name: `lot ${lotNo}'s photo${of}`,
-          href: `${photoBase}${image.photoId}/full?download=${encodeURIComponent(fileName)}`,
-          fileName,
-        });
-      });
+    const photos: FacebookPostPhotos | undefined = captioned
+      ? lotPhotos && { layout: "captions", lots: lotPhotos }
+      : textPhotos && { layout: "text", lots: textPhotos };
+    return facebookPostPhotoFiles(lots, photos).map((file): PostPhotoEntry => {
+      const src = `${photoBase}${file.photoId}/full`;
+      const of = file.of > 1 ? ` ${file.index}` : "";
+      return {
+        key: file.key,
+        src,
+        label: file.of > 1 ? `Lot ${file.lotNo} · photo ${file.index} of ${file.of}` : `Lot ${file.lotNo}`,
+        name: `lot ${file.lotNo}'s photo${of}`,
+        href: `${src}?download=${encodeURIComponent(file.fileName)}`,
+        fileName: file.fileName,
+      };
     });
-    return photos;
   }, [lots, captioned, lotPhotos, textPhotos, collectionId]);
 
   function photo(key: string) {

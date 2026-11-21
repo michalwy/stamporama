@@ -12,7 +12,6 @@ import {
   facebookPostStage,
   hasFacebookPostGoneUp,
   isFacebookLotClosed,
-  isFacebookLotLeftOut,
 } from "@/lib/facebook-post-rules";
 import type { FacebookKitLot } from "@/lib/facebook-auctions";
 import { canPreviewFacebookPost } from "@/lib/facebook-post-preview-rules";
@@ -22,6 +21,7 @@ import { lotGroupName } from "@/lib/offer-lot-group-rules";
 import { facebookLotsInView, isFacebookLotForSale } from "@/lib/facebook-post-ui-state";
 import { isAuctionListing, isTerminalState, manualTransitions, OFFER_LISTING_TYPE_LABEL } from "@/lib/offer-rules";
 import { isPhotoRunBlocker } from "@/lib/offer-photo-readiness";
+import { facebookPostPublishedMessage, facebookPostPublishVia } from "@/lib/facebook-post-publish-rules";
 import { Icon } from "@/app/icons";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { PinToSidebarButton } from "@/app/c/[collectionSlug]/shared/pin-to-sidebar-button";
@@ -65,7 +65,7 @@ import { useFacebookPostStillForSale } from "./post-ui-state";
 import { PostPreviewDialog } from "./post-preview-dialog";
 import { PostPriceTotalsBar } from "./post-price-totals-bar";
 import { NewProposalDialog } from "../../proposals/proposal-parts";
-import { isProposalOpen, postProposalPublishWarning, PROPOSAL_STATUS_LABEL } from "@/lib/proposal-rules";
+import { isProposalOpen, postProposalPublishConfirm, PROPOSAL_STATUS_LABEL } from "@/lib/proposal-rules";
 import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
 import type { CollectionAreaData } from "@/lib/areas";
 import type { LocationData } from "@/lib/locations";
@@ -353,26 +353,14 @@ export function FacebookPostPanel({
   // closing-time question reads the post's pending auctions (#1779).
   function publish(url: string, target: PublishTarget, endsAt?: string) {
     const approving = dialog.kind === "publish" && dialog.approving;
-    // What goes up is the lots not sold before (#2560); the post is asked through one of them.
-    const goingUp = lots.filter((l) => !isFacebookLotLeftOut(l));
-    const via = approving && pendingLot ? pendingLot.offerId : (goingUp[0] ?? lots[0]).offerId;
+    const via = facebookPostPublishVia(lots, approving);
+    if (!via) return;
     run(
       async () => {
         const { publishOfferAction } = await import("@/app/actions/offers");
         return publishOfferAction(via, url, target, endsAt);
       },
-      // A lot sold or withdrawn while the post waited stays as it is (#2290).
-      approving
-        ? lots.some((l) => isFacebookLotClosed(l.state))
-          ? `Post #${postNo} approved — the lots that were waiting are up`
-          : `Post #${postNo} approved — all its lots are up`
-        : target === "pending"
-          ? `Post #${postNo} submitted — waiting for the group's approval`
-          : goingUp.length < lots.length
-            ? `Post #${postNo} is up — ${goingUp.length} of its ${lots.length} lots active, the sold ones left out`
-            : lots.length > 1
-              ? `Post #${postNo} is up — all ${lots.length} lots active`
-              : `Post #${postNo} is up`
+      facebookPostPublishedMessage(postNo, lots, { approving, target })
     );
   }
 
@@ -1013,7 +1001,7 @@ export function FacebookPostPanel({
       {dialog.kind === "publishWarning" && openProposal && (
         <ConfirmDialog
           title={`Publish post #${postNo}`}
-          message={`${postProposalPublishWarning(openProposal)} The proposal stays open: the buyer can still take whatever is unsold, and a lot sold here shows as no longer available on their page.`}
+          message={postProposalPublishConfirm(openProposal)}
           actionLabel="Publish anyway…"
           pendingLabel="Publishing…"
           variant="primary"

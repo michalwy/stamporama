@@ -269,9 +269,45 @@ desktop-only.
   post screen shows it — a captioned post's one drawn photo, else the first of its upload set
   (`phonePostLotPhotoId`). **Its price** is the desk post screen's `facebookLotPrice`: *Start* until a
   bid is recorded, then *Bid*; a quick buy's *Price*. A post of one numbers its lot 1.
-- **The screen only reads.** A tap on a lot opens its phone offer screen (`phoneOfferPath`), where the
-  bid (#2010), *Sell* (#2009) and *Withdraw* (#2008) already are. #2629–#2632 add the post's own moves
-  here. A proposal made from the post links to `phoneProposalPath` — #2625's screen.
+- **A tap on a lot opens its phone offer screen** (`phoneOfferPath`), where the bid (#2010), *Sell*
+  (#2009) and *Withdraw* (#2008) already are. The post's own moves are added here: publishing
+  (#2629, below), the rest by #2630–#2632. A proposal made from the post links to `phoneProposalPath` —
+  #2625's screen.
+
+## Publishing a Facebook post (#2629)
+
+- **The post goes up from the phone** (settled with the collector on 2026-11-21), since the Facebook
+  app on the phone is where it is posted. `PhonePostPublishing` (`phone/posts/[postNo]/phone-post-publishing.tsx`)
+  is above the lots while `facebookPostMoves(kit.lots).activate` (*Publish*), and while `approve` or
+  `reject` (*Waiting for the group's approval*). `getPhonePost` now hands the screen the desk's
+  `kit` and `photos` whole — the moves are read off the kit's lots as the desk reads them.
+- **Nothing is written or drawn again for the phone.** *Copy text* is `renderFacebookKitPost(kit)` —
+  the desk kit's render, at the tap, so `{closesAt}` is in the phone's zone (#490) — written through
+  `writeClipboardText` (`shared/clipboard.ts`, which the desk's `CopyButton` now writes through too):
+  HTML for Facebook's editor beside the plain text. A captioned post's lots each get *Copy caption of
+  lot N* under their row (the collector's choice, 2026-11-21), the caption the desk kit gives that lot.
+- **Photos are separate pictures, not the ZIP** (the issue's decision, confirmed by the collector on
+  2026-11-21): the Facebook app takes pictures from the gallery or the share menu. Which files, in what
+  order and under what names is `facebookPostPhotoFiles` (`facebook-post-publish-rules.ts`, pure) —
+  the list the desk kit's lightbox and one-photo downloads were rewired to, the ZIP's names
+  (`lot-NN-…`). The phone reads each photo's `full` bytes in parallel and keeps them for a second tap:
+  **Share photos** is `navigator.share({ files })`, offered only where `navigator.canShare` exists,
+  and says *tap again* on `NotAllowedError` — a browser opens the share menu only straight after a tap,
+  and the reads may outlast it; **Save photos** clicks a download per file from blob URLs, 400 ms
+  apart, so they land in lot order. Both wait while `facebookPostPhotosHeld` names lots — a captioned
+  lot's photo drawing or failed (the ZIP's `lotPhotosNotReady`), or a lot's own photos being made
+  again (`lotPhotosDrawing`, what holds the desk's *Publish…*, #2114) — and the page is read again
+  every 3 s meanwhile (`router.refresh()`); the server page kicks the photo worker when a read finds
+  photos drawing, as the desk's `lot-photos` route does.
+- **The moves are the desk's.** *Published* / *Submitted for approval* is `publishOfferAction` through
+  `facebookPostPublishVia` with the dialog's *Waiting for approval* tick (`canWait` = `moves.submit`,
+  a `pending_posts` link ticking it, #1779); *Approved* is the same action from a pending lot, the link
+  starting on `facebookPostLink`, asking the closing time through `useApprovalEndsAt` — the dialog's
+  own hook, exported from `activate-offer-dialog.tsx` with `publishLinkLabel`, `publishLinkHint` and
+  `closingHint`; *Rejected — back to Ready* is `setOfferStateAction(…, "ready")`, confirmed in the
+  desk's words. The toast is `facebookPostPublishedMessage`, shared with the desk. While a proposal
+  made from the post is open, *Published* asks first with `postProposalPublishConfirm` (#2602), the
+  desk's sentence. Inline on the screen, not the desk's dialog, as the phone's other moves.
 
 ## Start a purchase (#2006)
 
@@ -389,8 +425,9 @@ The first step, each its own issue (ADR-0072 §5):
 | Facebook posts: list, a post's screen with all its lots | #2626 |
 | Proposals: list, proposal screen, share to the buyer | #2625 |
 | Proposals: convert to a sale, decline, reopen | #2627 |
+| Publishing a Facebook post: copy text and captions, share or save photos, paste the link, approve | #2629 |
 
 **Browsing is read only** except starting a purchase (#2006, above) and its photos (#2011). **Stays at the desk**: preparing,
-editing and publishing offers; intake, lots and the cost split; everything not in the table.
+editing and publishing offers — bar a Facebook post's publishing (#2629); intake, lots and the cost split; everything not in the table.
 **Rejected for now**: recognising a stamp from a photo (2026-10-17). A new phone screen is a decision
 of its own and is added to this table.

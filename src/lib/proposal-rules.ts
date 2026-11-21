@@ -512,6 +512,12 @@ export function postProposalPublishWarning(facts: { proposalNo: number; contactN
   return `Proposal #${facts.proposalNo} for ${facts.contactName} is still open — publish anyway?`;
 }
 
+/** What publishing a post asks while a proposal made from it is open (#2602), at the desk and on the
+ *  phone (#2629): the warning, and what becomes of the proposal. */
+export function postProposalPublishConfirm(facts: { proposalNo: number; contactName: string }): string {
+  return `${postProposalPublishWarning(facts)} The proposal stays open: the buyer can still take whatever is unsold, and a lot sold here shows as no longer available on their page.`;
+}
+
 /** Read a proposal's number off its address (`/offers/proposals/4`), or undefined. */
 export function parseProposalNo(raw: string): number | undefined {
   if (!/^\d+$/.test(raw)) return undefined;

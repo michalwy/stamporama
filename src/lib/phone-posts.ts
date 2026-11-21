@@ -1,6 +1,6 @@
 import "server-only";
-import { getFacebookPostKit } from "./facebook-auctions";
-import { readFacebookPostPhotos } from "./facebook-lot-photos";
+import { getFacebookPostKit, type FacebookOfferKit } from "./facebook-auctions";
+import { readFacebookPostPhotos, type FacebookPostPhotos } from "./facebook-lot-photos";
 import { facebookPostAuctionsEnd } from "./facebook-post-list-figures";
 import { facebookPostStage, type FacebookPostStage } from "./facebook-post-rules";
 import { findFacebookPostId, readPostProposal, type FacebookPostProposal } from "./facebook-posts";
@@ -10,7 +10,9 @@ import { phonePostLots, type PhonePostLot } from "./phone-post-view";
 /**
  * A Facebook post on the phone (#2626, ADR-0072): its group, stage and closing time, every lot, and the
  * proposal made from it. Read as the desk's post screen reads it — the post's kit, its photos and its
- * proposal — taking less of it: none of the texts, translations or titles the desk prepares a post with.
+ * proposal — taking less of it: none of the translations or titles the desk prepares a post with. The
+ * kit and the photos go to the screen whole, since publishing (#2629) copies the post's text and takes
+ * its photos exactly as the desk's kit gives them.
  */
 export interface PhonePost {
   postId: string;
@@ -26,6 +28,11 @@ export interface PhonePost {
   lots: PhonePostLot[];
   /** The proposal made from the post (#2602) — the open one, else the latest — or null. */
   proposal: FacebookPostProposal | null;
+  /** The post's kit, as the desk's post screen reads it (#2629): what the text and captions are rendered
+   *  from — in the browser, for the collector's zone (#490) — and the lots the post's moves are read off. */
+  kit: FacebookOfferKit;
+  /** The lots' photos, as the desk's post screen reads them (#2222): what the phone shares or saves. */
+  photos: FacebookPostPhotos;
 }
 
 /** The owner's post numbered `postNo` in this collection, or null when there is none. */
@@ -58,5 +65,7 @@ export async function getPhonePost(ownerId: string, collectionId: string, postNo
         : null,
     lots: phonePostLots(kit.lots, photos),
     proposal,
+    kit,
+    photos,
   };
 }

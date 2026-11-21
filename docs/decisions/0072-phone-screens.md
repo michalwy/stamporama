@@ -89,11 +89,15 @@ guide's phone page states the requirement.
   winner or withdrawing.
 - **#2625** (added 2026-11-21) — proposals: a list and a proposal's screen, and sending one to its
   buyer through the phone's share menu.
+- **#2629** (added 2026-11-21) — publishing a Facebook post: its text and captions copied, its photos
+  handed to the share menu or saved in lot order, its link pasted; a post waiting for the group's
+  approval approved or rejected.
 
 **#2002** is the shell all of them stand on: the path, the manifest and icon, the phone frame, the
 links both ways and a sign-in screen usable at phone width.
 
-**Stays at the desk:** preparing, editing and publishing offers; intake, lots and the cost split;
+**Stays at the desk:** preparing, editing and publishing offers — bar a Facebook post's publishing
+(#2629, 2026-11-21); intake, lots and the cost split;
 everything not listed above. **Rejected for now:** recognising a stamp from a photo (2026-10-17) — it
 comes back only if the collector raises it.
 

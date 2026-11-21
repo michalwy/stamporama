@@ -26,6 +26,7 @@ import {
   proposalSaleTotals,
   isPostProposalLotPlanEmpty,
   postProposalLotPlan,
+  postProposalPublishConfirm,
   postProposalPublishWarning,
   postProposalRefusal,
   postProposalSentRefusal,
@@ -370,6 +371,11 @@ describe("a proposal made from a Facebook post (#2602)", () => {
     const proposal = { proposalNo: 4, contactName: "Jan Kowalski" };
     assert.match(postProposalSentRefusal(proposal), /Proposal #4 for Jan Kowalski .* has been sent/);
     assert.equal(postProposalPublishWarning(proposal), "Proposal #4 for Jan Kowalski is still open — publish anyway?");
+    // The desk's dialog and the phone (#2629) ask the same: the warning, then what becomes of the proposal.
+    assert.equal(
+      postProposalPublishConfirm(proposal),
+      "Proposal #4 for Jan Kowalski is still open — publish anyway? The proposal stays open: the buyer can still take whatever is unsold, and a lot sold here shows as no longer available on their page."
+    );
   });
 });
 

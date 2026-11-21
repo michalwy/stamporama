@@ -126,18 +126,10 @@ export function ActivateOfferDialog({
         ? "pending"
         : initialTarget
   );
-  const closing = useApprovalClosing(approving ? offerId : undefined);
-  const [endsAt, setEndsAt] = useState<string | null>(null);
-  // The field starts on the proposal, else on the closing time as written, once both are known.
-  const proposal =
-    closing.value && closing.value.auctionDays !== null
-      ? toLocalInputValue(
-          facebookDefaultEndsAt(new Date(), closing.value.auctionDays, closing.value.closingTime)
-        )
-      : "";
-  const written = toLocalInputValue(closing.value?.endsAt ?? null);
-  const endsAtValue = endsAt ?? (proposal || written);
-  const confirm = () => onConfirm(url, target, closing.value ? fromLocalInputValue(endsAtValue) : undefined);
+  const { closing, proposal, written, endsAtValue, setEndsAt, endsAtAnswer } = useApprovalEndsAt(
+    approving ? offerId : undefined
+  );
+  const confirm = () => onConfirm(url, target, endsAtAnswer());
   const busy = isPending || closing.loading;
   const lots = facebookLots ?? 0;
   const pending = target === "pending";
@@ -176,21 +168,8 @@ export function ActivateOfferDialog({
     );
   }
 
-  let label: string;
-  if (pending) label = lots > 0 ? "Pending post link — the post's link (optional)" : "Pending post link (optional)";
-  else if (approving) label = lots > 0 ? "Final link — the post's link (optional)" : "Final listing URL (optional)";
-  else label = lots > 0 ? "Listing URL — the post's link (optional)" : "Listing URL (optional)";
-
-  let hint: string;
-  if (approving) {
-    hint = "Starts from the pending post's link — replace it if the approved listing has another.";
-  } else if (pending) {
-    hint = "The link to the post waiting for approval. Approving the offer later asks for the final one.";
-  } else if (lots > 1) {
-    hint = "Every lot without a link of its own gets this one. Leave it blank if you have none yet.";
-  } else {
-    hint = "Paste the link the platform gave you. Leave it blank if there is none yet — you can add it from the offer later.";
-  }
+  const label = publishLinkLabel(lots, pending, approving);
+  const hint = publishLinkHint(lots, pending, approving);
 
   let action: string;
   if (approving) action = isPending ? "Approving…" : "Approve";
@@ -306,13 +285,55 @@ export function ActivateOfferDialog({
   );
 }
 
+/** The link field's label while publishing (#322), submitting (#1778) or approving — `lots` being the
+ *  Facebook post's lot count, 0 off Facebook. Shared with the post's phone screen (#2629). */
+export function publishLinkLabel(lots: number, pending: boolean, approving: boolean): string {
+  if (pending) return lots > 0 ? "Pending post link — the post's link (optional)" : "Pending post link (optional)";
+  if (approving) return lots > 0 ? "Final link — the post's link (optional)" : "Final listing URL (optional)";
+  return lots > 0 ? "Listing URL — the post's link (optional)" : "Listing URL (optional)";
+}
+
+/** The line under the link field, as {@link publishLinkLabel}. */
+export function publishLinkHint(lots: number, pending: boolean, approving: boolean): string {
+  if (approving) return "Starts from the pending post's link — replace it if the approved listing has another.";
+  if (pending) return "The link to the post waiting for approval. Approving the offer later asks for the final one.";
+  if (lots > 1) return "Every lot without a link of its own gets this one. Leave it blank if you have none yet.";
+  return "Paste the link the platform gave you. Leave it blank if there is none yet — you can add it from the offer later.";
+}
+
 /** One line under the closing time: what the post said, and what today's proposal is counted from. */
-function closingHint(closing: FacebookApprovalClosing): string {
+export function closingHint(closing: FacebookApprovalClosing): string {
   const posted = closing.endsAt ? `Posted to close ${formatInstant(closing.endsAt)}.` : "Posted with no closing time.";
   if (closing.auctionDays === null) return `${posted} The group states no auction length, so nothing is proposed.`;
   const days = `${closing.auctionDays} ${closing.auctionDays === 1 ? "day" : "days"}`;
   const at = closing.closingTime ? ` at ${closing.closingTime}` : "";
   return `${posted} Proposed: the group's ${days} from today${at}.`;
+}
+
+/**
+ * The closing-time question of an approval (#1779), as the field holds it: what was asked, the
+ * proposal counted from today and the time as posted (`datetime-local` values, "" where there is none),
+ * the field's value — starting on the proposal, else on the time as posted — and the answer to send:
+ * an ISO instant, "" for none, or undefined when nothing was asked. Shared with the post's phone
+ * screen (#2629), so the phone asks exactly what the dialog asks.
+ */
+export function useApprovalEndsAt(offerId: string | undefined) {
+  const closing = useApprovalClosing(offerId);
+  const [endsAt, setEndsAt] = useState<string | null>(null);
+  const proposal =
+    closing.value && closing.value.auctionDays !== null
+      ? toLocalInputValue(facebookDefaultEndsAt(new Date(), closing.value.auctionDays, closing.value.closingTime))
+      : "";
+  const written = toLocalInputValue(closing.value?.endsAt ?? null);
+  const endsAtValue = endsAt ?? (proposal || written);
+  return {
+    closing,
+    proposal,
+    written,
+    endsAtValue,
+    setEndsAt,
+    endsAtAnswer: (): string | undefined => (closing.value ? fromLocalInputValue(endsAtValue) : undefined),
+  };
 }
 
 /**
