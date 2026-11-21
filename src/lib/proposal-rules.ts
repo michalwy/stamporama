@@ -299,6 +299,76 @@ export function declineProposalMessage(proposalNo: number, post: { postNo: numbe
     : `Proposal #${proposalNo} is closed as declined, and every lot still open is withdrawn. The copies stay in your inventory. This cannot be undone.`;
 }
 
+/** Why a proposal cannot be deleted (#2641), or null when it can: any but a Sold one — that one is the
+ *  record of how its sale came about. */
+export function proposalDeleteRefusal(status: ProposalStatus): string | null {
+  return status === "sold"
+    ? "A sold proposal cannot be deleted — it is the record of how its sale came about."
+    : null;
+}
+
+/** What *Delete proposal…* weighs before it deletes (#2641). */
+export interface ProposalDeletion {
+  proposalNo: number;
+  contactName: string;
+  status: ProposalStatus;
+  /** The lots deleted with it — none for a proposal made from a post. */
+  lotCount: number;
+  /** Lots with a sold set: they stay with their sale and no longer name the proposal. */
+  soldLotCount: number;
+  /** The post it was made from (#2602), whose lots stay in it, and how many they are. */
+  post: { postNo: number; lotCount: number } | null;
+  /** Whether a live link to it has been made (#2288) — it stops working with the proposal. */
+  hasLink: boolean;
+}
+
+function lotsWord(n: number): string {
+  return n === 1 ? "lot" : "lots";
+}
+
+/** The confirmation of *Delete proposal…* (#2641), a paragraph each: what goes, what stays, and — for
+ *  a proposal sent or with a live link — that the buyer's link stops working. */
+export function proposalDeletionText(d: ProposalDeletion): string[] {
+  const name = `Proposal #${d.proposalNo} for ${d.contactName}`;
+  const lines: string[] = [];
+  if (d.post) {
+    lines.push(
+      d.post.lotCount > 0
+        ? `This permanently deletes ${name}. Its ${d.post.lotCount} ${lotsWord(d.post.lotCount)} stay in post #${d.post.postNo} as they are, no longer in a proposal.`
+        : `This permanently deletes ${name}.`
+    );
+  } else if (d.lotCount > 0) {
+    lines.push(
+      `This permanently deletes ${name} and ${d.lotCount === 1 ? "its lot" : `all ${d.lotCount} of its lots`} — the offers, with their sets. The copies stay in your inventory and can go into a new offer.`
+    );
+  } else {
+    lines.push(`This permanently deletes ${name}.`);
+  }
+  if (d.soldLotCount > 0) {
+    lines.push(
+      d.soldLotCount === 1
+        ? "Its sold lot is kept with its sale, no longer in a proposal."
+        : `Its ${d.soldLotCount} sold lots are kept with their sales, no longer in a proposal.`
+    );
+  }
+  if (d.status === "sent" || d.hasLink) {
+    lines.push(
+      d.status === "sent"
+        ? "It was sent to the buyer: their live link stops working and says the offer is no longer available."
+        : "The buyer's live link stops working and says the offer is no longer available."
+    );
+  }
+  lines.push("This cannot be undone.");
+  return lines;
+}
+
+/** The toast once a proposal is gone (#2641). */
+export function deletedProposalMessage(d: { proposalNo: number; deletedLots: number }): string {
+  return d.deletedLots === 0
+    ? `Proposal #${d.proposalNo} deleted`
+    : `Proposal #${d.proposalNo} deleted with ${d.deletedLots === 1 ? "its lot" : `its ${d.deletedLots} lots`}`;
+}
+
 /** Why a lot cannot be ticked in *Convert to sale…* (#2336), said on its greyed row, or null when it
  *  can: sold already, withdrawn, or with every set's copies gone elsewhere. */
 export function proposalSaleLotNote(state: OfferState, setsToSell: number): string | null {

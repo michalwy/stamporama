@@ -9,7 +9,9 @@ import {
   convertProposalToSale,
   createProposal,
   createProposalFromPost,
+  deleteProposal,
   makeProposalLots,
+  readProposalDeletion,
   moveProposal,
   removeProposalLot,
   type ProposalNewLotsResult,
@@ -18,7 +20,7 @@ import {
 } from "@/lib/proposals";
 import { createProposalShareToken, revokeProposalShareToken, setProposalLanguage } from "@/lib/proposal-handout";
 import { swapProposalLotCopy } from "@/lib/listed-elsewhere";
-import { parseProposalLotPacking, type ProposalMove } from "@/lib/proposal-rules";
+import { parseProposalLotPacking, type ProposalDeletion, type ProposalMove } from "@/lib/proposal-rules";
 
 // Proposals (#2287; ADR-0075). Every action reports a message rather than throwing: a refusal — a
 // closed proposal, an offer not on Direct — is the collector's to read.
@@ -109,6 +111,30 @@ export async function moveProposalAction(proposalId: string, move: ProposalMove)
     return { status: "success" };
   } catch (err) {
     return failure(err, MOVE_FAILED[move]);
+  }
+}
+
+/** What *Delete proposal…* shows before it deletes (#2641). */
+export async function readProposalDeletionAction(
+  proposalId: string
+): Promise<{ status: "success"; deletion: ProposalDeletion } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", deletion: await readProposalDeletion(session.user.id, proposalId) };
+  } catch (err) {
+    return failure(err, "Could not read the proposal.");
+  }
+}
+
+/** *Delete proposal…* (#2641): the proposal and its lots, except a sold lot or a post's. */
+export async function deleteProposalAction(
+  proposalId: string
+): Promise<{ status: "success"; proposalNo: number; deletedLots: number } | { status: "error"; message: string }> {
+  const session = await getSession();
+  try {
+    return { status: "success", ...(await deleteProposal(session.user.id, proposalId)) };
+  } catch (err) {
+    return failure(err, "Failed to delete the proposal.");
   }
 }
 

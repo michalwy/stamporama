@@ -269,7 +269,7 @@ describe("what a proposal's buyer is sent (#2288)", () => {
     await assert.rejects(createProposalShareToken(userId, proposalId), /closed/);
   });
 
-  it("ends the old address on a new link, every address on a withdrawal, and says closed once the proposal is gone", async () => {
+  it("ends the old address on a new link, every address on a withdrawal, and says no longer available once the proposal is gone", async () => {
     const { proposalId } = await proposalWith(["A"]);
     const first = await createProposalShareToken(userId, proposalId);
     const second = await createProposalShareToken(userId, proposalId);
@@ -282,7 +282,7 @@ describe("what a proposal's buyer is sent (#2288)", () => {
     await prisma.proposal.delete({ where: { id: proposalId } });
     const access = (await verifyProposalShareToken(third.token))!;
     assert.equal(access.proposalId, null);
-    assert.deepEqual(await readSharedProposalDocument(access), { standing: "closed", proposalNo: null, language: "pl" });
+    assert.deepEqual(await readSharedProposalDocument(access), { standing: "gone", language: "pl" });
 
     await assert.rejects(createProposalShareToken(otherUserId, (await proposalWith(["B"])).proposalId));
     assert.equal(await verifyProposalShareToken("stmpf_whatever"), null);

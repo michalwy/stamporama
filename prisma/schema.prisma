@@ -3166,6 +3166,9 @@ model FacebookPost {
 //
 // **Cascades with its contact**: a proposal is one person's, and a contact deleted takes the offers
 // made for them out of their proposals (the lots' `SetNull`), never the offers themselves.
+//
+// **Deleted by hand** (#2641, `deleteProposal`) — any but a Sold one — it takes its lots with it, as
+// deleting those offers would; a sold lot, and a post's lots (#2602), stay, no longer naming it.
 model Proposal {
   id           String    @id @default(cuid())
   collectionId String
@@ -3256,9 +3259,9 @@ model FacebookPostPreviewToken {
 // document — nothing else from the collection. One row per proposal; a new link replaces the row.
 //
 // **The link stays live** until the proposal closes: it follows the prices, and marks a lot no longer
-// available once it is withdrawn. Once the proposal is sold or declined — or deleted, which sets
-// `proposalId` null — the page says only that the offer is closed, in `language`, the proposal's
-// language as last read.
+// available once it is withdrawn. Once the proposal is sold or declined the page says only that the
+// offer is closed; once it is deleted, which sets `proposalId` null, that the offer is no longer
+// available (#2641) — in `language`, the proposal's language as last read.
 //
 // The hash resolves a request and the seal is for display (#681), with the same best-effort sealing.
 model ProposalShareToken {
@@ -5764,8 +5767,10 @@ model Offer {
   // offer is back in Ready; a repost takes it afresh. Shape: `FacebookFrozenLot`.
   facebookPostSnapshot Json?
   // The proposal this offer is a lot of (#2287; ADR-0075) — an offer prepared for one contact, on the
-  // Direct platform. Null on every other offer. `SetNull`: deleting a proposal leaves its lots as
-  // ordinary Direct offers, and deleting an offer simply takes it out of its proposal.
+  // Direct platform. Null on every other offer. `SetNull`: deleting a contact takes its proposals and
+  // leaves their lots as ordinary Direct offers, and deleting an offer simply takes it out of its
+  // proposal. Deleting a proposal by hand (#2641) deletes its lots itself, keeping only a sold lot and
+  // a post's, whose lot number and pick it clears.
   proposalId     String?
   // Its lot number in that proposal (#2288) — what the buyer is sent, the photos, the document and
   // the message alike, so *I'll take 2, 5 and 7* is ticked as said (#2289). The next free number on

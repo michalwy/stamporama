@@ -20,8 +20,9 @@ import { ProposalPicksDocument } from "./proposal-picks";
 //
 // **What is on it is the printable page's, and only that**: `readProposalDocument`'s read, drawn by the
 // same document. **It stays live** while the proposal is open — it follows the prices, and a lot
-// withdrawn is marked no longer available. Once the proposal is sold, declined or gone, the page says
-// only that the offer is closed, in the proposal's language.
+// withdrawn is marked no longer available. Once the proposal is sold or declined, the page says only
+// that the offer is closed, in the proposal's language — and once it is deleted (#2641), that the offer
+// is no longer available.
 //
 // **The buyer ticks the lots they want on it** (#2601), each tick saved at once — the one thing the
 // page writes, through its own route (`/api/p/[token]/picks`).
@@ -37,7 +38,8 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
   if (!access) return { title: "Offer", robots: ROBOTS };
   const shared = await readSharedProposalDocument(access);
   const language = shared.standing === "shown" ? shared.document.language : shared.language;
-  const proposalNo = shared.standing === "shown" ? shared.document.proposalNo : shared.proposalNo;
+  const proposalNo =
+    shared.standing === "shown" ? shared.document.proposalNo : shared.standing === "closed" ? shared.proposalNo : null;
   const word = proposalDocumentLabels(language).offer;
   return { title: proposalNo !== null ? `${word} #${proposalNo}` : word, robots: ROBOTS };
 }
@@ -71,8 +73,8 @@ export default async function ProposalSharePage({ params }: SharePageProps) {
     return (
       <Notice
         lang={proposalDocumentLabelLanguage(shared.language)}
-        heading={shared.proposalNo !== null ? `${labels.offer} #${shared.proposalNo}` : labels.offer}
-        message={labels.closed}
+        heading={shared.standing === "closed" ? `${labels.offer} #${shared.proposalNo}` : labels.offer}
+        message={shared.standing === "closed" ? labels.closed : labels.gone}
       />
     );
   }
