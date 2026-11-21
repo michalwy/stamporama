@@ -156,14 +156,25 @@ export function applySwaps(itemIds: readonly string[], swaps: ReadonlyMap<string
  */
 export function listedElsewhereMarker(copies: readonly ListedElsewhereCopy[]): string | null {
   if (copies.length === 0) return null;
+  return `${copies.length} on ${listedElsewherePlatforms(copies).join(", ")}`;
+}
+
+/** The platforms the copies are on, the one holding the most of them first, ties in the order met. */
+export function listedElsewherePlatforms(copies: readonly ListedElsewhereCopy[]): string[] {
   const counts = new Map<string, number>();
   for (const copy of copies) {
     for (const platform of new Set(copy.offers.map((offer) => offer.platformName))) {
       counts.set(platform, (counts.get(platform) ?? 0) + 1);
     }
   }
-  const platforms = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([platform]) => platform);
-  return `${copies.length} on ${platforms.join(", ")}`;
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([platform]) => platform);
+}
+
+/** *2*, *both*, *all 50* or *none* — how many of several listed copies can be swapped. */
+function swappableWord(swappable: number, of: number): string {
+  if (swappable === 0) return "none";
+  if (swappable < of) return `${swappable}`;
+  return swappable === 2 ? "both" : `all ${swappable}`;
 }
 
 /**
@@ -176,13 +187,21 @@ export function listedElsewhereSummary(copies: readonly ListedElsewhereCopy[], o
   if (copies.length === 1) {
     return `A copy in ${inOffers} is already in an open offer — ${swappable === 1 ? "it can be swapped for a copy listed nowhere" : NO_TWIN_SENTENCE}`;
   }
-  const swap =
-    swappable === 0
-      ? "none"
-      : swappable < copies.length
-        ? `${swappable}`
-        : swappable === 2
-          ? "both"
-          : `all ${swappable}`;
+  const swap = swappableWord(swappable, copies.length);
   return `${copies.length} copies in ${inOffers} are already in an open offer — ${swap} can be swapped for a copy listed nowhere`;
+}
+
+/**
+ * The copy pickers' one line (#2635) — *Compose a set*, *New lot of post*, *Add to offer*: how many of
+ * the picked copies are already in an open offer, on which platforms, and how many have a twin to swap
+ * in. Each copy's own row says the rest: its open offer on the row's chip (#2337), its twin and
+ * **Swap** beside it.
+ */
+export function listedElsewherePickSummary(copies: readonly ListedElsewhereCopy[]): string {
+  const swappable = copies.filter((copy) => copy.twin).length;
+  const on = `on ${listedElsewherePlatforms(copies).join(", ")}`;
+  if (copies.length === 1) {
+    return `A copy is already in an open offer, ${on} — ${swappable === 1 ? "it can be swapped for a copy listed nowhere" : NO_TWIN_SENTENCE}`;
+  }
+  return `${copies.length} copies are already in an open offer, ${on} — ${swappableWord(swappable, copies.length)} can be swapped for a copy listed nowhere`;
 }

@@ -38,7 +38,7 @@ import { languageLabel, normalizeLanguage } from "@/lib/languages";
 import type { OfferTitlePreview } from "@/lib/offers";
 import type { ItemListItem } from "@/lib/items";
 import { useComposableCopies, useListedElsewhere, useOfferCollisions } from "../use-offers-query";
-import { ListedElsewhereNote } from "../listed-elsewhere-note";
+import { ListedElsewherePickSummary, ListedElsewhereTwinChip } from "../listed-elsewhere-note";
 import { Icon } from "@/app/icons";
 import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
@@ -232,7 +232,14 @@ export function ComposeSetDialog({
   // Making new offers (#2339): the picked copies already in an open offer elsewhere, each with a twin
   // listed nowhere. A twin swapped in may sit outside the rail's area, so its row is kept here to be
   // handed over with the rest.
-  const { data: listedElsewhere = [] } = useListedElsewhere(collectionId, selectedIds, platformId, offerId === null);
+  const { data: listedEntries = [] } = useListedElsewhere(collectionId, selectedIds, platformId, offerId === null);
+  // Only the copies still ticked (#2635): the read keeps its last answer while a new one is asked, so a
+  // copy just swapped out or unticked leaves the summary and its row at once rather than a beat later.
+  const listedElsewhere = useMemo(
+    () => listedEntries.filter((entry) => selected.has(entry.itemId)),
+    [listedEntries, selected]
+  );
+  const listedById = useMemo(() => new Map(listedElsewhere.map((entry) => [entry.itemId, entry])), [listedElsewhere]);
   const [twinRows, setTwinRows] = useState<ReadonlyMap<string, ItemListItem>>(new Map());
   function swapCopies(pairs: { from: string; to: string }[]) {
     const next = new Set(selected);
@@ -399,6 +406,9 @@ export function ComposeSetDialog({
                 const checked = selected.has(item.id);
                 const primaryVendorId = item.areaId ? (primaryVendorByArea.get(item.areaId) ?? null) : null;
                 const vendorMap = vendorMapFor(item.areaId, item.issueId);
+                // A ticked copy already in an open offer (#2635): its twin and Swap beside the chip
+                // that names the offer.
+                const listed = checked ? listedById.get(item.id) : undefined;
                 return (
                   <div
                     key={item.id}
@@ -430,6 +440,9 @@ export function ComposeSetDialog({
                         readOnly
                         showCostBasis
                         ownOffers={ownOffers}
+                        trailingChips={
+                          listed ? <ListedElsewhereTwinChip copy={listed} onSwap={swapCopies} disabled={busy} /> : undefined
+                        }
                       />
                     </div>
                   </div>
@@ -442,7 +455,7 @@ export function ComposeSetDialog({
 
       {listedElsewhere.length > 0 && (
         <div style={{ padding: "0.5rem 1rem", borderTop: "1px solid var(--color-border)" }}>
-          <ListedElsewhereNote copies={listedElsewhere} onSwap={swapCopies} disabled={busy} />
+          <ListedElsewherePickSummary copies={listedElsewhere} onSwap={swapCopies} disabled={busy} />
         </div>
       )}
 
