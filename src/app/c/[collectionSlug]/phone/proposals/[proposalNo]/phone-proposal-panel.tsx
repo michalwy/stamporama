@@ -21,7 +21,9 @@ import { PHONE_TAP_TARGET, phoneButton, phoneRow } from "@/app/phone-screen";
 import { useToast } from "@/app/toast-provider";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import { useInvalidateOffers } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import { formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
 import {
+  BuyerPickedChip,
   LotPickChip,
   ProposalStatusChip,
   proposalTotalText,
@@ -77,6 +79,15 @@ export function PhoneProposalPanel({
         {proposal.sale && (
           <div style={META}>
             Sold as sale #{proposal.sale.saleNo} on {proposal.sale.platformName}
+          </div>
+        )}
+        {/* What the buyer ticked on the live page, timed from their last change — the desk's (#2628). */}
+        {proposal.buyerPicks && (
+          <div>
+            <BuyerPickedChip
+              count={proposal.buyerPicks.count}
+              suffix={proposal.buyerPicks.changedAt ? formatRelative(proposal.buyerPicks.changedAt, new Date()) : undefined}
+            />
           </div>
         )}
       </section>

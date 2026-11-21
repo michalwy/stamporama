@@ -4,8 +4,20 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { createOffer } from "../../src/lib/offers";
 import { updatePlatform } from "../../src/lib/platforms";
-import { addProposalLots, createProposal, getDirectPlatform, moveProposal } from "../../src/lib/proposals";
-import { createProposalShareToken, readProposalMessage, setProposalLanguage } from "../../src/lib/proposal-handout";
+import {
+  addProposalLots,
+  createProposal,
+  getDirectPlatform,
+  listProposalsPaginated,
+  moveProposal,
+} from "../../src/lib/proposals";
+import {
+  createProposalShareToken,
+  readProposalMessage,
+  saveProposalBuyerPick,
+  setProposalLanguage,
+  verifyProposalShareToken,
+} from "../../src/lib/proposal-handout";
 import { getPhoneProposal } from "../../src/lib/phone-proposals";
 import { secretKeyConfigured } from "../../src/lib/secret-box";
 
@@ -121,6 +133,32 @@ describe("a proposal on the phone (#2625)", () => {
     const { token } = await createProposalShareToken(userId, proposalId);
     const withLink = (await getPhoneProposal(userId, collectionId, proposalNo))!;
     assert.deepEqual(withLink.link, secretKeyConfigured() ? { token } : { unreadable: "unconfigured" });
+  });
+
+  it("shows the buyer's picks on the list and the screen, timed from their last change (#2628)", async () => {
+    const { proposalId, proposalNo } = await createProposal(userId, collectionId, buyerId);
+    for (const name of ["One", "Two", "Three", "Four"]) {
+      await addProposalLots(userId, proposalId, [(await lot(name, "5.00")).offerId]);
+    }
+    const unpicked = (await getPhoneProposal(userId, collectionId, proposalNo))!;
+    assert.equal(unpicked.buyerPicks, null);
+
+    const access = (await verifyProposalShareToken((await createProposalShareToken(userId, proposalId)).token))!;
+    await saveProposalBuyerPick(access, 1, true, new Date("2026-11-21T09:00:00Z"));
+    const last = new Date("2026-11-21T09:05:00Z");
+    await saveProposalBuyerPick(access, 4, true, last);
+
+    const { items } = await listProposalsPaginated(userId, collectionId);
+    const row = items.find((p) => p.proposalId === proposalId)!;
+    assert.equal(row.pickedLotCount, 2);
+    assert.equal(row.picksChangedAt, last.toISOString());
+
+    const phone = (await getPhoneProposal(userId, collectionId, proposalNo))!;
+    assert.deepEqual(phone.buyerPicks, { count: 2, changedAt: last.toISOString() });
+    assert.deepEqual(
+      phone.lots.filter((l) => l.pick === "picked").map((l) => l.lotNo),
+      [1, 4]
+    );
   });
 
   it("reads the message in the language chosen, saved on the contact", async () => {

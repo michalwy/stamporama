@@ -212,6 +212,9 @@ export interface ProposalListItem {
   openLotCount: number;
   /** The lots the buyer ticked on the live page (#2601), the ones since sold or withdrawn included. */
   pickedLotCount: number;
+  /** When the buyer last changed their ticks, ISO; null while they have changed none (#2628 — the
+   *  phone list's *Buyer picked 2 lots · 3 minutes ago*). */
+  picksChangedAt: string | null;
   /** The lots not withdrawn, summed at their prices; see `proposalTotal`. */
   total: string;
   unpriced: number;
@@ -246,6 +249,7 @@ const LIST_SELECT = {
   status: true,
   createdAt: true,
   sentAt: true,
+  buyerPicksChangedAt: true,
   contact: { select: { id: true, name: true } },
   lots: { select: { ...LOT_FIGURES_SELECT, proposalPickedAt: true } },
 } as const;
@@ -280,6 +284,7 @@ function toListItem(
     lotCount: row.lots.length,
     openLotCount: row.lots.filter((lot) => (OPEN_OFFER_STATES as readonly string[]).includes(lot.state)).length,
     pickedLotCount: row.lots.filter((lot) => lot.proposalPickedAt !== null).length,
+    picksChangedAt: row.buyerPicksChangedAt?.toISOString() ?? null,
     total,
     unpriced,
     currency: row.lots[0]?.currency ?? currency,

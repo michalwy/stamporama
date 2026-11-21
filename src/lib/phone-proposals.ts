@@ -30,6 +30,8 @@ export interface PhoneProposal {
   platformName: string;
   post: ProposalScreen["post"];
   sale: ProposalScreen["sale"];
+  /** What the buyer ticked on the live page and when they last changed it — the desk's (#2601, #2628). */
+  buyerPicks: ProposalScreen["buyerPicks"];
   lots: PhoneProposalLot[];
   /** The message, its language and the languages to choose from — null once the proposal is closed,
    *  when there is nothing left to send. */
@@ -72,6 +74,7 @@ export async function getPhoneProposal(
     platformName: screen.platform.name,
     post: screen.post,
     sale: screen.sale,
+    buyerPicks: screen.buyerPicks,
     lots: screen.lots.map((lot) => ({
       offerId: lot.offerId,
       offerNo: lot.offerNo,

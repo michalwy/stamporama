@@ -210,10 +210,15 @@ Tap a lot to open its offer screen, where you record bids and sell or withdraw i
 **Proposals** on the start screen lists your proposals, newest first: each one's number, the contact
 it is for, its state, how many lots it has and its total. It shows the **open** ones — Preparing and
 Sent — and the select at the top switches to **Every proposal**, the sold and declined ones included.
+Once the buyer has ticked lots on the live link, the proposal's row says so — *Buyer picked 2 lots ·
+3 minutes ago*, timed from their last change — as the desk's list does. The phone sends no
+notification: the list is where you see the picks come in.
 
-Tap a proposal to open it. Its screen shows the contact, the state and the total, and every lot with
-its number, picture, title, price and state — and *Picked by the buyer* on a lot the buyer ticked on
-the live link. A proposal made from a Facebook post names the post. Tap a lot to open its offer.
+Tap a proposal to open it. Its screen shows the contact, the state and the total, the same *Buyer
+picked …* line when the buyer has ticked lots, and every lot with its number, picture, title, price
+and state — and *Picked by the buyer* on a lot the buyer ticked on the live link (*Picked, no longer
+available* on one sold or withdrawn since). A proposal made from a Facebook post names the post. Tap a
+lot to open its offer.
 
 While the proposal is open, **For the buyer** sends it from the phone:
 
