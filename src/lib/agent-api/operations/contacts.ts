@@ -2,13 +2,20 @@ import "server-only";
 import { prisma } from "../../db";
 import {
   ContactFieldError,
+  ContactMergeError,
   ContactNameTakenError,
+  ContactNotEmptyError,
   createContact,
+  deleteEmptyContact,
   getContactListItem,
+  getContactMergePair,
+  mergeContacts,
   updateContact,
   type ContactCreateInput,
   type ContactData,
+  type ContactMergeCandidate,
 } from "../../contacts";
+import { mergedContactDetails } from "../../contact-merge-rules";
 import { COMMON_CURRENCIES } from "../../currencies";
 import { normalizeDecimalInput } from "../../decimal-input";
 import { normalizeFacebookProfileUrl } from "../../facebook-profile-rules";
@@ -23,16 +30,26 @@ import {
   CLEARABLE_CONTACT_FIELDS,
   CONTACT_FIELDS,
   CONTACT_ROLE_FLAGS,
+  agentFieldChanges,
   contactChangeNote,
   contactChanges,
+  contactDetails,
   contactFieldChanges,
+  contactHoldingsParts,
+  contactMergeMoves,
+  contactMergeMovesSentence,
+  contactMergeNote,
+  contactNotEmptyMessage,
   contactRecord,
   contactRow,
   parseContactRole,
   refuseSellerOnlyFields,
   roleFlags,
   sellsToCollector,
+  type AgentContactDetails,
+  type AgentContactFieldChange,
   type ContactFieldChanges,
+  type ContactMergeMoves,
   type ContactLogFacts,
   type ContactRoleFlags,
   type AgentContact,
@@ -197,13 +214,13 @@ export const findContactsOperation: Operation = {
 
 // ── get_contact ──────────────────────────────────────────────────────────────
 
-async function resolveContact(context: OperationContext, value: string): Promise<string> {
+async function resolveContact(context: OperationContext, value: string, parameter = "contact"): Promise<string> {
   const candidates = await prisma.contact.findMany({
     where: { collectionId: context.collectionId, collection: { ownerId: context.ownerId } },
     select: { id: true, name: true, fullName: true },
     orderBy: { name: "asc" },
   });
-  return resolveSeller(value, candidates, "contact", null);
+  return resolveSeller(value, candidates, parameter, null);
 }
 
 /** What the collector has done with the contact — the contact page's narrowing, as numbers. */
@@ -595,4 +612,219 @@ export const updateContactOperation: Operation = {
     description: "The contact as it now stands, as `get_contact` reads it.",
   },
   handler: async (context, params) => editContact(context, params),
+};
+
+// ── preview_contact_merge / merge_contacts / delete_contact (#2612) ──────────
+//
+// **A merge is the app's own `mergeContacts`**, *Merge with…*: everything filed under the other contact
+// moves to the one that remains, which keeps its name and details and takes the ones it lacks
+// (`contact-merge-rules.ts`), and the other is deleted. It cannot be undone, as in the app; the
+// remaining contact's conversation log gets the Assistant's note naming the contact merged away, what
+// moved and every field it took. The preview is the dialog's: the merged contact and the counts.
+//
+// **A delete takes only an empty contact** — nothing filed under it at all, conversation entries and
+// proposals included, which the app's delete would take along. A contact with history is refused
+// with what it holds and pointed at the merge, so no purchase, sale or proposal is lost with it.
+
+const MERGE_CONTACT_PARAMETER: ParameterSpec = {
+  name: "contact",
+  in: "path",
+  type: "string",
+  required: true,
+  description:
+    "The contact that **remains** — it keeps its name and details. Its id from `find_contacts`, or what they are filed under or their full name, exactly.",
+};
+
+function mergeOtherParameter(location: "query" | "body"): ParameterSpec {
+  return {
+    name: "other",
+    in: location,
+    type: "string",
+    required: true,
+    description:
+      "The contact merged **away** — everything filed under it moves to `contact`, and it is deleted. Its id from `find_contacts`, or what they are filed under or their full name, exactly.",
+  };
+}
+
+interface MergePair {
+  readonly remaining: ContactMergeCandidate;
+  readonly other: ContactMergeCandidate;
+}
+
+async function resolveMergePair(context: OperationContext, params: ParsedParams): Promise<MergePair> {
+  const remainingId = await resolveContact(context, requiredString(params, "contact"));
+  const otherId = await resolveContact(context, requiredString(params, "other"), "other");
+  if (remainingId === otherId) {
+    throw invalidRequest(`"contact" and "other" name the same contact (${remainingId}). A contact cannot be merged with itself.`);
+  }
+  try {
+    const pair = await getContactMergePair(context.ownerId, remainingId, otherId);
+    return { remaining: pair.contact, other: pair.other };
+  } catch (error) {
+    if (error instanceof ContactMergeError) throw invalidRequest(`${error.message} Nothing was merged.`);
+    throw error;
+  }
+}
+
+function contactRef(contact: ContactData): { id: string; name: string } {
+  return { id: contact.id, name: contact.name };
+}
+
+export interface AgentContactMergePreview {
+  readonly remaining: { readonly id: string; readonly name: string };
+  readonly other: { readonly id: string; readonly name: string };
+  readonly merged: AgentContactDetails;
+  readonly changes: readonly AgentContactFieldChange[];
+  readonly moves: ContactMergeMoves;
+  readonly summary: string;
+}
+
+export async function previewContactMerge(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<AgentContactMergePreview> {
+  const { remaining, other } = await resolveMergePair(context, params);
+  const merged = mergedContactDetails(remaining, other);
+  const moves = contactMergeMoves(other);
+  const moved = contactMergeMovesSentence(moves);
+  return {
+    remaining: contactRef(remaining),
+    other: contactRef(other),
+    merged: contactDetails(merged),
+    changes: agentFieldChanges(contactChanges(logFacts(remaining), merged)),
+    moves,
+    summary: `${other.name} merges into ${remaining.name}: ${moved === "nothing" ? "nothing moves" : `${moved} move`} to ${remaining.name}, and ${other.name} is deleted. This cannot be undone.`,
+  };
+}
+
+const MERGE_RULE =
+  "The contact that remains keeps its name and the details it has, takes each detail it lacks from the other, plays the roles of both, and keeps the other's notes under its own; the auction defaults and the free-extras terms are each taken as one set, from the other only when it has none of its own. Every purchase, sale, trade, proposal, auction sale, price observation, conversation entry and Facebook profile of the other moves to it, and the other is deleted.";
+
+export const previewContactMergeOperation: Operation = {
+  name: "preview_contact_merge",
+  method: "GET",
+  path: "/contacts/{contact}/merge",
+  description: `Say what \`merge_contacts\` would do, writing nothing — what the app's *Merge with…* dialog shows: the contact as it will be once merged, the details it gains, and how many records move. ${MERGE_RULE} Call it first and tell the collector before merging.`,
+  writes: false,
+  parameters: [MERGE_CONTACT_PARAMETER, mergeOtherParameter("query")],
+  result: {
+    kind: "object",
+    description:
+      "`remaining` and `other` (`id`, `name`). `merged`: the remaining contact's details once merged — the fields `get_contact` states, without the record. `changes`: each detail it gains or changes, `field` with `before` and `after`. `moves`: how many `purchases`, `sales`, `trades`, `proposals`, `auctionSales`, `priceObservations`, `conversationEntries` and `facebookProfiles` move from the other. `summary` says it in a sentence.",
+  },
+  handler: async (context, params) => previewContactMerge(context, params),
+};
+
+export async function mergeContactsFromParams(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<{ contact: AgentContact; mergedAway: { id: string; name: string }; moved: ContactMergeMoves }> {
+  const { remaining, other } = await resolveMergePair(context, params);
+  const moves = contactMergeMoves(other);
+  try {
+    await mergeContacts(context.ownerId, { remainingContactId: remaining.id, otherContactId: other.id });
+  } catch (error) {
+    if (error instanceof ContactMergeError) throw invalidRequest(`${error.message} Nothing was merged.`);
+    throw error;
+  }
+  // The note is the second transaction, as every contact write's is (#2611).
+  const after = await getContactListItem(context.ownerId, remaining.id);
+  if (after) {
+    const note = contactMergeNote(contactRef(other), moves, contactChanges(logFacts(remaining), logFacts(after)));
+    await writeAssistantEntries(context, remaining.id, [
+      { occurredAt: new Date(), channel: "other", direction: "note", summary: note.summary, quote: note.quote, url: null, saleId: null },
+    ]);
+  }
+  return {
+    contact: await readContactById(context, remaining.id),
+    mergedAway: contactRef(other),
+    moved: moves,
+  };
+}
+
+export const mergeContactsOperation: Operation = {
+  name: "merge_contacts",
+  method: "POST",
+  path: "/contacts/{contact}/merge",
+  description: `Merge two contacts that are the same person or firm — a buyer bidding from a second Facebook account, a contact made twice — exactly as the app's *Merge with…* does. ${MERGE_RULE} **It cannot be undone.** Run \`preview_contact_merge\` with the same two contacts first. The merge is noted in the remaining contact's conversation log as the Assistant's, naming the contact merged away, what moved and each detail taken.`,
+  writes: true,
+  parameters: [MERGE_CONTACT_PARAMETER, mergeOtherParameter("body")],
+  result: {
+    kind: "object",
+    description:
+      "`contact`: the remaining contact as `get_contact` now reads it. `mergedAway`: the deleted contact's `id` and `name`. `moved`: the counts `preview_contact_merge` states as `moves`.",
+  },
+  handler: async (context, params) => mergeContactsFromParams(context, params),
+};
+
+/** Everything filed under the contact, each record by what it is called by, newest first. */
+async function loadContactHoldings(collectionId: string, contactId: string) {
+  const [purchases, history, priceObservations] = await Promise.all([
+    // Every purchase naming it, a trade's incoming half included — each one keeps it from being deleted.
+    prisma.purchase.findMany({
+      where: { collectionId, contactId },
+      orderBy: [{ purchasedAt: "desc" }, { purchaseNo: "desc" }],
+      select: { purchaseNo: true },
+    }),
+    loadContactHistory(collectionId, contactId),
+    prisma.priceObservation.count({ where: { collectionId, auctionHouseId: contactId } }),
+  ]);
+  return {
+    purchases: purchases.map((row) => row.purchaseNo),
+    sales: history.sales,
+    trades: history.trades,
+    proposals: history.proposals,
+    auctionSales: history.auctionSales,
+    priceObservations,
+    conversationEntries: history.conversationEntries,
+  };
+}
+
+export async function deleteContactFromParams(
+  context: OperationContext,
+  params: ParsedParams
+): Promise<{ deleted: { id: string; name: string; fullName: string | null; facebookProfiles: string[] } }> {
+  const contactId = await resolveContact(context, requiredString(params, "contact"));
+  const contact = await getContactListItem(context.ownerId, contactId);
+  if (!contact || contact.collectionId !== context.collectionId) {
+    throw notFound(`No contact with id "${contactId}" is in this token's collection. Use \`find_contacts\` to find the right one.`);
+  }
+  const parts = contactHoldingsParts(await loadContactHoldings(context.collectionId, contactId));
+  if (parts.length > 0) throw invalidRequest(contactNotEmptyMessage(contact.name, parts));
+  try {
+    await deleteEmptyContact(context.ownerId, contactId);
+  } catch (error) {
+    // A record filed between the check above and the write: refused there, inside the transaction.
+    if (error instanceof ContactNotEmptyError) {
+      throw invalidRequest(`${contact.name} gained a record while being deleted, and is not deleted. Read them with \`get_contact\`. Nothing was deleted.`);
+    }
+    throw error;
+  }
+  return {
+    deleted: { id: contact.id, name: contact.name, fullName: contact.fullName, facebookProfiles: [...contact.facebookProfileUrls] },
+  };
+}
+
+export const deleteContactOperation: Operation = {
+  name: "delete_contact",
+  method: "DELETE",
+  path: "/contacts/{contact}",
+  description:
+    "Delete a contact made by mistake — **only one with nothing filed under it**: no purchase, sale, trade, proposal, auction sale, price observation or conversation entry. Its Facebook profiles go with it. A contact with any of those is refused with what it holds, by number: a contact with history is merged with `merge_contacts`, never deleted, so nothing filed under it is lost.",
+  writes: true,
+  parameters: [
+    {
+      name: "contact",
+      in: "path",
+      type: "string",
+      required: true,
+      description:
+        "The contact's id from `find_contacts`, or what they are filed under or their full name, exactly; a name that matches nobody is refused with the contacts close to it.",
+    },
+  ],
+  result: {
+    kind: "object",
+    description: "`deleted`: the contact as it was — `id`, `name`, `fullName` and the `facebookProfiles` that went with it.",
+  },
+  handler: async (context, params) => deleteContactFromParams(context, params),
 };

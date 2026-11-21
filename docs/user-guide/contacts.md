@@ -212,7 +212,9 @@ the contact has a blue left bar and a blue *← From the buyer* chip, one to the
 green *→ To the buyer* chip; a *Note* stays grey. Entries an AI assistant wrote are marked
 *Assistant*. When an assistant adds or changes a contact through the
 [Assistant API](agent-api.md), it leaves a *Note* here naming the details it changed, with each
-one's old and new value — so a wrong change can be found and put back in **Edit**.
+one's old and new value — so a wrong change can be found and put back in **Edit**. When it merges
+another contact into this one, the *Note* names the contact merged away, what moved and each detail
+this one took.
 
 ## Finding a contact
 
@@ -249,6 +251,9 @@ no undoing a merge.
 
 You can merge from either contact's page: if the one whose page you are on is the one that goes, you
 land on the merged contact's page.
+
+An AI assistant can merge two contacts the same way through the [Assistant API](agent-api.md), and
+can delete a contact that has nothing filed under it.
 
 ## Deleting
 

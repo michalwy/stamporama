@@ -702,6 +702,30 @@ export async function deleteContact(
   await deleteConversationAttachmentBytes(attachments);
 }
 
+/** Raised by {@link deleteEmptyContact} when something is filed under the contact after all. */
+export class ContactNotEmptyError extends Error {
+  constructor() {
+    super("The contact has records filed under it.");
+    this.name = "ContactNotEmptyError";
+  }
+}
+
+/**
+ * Delete a contact **only when nothing is filed under it** (#2612): no purchase, sale, trade, proposal,
+ * auction sale, price observation or conversation entry. The Agent API's delete — a contact with
+ * history is merged, never deleted, so no proposal or log entry goes with it as it does from the app.
+ * The check and the delete are one transaction; the Facebook profiles go with the contact.
+ */
+export async function deleteEmptyContact(ownerId: string, contactId: string): Promise<void> {
+  await assertContactOwner(ownerId, contactId);
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.contact.findUnique({ where: { id: contactId }, select: MERGE_COUNT_SELECT });
+    if (!row) return;
+    if (Object.values(row._count).some((count) => count > 0)) throw new ContactNotEmptyError();
+    await tx.contact.delete({ where: { id: contactId } });
+  });
+}
+
 // ── Merge (#2043) ────────────────────────────────────────────────────────────────────────────────
 //
 // The same person sometimes ends up as two contacts — a buyer bidding from two Facebook accounts, a
