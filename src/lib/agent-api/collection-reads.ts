@@ -559,6 +559,17 @@ export function stampDetail(
   });
 }
 
+/** An issue's catalogue value (#2659, #2661): the stamps on its checklists, **each counted once** —
+ *  the {@link AgentIssueDetail.requiredCount} union — priced as a checklist's total is. */
+export interface AgentIssueCatalogValue extends AgentMoney {
+  /** The app's `~`: some counted stamp is priced from its lowest variant (#238) or derived from the
+   *  single by a format multiplier (#343), so the figure is an estimate. */
+  readonly approximate?: boolean;
+  /** No counted stamp is priced on the current edition of the main catalogue, so the figure is
+   *  summed from older-edition prices. */
+  readonly olderEdition?: boolean;
+}
+
 export interface AgentIssueChecklist {
   readonly checklistId: string;
   readonly name: string;
@@ -591,6 +602,10 @@ export interface AgentIssueDetail {
    *  that checklist's size; with several it is not the sum, a stamp shared by two being counted
    *  once. */
   readonly requiredCount: number;
+  /** The issue's one catalogue value (#2661) — the figure the Issues list shows on its row. Present
+   *  with one checklist too, equal to that checklist's `catalogTotal`; absent with no checklist or no
+   *  price. */
+  readonly catalogValue?: AgentIssueCatalogValue;
   readonly checklists: AgentIssueChecklist[];
   readonly photoUrls: string[];
   readonly path: string;
@@ -603,6 +618,14 @@ export interface IssueDetailRow {
   readonly year: number | null;
   readonly memberCount: number;
   readonly requiredCount: number;
+  /** The union's total (#2659), `IssueListItem.priceTotal`. */
+  readonly priceTotal:
+    | (MoneyRow & {
+        readonly estimatedCount: number;
+        readonly derivedCount: number;
+        readonly usesOlderEdition: boolean;
+      })
+    | null;
   readonly checklists: readonly {
     readonly id: string;
     readonly name: string;
@@ -633,14 +656,21 @@ export function issueDetail(
     catalogues: extra.catalogues,
     memberCount: row.memberCount,
     requiredCount: row.requiredCount,
+    catalogValue: row.priceTotal
+      ? compact({
+          ...money(row.priceTotal),
+          approximate: row.priceTotal.estimatedCount > 0 || row.priceTotal.derivedCount > 0 || undefined,
+          olderEdition: row.priceTotal.usesOlderEdition || undefined,
+        })
+      : undefined,
     checklists: row.checklists.map((list) =>
       compact({
         checklistId: list.id,
         name: list.name,
         type: asChecklistKind(list.kind),
         stampCount: list.stampCount,
-        // **Per checklist, never over the union** (#531): summing the union would count a stamp on
-        // both a basic and a specialized list once, for a total answering neither question.
+        // **Each checklist's own**, beside the issue's `catalogValue` over the union (#2661): the
+        // two answer different questions, and neither is derived from the other.
         catalogTotal: list.priceTotal ? money(list.priceTotal) : undefined,
       })
     ),

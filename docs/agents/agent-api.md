@@ -626,6 +626,14 @@ holds them — `issue-stamp-match.ts`'s precedent, and for its reason. Four deci
   copies under its variants.
 - **A holdings row is leaner than a record.** A list is read twenty-five rows at a time and every
   field is paid for on each of them; the rest is one `get_copy` away.
+- **`get_issue` states the issue's catalogue value and each checklist's total, apart** (#2661).
+  `catalogValue` is `IssueListItem.priceTotal` (#2659) — the `requiredCount` union, each stamp once,
+  by the same `include_specialised` switch — present with one checklist too, so an agent reads one
+  field whatever the count; each checklist's `catalogTotal` is unchanged beside it. It carries the
+  row's two markers and not the counts behind them: `approximate` is the `~` (an umbrella priced from
+  its lowest variant, #238, or a format derived from the single, #343), `olderEdition` the
+  older-edition warning. Until #2661 the projection said *per checklist, never over the union*,
+  which was #531's position before #2659 reversed it.
 
 ### Two conventions this issue had to extend
 
@@ -3180,8 +3188,8 @@ spelling `update_issue` takes, `memberCount` and `requiredCount` the row's two c
 `heldCopies` with `heldByCondition` the copies held of any of its stamps —
 `countCopiesByStampAndCondition`, so *held* means what it means on every badge, folded per issue in the
 pure `heldByCondition`. A copy is linked to one stamp, so summing over an issue's members counts each
-copy once. Catalogue totals stay `get_issue`'s: they are per checklist and per condition, and a list
-row carrying them would spend an agent's context on figures it did not ask for.
+copy once. Catalogue totals stay `get_issue`'s: they are per checklist and per condition — and, since #2661,
+the issue's own over the union — and a list row carrying them would spend an agent's context on figures it did not ask for.
 
 **#2170 added what an assistant completing a catalogue still read off the screen.** Most of its
 refused writes came from stamps filed under an issue but numbered outside its declared range, which
