@@ -161,6 +161,9 @@ export interface ProposalListFilters {
   /** Any of these statuses; empty is every one. */
   statuses?: readonly ProposalStatus[];
   contactId?: string;
+  /** Only the proposals with a lot the buyer ticked on the live page (#2601) — the agent API's
+   *  `picked` (#2607). */
+  withBuyerPicks?: boolean;
   offset?: number;
   pageSize?: number;
 }
@@ -238,6 +241,8 @@ function proposalListWhere(collectionId: string, filters: ProposalListFilters): 
     collectionId,
     ...(filters.statuses?.length ? { status: { in: [...filters.statuses] } } : {}),
     ...(filters.contactId ? { contactId: filters.contactId } : {}),
+    // Any lot ticked, a lot since sold or withdrawn included — as `pickedLotCount` counts them.
+    ...(filters.withBuyerPicks ? { lots: { some: { proposalPickedAt: { not: null } } } } : {}),
   };
 }
 

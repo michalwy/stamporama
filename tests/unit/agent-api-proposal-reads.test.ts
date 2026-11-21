@@ -8,6 +8,7 @@ import {
   parseProposalSaleLots,
   proposalRecord,
   proposalRow,
+  proposalSaleLotsWithPicks,
   proposalSaleOptions,
 } from "../../src/lib/agent-api/proposal-reads";
 import { ApiError } from "../../src/lib/agent-api/errors";
@@ -81,6 +82,7 @@ describe("what a proposal is told as (#2303)", () => {
         status: "sent",
         lotCount: 3,
         openLotCount: 2,
+        pickedLotCount: 1,
         total: "80.00",
         unpriced: 1,
         currency: "PLN",
@@ -92,6 +94,7 @@ describe("what a proposal is told as (#2303)", () => {
     assert.deepEqual(row.contact, { id: "c1", name: "Jan Kowalski" });
     assert.equal(row.lots, 3);
     assert.equal(row.openLots, 2);
+    assert.equal(row.pickedLots, 1);
     assert.ok(!JSON.stringify(row).includes("example.com"));
   });
 
@@ -118,11 +121,13 @@ describe("what a proposal is told as (#2303)", () => {
             price: null,
             currency: "PLN",
             setCount: 1,
+            pick: null,
           },
         ],
         total: "0.00",
         unpriced: 1,
         currency: "PLN",
+        buyerPicks: null,
       },
       new Map([["o1", ["#12", "#15"]]]),
       "Lot 1 …",
@@ -139,7 +144,9 @@ describe("what a proposal is told as (#2303)", () => {
       currency: "PLN",
       sets: 1,
       copies: ["#12", "#15"],
+      pick: null,
     });
+    assert.equal(record.buyerPicks, null);
     assert.equal(record.message, "Lot 1 …");
     assert.equal(record.sale, null);
     assert.ok(!JSON.stringify(record).includes("example.com"));
@@ -157,6 +164,7 @@ describe("what a proposal can be sold as (#2303, #2336)", () => {
       price: "5.00",
       currency: "PLN",
       setsToSell: state === "sold" ? 0 : 1,
+      picked: lotNo === 4,
     });
     const options = proposalSaleOptions({
       lots: [lot(1, "ready"), lot(2, "sold"), lot(3, "withdrawn"), lot(4, "preparing")],
@@ -170,5 +178,106 @@ describe("what a proposal can be sold as (#2303, #2336)", () => {
         [4, "preparing"],
       ]
     );
+    assert.deepEqual(
+      options.lots.map((l) => [l.lotNo, l.picked]),
+      [
+        [1, false],
+        [4, true],
+      ]
+    );
+  });
+});
+
+describe("the buyer's picks (#2607)", () => {
+  const contact = { id: "c1", name: "Jan Kowalski" };
+  const lot = (lotNo: number, state: string, pick: string | null) => ({
+    offerId: `o${lotNo}`,
+    offerNo: 100 + lotNo,
+    lotNo,
+    title: `Lot ${lotNo}`,
+    state,
+    listingType: "buy_now",
+    price: "5.00",
+    currency: "PLN",
+    setCount: 1,
+    pick,
+  });
+
+  it("states which lots the buyer picked and when they last changed them, the unavailable ones marked", () => {
+    const record = proposalRecord(
+      {
+        proposalId: "p1",
+        proposalNo: 4,
+        status: "sent",
+        contact,
+        createdOn: "2026-11-01",
+        sentOn: "2026-11-02",
+        closedOn: null,
+        platform: { id: "d1", name: "Direct" },
+        sale: null,
+        lots: [lot(1, "ready", null), lot(2, "ready", "picked"), lot(5, "sold", "unavailable"), lot(7, "ready", "picked")],
+        total: "20.00",
+        unpriced: 0,
+        currency: "PLN",
+        buyerPicks: { count: 3, changedAt: "2026-11-21T10:00:00.000Z" },
+      },
+      new Map(),
+      null,
+      "/c/x/offers/proposals/4"
+    );
+    assert.deepEqual(record.buyerPicks, { lots: [2, 5, 7], changedAt: "2026-11-21T10:00:00.000Z" });
+    assert.deepEqual(
+      record.lots.map((l) => [l.lotNo, l.pick]),
+      [
+        [1, null],
+        [2, "picked"],
+        [5, "unavailable"],
+        [7, "picked"],
+      ]
+    );
+  });
+
+  const lots = [
+    { lotNo: 1, pick: null },
+    { lotNo: 2, pick: "picked" },
+    { lotNo: 4, pick: "unavailable" },
+    { lotNo: 5, pick: "picked" },
+    { lotNo: 7, pick: "picked" },
+  ];
+
+  it("sells the picks still for sale at their own prices, passing over one no longer available", () => {
+    assert.deepEqual(proposalSaleLotsWithPicks([" Picked "], lots, "lots", 4), [
+      { lotNo: 2, price: null },
+      { lotNo: 5, price: null },
+      { lotNo: 7, price: null },
+    ]);
+  });
+
+  it("adds a lot named beside the picks, and takes a price agreed for a picked one", () => {
+    assert.deepEqual(proposalSaleLotsWithPicks(["5=30", "picked", "1"], lots, "lots", 4), [
+      { lotNo: 1, price: null },
+      { lotNo: 2, price: null },
+      { lotNo: 5, price: "30.00" },
+      { lotNo: 7, price: null },
+    ]);
+  });
+
+  it("is the plain grammar without the word", () => {
+    assert.deepEqual(proposalSaleLotsWithPicks(["7", "2=10"], lots, "lots", 4), [
+      { lotNo: 7, price: null },
+      { lotNo: 2, price: "10.00" },
+    ]);
+  });
+
+  it("refuses the picks when none is left to sell, and the word named twice", () => {
+    assert.match(
+      refusal(() => proposalSaleLotsWithPicks(["picked"], [{ lotNo: 1, pick: null }], "lots", 4)),
+      /The buyer has picked no lot of proposal #4/
+    );
+    assert.match(
+      refusal(() => proposalSaleLotsWithPicks(["picked", "1"], [{ lotNo: 1, pick: null }, { lotNo: 3, pick: "unavailable" }], "lots", 4)),
+      /— 3 — are no longer available/
+    );
+    assert.match(refusal(() => proposalSaleLotsWithPicks(["picked", "PICKED"], lots, "lots", 4)), /named twice/);
   });
 });

@@ -156,6 +156,11 @@ is sold elsewhere or withdrawn), the same count on the Proposals list — and *C
 with the picks still sellable ticked, every tick still the collector's to change. The agent API
 reads no picks.
 
+*Amended by #2607 (2026-11-21):* the agent API now reads them — `get_proposal` lists the lots
+picked and when the buyer last changed them, `list_proposals` narrows to proposals with picks, and
+`convert_proposal_to_sale` takes `picked` for the picks still sellable, as *Convert to sale…* opens
+with them — with a read only token included. It still never ticks or unticks: picks are the buyer's.
+
 ## Consequences
 
 - The Proposals list is under Offers in the sidebar's Selling section (`/offers/proposals`), each

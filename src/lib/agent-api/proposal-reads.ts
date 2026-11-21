@@ -17,6 +17,10 @@
 //    notes — a private person's details, out of these projections' reach as a buyer's are (#1949);
 //    `get_contact` is the one read that carries them (#2610).
 //    The projections name their fields; **do not replace a mapper here with a spread**.
+//  - **The buyer's picks are read, never written** (#2607). What the buyer ticked on the live page
+//    (#2601) is theirs: `get_proposal` reads it, `list_proposals` narrows to it, and
+//    `convert_proposal_to_sale` takes the word `picked` for *every lot the buyer picked that can
+//    still be sold* — as *Convert to sale…* opens with them ticked. Nothing here ticks or unticks.
 
 import { OPEN_OFFER_STATES } from "../offer-rules";
 import { PROPOSAL_LOT_PACKINGS, PROPOSAL_STATUSES } from "../proposal-rules";
@@ -30,6 +34,9 @@ export const AGENT_PROPOSAL_LOT_PACKINGS: readonly string[] = PROPOSAL_LOT_PACKI
 
 /** The word for *a new sale*, where the sale a proposal becomes is named. */
 export const NEW_SALE = "new";
+
+/** The word for *the lots the buyer picked*, where the lots a proposal sells are named (#2607). */
+export const BUYER_PICKS = "picked";
 
 // ── Naming ───────────────────────────────────────────────────────────────────
 
@@ -123,6 +130,50 @@ export function parseProposalSaleLots(values: readonly string[], parameter: stri
   return specs;
 }
 
+/** A lot as the conversion resolves `picked` against it: its number and the buyer's pick, as
+ *  `proposalLotPick` reads it — `picked` while it can still be sold, `unavailable` once it cannot. */
+export interface ProposalPickFacts {
+  readonly lotNo: number;
+  readonly pick: string | null;
+}
+
+/**
+ * The lots `convert_proposal_to_sale` sells, as it is sent them (#2607). Without the word `picked`
+ * this is `parseProposalSaleLots`. With it, every lot the buyer picked that can still be sold is
+ * added at its own price — *Convert to sale…* opens with exactly those ticked — and a lot also named
+ * on its own keeps what it was named with, so `picked, 5=30.00` sells the picks with lot 5 at the
+ * price agreed, and `picked, 3` adds lot 3 to them. A pick no longer available is passed over, as
+ * the dialog passes it over. `picked` with no pick left to sell is refused rather than selling only
+ * what else was named. The lots come back in lot order.
+ */
+export function proposalSaleLotsWithPicks(
+  values: readonly string[],
+  lots: readonly ProposalPickFacts[],
+  parameter: string,
+  proposalNo: number
+): ProposalSaleLotSpec[] {
+  const isPicks = (value: string) => value.trim().toLocaleLowerCase() === BUYER_PICKS;
+  const named = values.filter((value) => !isPicks(value));
+  const picksAsked = values.length - named.length;
+  if (picksAsked > 1) {
+    throw invalidRequest(`\`${BUYER_PICKS}\` is named twice in "${parameter}". Name it once. Nothing was sold.`);
+  }
+  const specs = parseProposalSaleLots(named, parameter);
+  if (picksAsked === 0) return specs;
+  const picked = lots.filter((lot) => lot.pick === "picked");
+  if (picked.length === 0) {
+    const unavailable = lots.filter((lot) => lot.pick !== null).map((lot) => lot.lotNo);
+    throw invalidRequest(
+      unavailable.length === 0
+        ? `The buyer has picked no lot of proposal #${proposalNo}. Name the lots they took by number. Nothing was sold.`
+        : `The lots the buyer picked on proposal #${proposalNo} — ${unavailable.join(", ")} — are no longer available. Name the lots they took by number. Nothing was sold.`
+    );
+  }
+  const seen = new Set(specs.map((spec) => spec.lotNo));
+  const all = [...specs, ...picked.filter((lot) => !seen.has(lot.lotNo)).map((lot) => ({ lotNo: lot.lotNo, price: null }))];
+  return all.sort((a, b) => a.lotNo - b.lotNo);
+}
+
 // ── list_proposals ───────────────────────────────────────────────────────────
 
 /** A proposal as the list of proposals reads it, typed structurally. */
@@ -133,6 +184,7 @@ export interface ProposalListItemFacts {
   status: string;
   lotCount: number;
   openLotCount: number;
+  pickedLotCount: number;
   total: string;
   unpriced: number;
   currency: string;
@@ -148,6 +200,8 @@ export interface AgentProposalRow {
   readonly status: string;
   readonly lots: number;
   readonly openLots: number;
+  /** The lots the buyer ticked on the live page (#2601), the ones since sold or withdrawn included. */
+  readonly pickedLots: number;
   readonly total: string;
   readonly unpriced: number;
   readonly currency: string;
@@ -164,6 +218,7 @@ export function proposalRow(item: ProposalListItemFacts, path: string): AgentPro
     status: item.status,
     lots: item.lotCount,
     openLots: item.openLotCount,
+    pickedLots: item.pickedLotCount,
     total: item.total,
     unpriced: item.unpriced,
     currency: item.currency,
@@ -186,6 +241,8 @@ export interface ProposalLotFacts {
   price: string | null;
   currency: string;
   setCount: number;
+  /** The buyer's pick (#2601): `picked`, `unavailable` — picked, then sold or withdrawn — or null. */
+  pick: string | null;
 }
 
 /** The proposal as its screen reads it, typed structurally. */
@@ -203,6 +260,7 @@ export interface ProposalScreenFacts {
   total: string;
   unpriced: number;
   currency: string;
+  buyerPicks: { count: number; changedAt: string | null } | null;
 }
 
 /** One lot as `get_proposal` states it. */
@@ -218,6 +276,16 @@ export interface AgentProposalLot {
   readonly sets: number;
   /** The copies on it, by their copy numbers (`#123`). */
   readonly copies: readonly string[];
+  /** Whether the buyer ticked it on the live page (#2601): `picked`, `unavailable` once it was sold
+   *  elsewhere or withdrawn after they did — as the proposal's screen marks it — or null. */
+  readonly pick: string | null;
+}
+
+/** What the buyer ticked on the live page (#2601): the lots, by number — every one ticked, those no
+ *  longer available included — and when the buyer last ticked or unticked one (ISO). */
+export interface AgentProposalBuyerPicks {
+  readonly lots: readonly number[];
+  readonly changedAt: string | null;
 }
 
 /** One proposal in full, as `get_proposal` and every proposal write answer. */
@@ -232,6 +300,8 @@ export interface AgentProposal {
   readonly closedOn: string | null;
   readonly sale: { readonly id: string; readonly saleNo: number; readonly platform: string } | null;
   readonly lots: readonly AgentProposalLot[];
+  /** What the buyer picked, null while no lot is ticked — as the screen's *Buyer picked 3 lots*. */
+  readonly buyerPicks: AgentProposalBuyerPicks | null;
   readonly total: string;
   readonly unpriced: number;
   readonly currency: string;
@@ -267,7 +337,12 @@ export function proposalRecord(
       currency: lot.currency,
       sets: lot.setCount,
       copies: [...(copiesByOffer.get(lot.offerId) ?? [])],
+      pick: lot.pick,
     })),
+    buyerPicks: screen.buyerPicks && {
+      lots: screen.lots.filter((lot) => lot.pick !== null).map((lot) => lot.lotNo),
+      changedAt: screen.buyerPicks.changedAt,
+    },
     total: screen.total,
     unpriced: screen.unpriced,
     currency: screen.currency,
@@ -289,6 +364,7 @@ export interface ProposalSaleOptionsFacts {
     price: string | null;
     currency: string;
     setsToSell: number;
+    picked: boolean;
   }[];
   sales: readonly {
     saleId: string;
@@ -314,6 +390,8 @@ export interface AgentProposalSaleOptions {
     readonly price: string | null;
     readonly currency: string;
     readonly setsToSell: number;
+    /** Whether the buyer ticked it on the live page (#2601) — what `picked` sells. */
+    readonly picked: boolean;
   }[];
   readonly sales: readonly {
     readonly id: string;
@@ -339,6 +417,7 @@ export function proposalSaleOptions(options: ProposalSaleOptionsFacts): AgentPro
       price: lot.price,
       currency: lot.currency,
       setsToSell: lot.setsToSell,
+      picked: lot.picked,
     })),
     sales: options.sales.map((sale) => ({
       id: sale.saleId,

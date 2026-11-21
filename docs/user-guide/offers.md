@@ -3625,7 +3625,7 @@ no tick box. The buyer can tick while the proposal is Preparing or Sent; once it
 the page says only that the offer is closed. Printed or saved as a PDF, the page has no tick boxes.
 The buyer only ticks — talking and haggling stay in your chat.
 
-You see the picks in the app, and nowhere else — nothing is sent to you:
+You see the picks in the app — nothing is sent to you:
 
 - On the proposal's screen, a line above the lots reads *Buyer picked 3 lots · 2 hours ago*, timed
   from the buyer's last tick or untick, and each lot they ticked is marked **Picked by the buyer** in
@@ -3633,6 +3633,8 @@ You see the picks in the app, and nowhere else — nothing is sent to you:
   available**.
 - The **Proposals** list shows *Buyer picked 3 lots* on each proposal that has picks.
 - **Convert to sale…** opens with the buyer's picks already ticked (below).
+- Your assistant reads them too, through the [Assistant API](agent-api.md), and can sell the
+  proposal as the buyer picked it. It never ticks or unticks a lot for the buyer.
 
 The picks stay when you reopen the proposal. A lot taken out of the proposal loses its pick.
 
