@@ -4,7 +4,12 @@ import { prisma } from "../../src/lib/db";
 import { createItem } from "../../src/lib/items";
 import { addOfferSet, createOffer, setOfferState } from "../../src/lib/offers";
 import { addSaleLines, createSale } from "../../src/lib/sales";
-import { readOfferSpecification } from "../../src/lib/offer-specification";
+import {
+  checkSpecificationLanguage,
+  readOfferSpecification,
+  readSpecificationLanguages,
+  SpecificationLanguageError,
+} from "../../src/lib/offer-specification";
 
 // An offer's specification for buyers (#1758), read against a real database: it lists the copies the
 // offer still holds — a set sold through it and a copy sold through another listing are both gone —
@@ -210,5 +215,59 @@ describe("an offer's specification (#1758)", () => {
 
   it("is nobody else's", async () => {
     assert.equal(await readOfferSpecification(`${userId}-other`, offerId), null);
+  });
+  it("is written in another of the collection's languages when asked (#2605)", async () => {
+    // A Colnect offer: its platform lists in English, the collection's own language.
+    const colnect = await prisma.platform.create({
+      data: { collectionId, name: "Colnect", titleLanguage: "en", titleTemplate: "{name}" },
+    });
+    const colnectOffer = await createOffer(userId, collectionId, {
+      platformId: colnect.id,
+      url: null,
+      listingType: "fixed",
+      price: "10.00",
+      currency: "PLN",
+      listingDate: null,
+    });
+    await addOfferSet(userId, colnectOffer, [items.kept]);
+    const stored = await prisma.offer.findUniqueOrThrow({ where: { id: colnectOffer }, select: { name: true } });
+    assert.equal(stored.name, "Copernicus");
+
+    const own = await readOfferSpecification(userId, colnectOffer);
+    assert.ok(own);
+    assert.equal(own.language, "en");
+    assert.equal(own.offerLanguage, "en");
+    assert.equal(own.rows[0].description, "Copernicus");
+    assert.equal(own.rows[0].condition, "Mint never hinged");
+
+    const polish = await readOfferSpecification(userId, colnectOffer, "pl");
+    assert.ok(polish);
+    assert.equal(polish.language, "pl");
+    assert.equal(polish.offerLanguage, "en");
+    // Polish names where the collection has them, its own wording where it has none…
+    assert.equal(polish.rows[0].description, "Kopernik");
+    assert.equal(polish.rows[0].condition, "Czysty");
+    assert.deepEqual(polish.rows[0].faults, ["Cienkie miejsce", "Crease"]);
+    // …and the title generated in Polish from its template.
+    assert.equal(polish.title, "Kopernik");
+
+    // Nothing of the offer changes: its stored title and its platform's language stay.
+    const after = await prisma.offer.findUniqueOrThrow({
+      where: { id: colnectOffer },
+      select: { name: true, platform: { select: { titleLanguage: true } } },
+    });
+    assert.equal(after.name, "Copernicus");
+    assert.equal(after.platform.titleLanguage, "en");
+  });
+
+  it("offers the collection's languages, the offer's own among them (#2605)", async () => {
+    const choices = await readSpecificationLanguages(userId, offerId);
+    assert.ok(choices);
+    assert.equal(choices.offerLanguage, "pl");
+    assert.ok(choices.languages.includes("pl"));
+    assert.equal(await checkSpecificationLanguage(userId, offerId, "PL"), "pl");
+    assert.equal(await checkSpecificationLanguage(userId, offerId, ""), null);
+    await assert.rejects(checkSpecificationLanguage(userId, offerId, "de"), SpecificationLanguageError);
+    assert.equal(await readSpecificationLanguages(`${userId}-other`, offerId), null);
   });
 });

@@ -210,16 +210,40 @@ describe("an offer's specification share link (#1760)", () => {
     assert.equal(shared.spec.rows.length, 2);
 
     await prisma.platform.updateMany({ where: { collectionId }, data: { titleLanguage: "pl" } });
-    // The language is part of what the link showed, so the old link now reads as changed…
-    assert.equal((await readSharedOfferSpecification(access))?.standing, "changed");
-    // …and a new one speaks Polish.
+    // A link keeps the language it was made in (#2605): the old one still shows English…
+    const kept = await readSharedOfferSpecification(access);
+    assert.ok(kept && kept.standing === "current");
+    assert.equal(kept.spec.language, "en");
+    assert.equal((await readOfferSpecificationShareState(userId, offerId)).link?.language, "en");
+    // …and a new one, made in the offer's language, speaks Polish.
     const { token: polish } = await createOfferSpecificationShareToken(userId, offerId);
     const polishAccess = await verifyOfferSpecificationShareToken(polish, { touch: false });
     assert.ok(polishAccess);
     const polishShared = await readSharedOfferSpecification(polishAccess);
     assert.ok(polishShared && polishShared.standing === "current");
     assert.equal(polishShared.spec.language, "pl");
-    assert.equal((await readOfferSpecificationShareState(userId, offerId)).language, "pl");
+    const state = await readOfferSpecificationShareState(userId, offerId);
+    assert.equal(state.offerLanguage, "pl");
+    assert.equal(state.link?.language, "pl");
+  });
+
+  it("is made in a chosen language, and keeps it (#2605)", async () => {
+    // The platform lists in Polish (the test above); the collection's own is English.
+    const { token } = await createOfferSpecificationShareToken(userId, offerId, "en");
+    const access = await verifyOfferSpecificationShareToken(token, { touch: false });
+    assert.ok(access);
+    assert.equal(access.language, "en");
+    const shared = await readSharedOfferSpecification(access);
+    assert.ok(shared && shared.standing === "current");
+    assert.equal(shared.spec.language, "en");
+    const state = await readOfferSpecificationShareState(userId, offerId);
+    assert.equal(state.offerLanguage, "pl");
+    assert.equal(state.link?.language, "en");
+    assert.equal(state.link?.standing, "current");
+    assert.deepEqual([...state.languages].sort(), ["en", "pl"]);
+    // A language the collection does not use is refused, and the link stays as it was.
+    await assert.rejects(createOfferSpecificationShareToken(userId, offerId, "de"));
+    assert.ok(await verifyOfferSpecificationShareToken(token, { touch: false }));
   });
 
   it("says the offer has changed once anything on the specification has, and nothing of it", async () => {

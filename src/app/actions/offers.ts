@@ -1365,13 +1365,15 @@ export type OfferSpecificationShareActionState =
   | { status: "error"; message: string };
 
 /** Generate the offer's specification link, replacing any it had — an offer has one link, and asking
- *  for a new one is asking for the old one to stop working. */
+ *  for a new one is asking for the old one to stop working. Made in `language` (#2605), null for the
+ *  offer's own, and kept in it. */
 export async function createOfferSpecificationShareLinkAction(
-  offerId: string
+  offerId: string,
+  language: string | null = null
 ): Promise<OfferSpecificationShareActionState> {
   const session = await getSession();
   try {
-    const { token } = await createOfferSpecificationShareToken(session.user.id, offerId);
+    const { token } = await createOfferSpecificationShareToken(session.user.id, offerId, language);
     return { status: "success", token };
   } catch (e) {
     return fail(e, "Failed to create the link. Please try again.");

@@ -5,6 +5,8 @@ import { loadChecklistSlots } from "./offer-photo-checklists";
 import { makeOfferLabeller, STAMP_LABEL_SELECT } from "./offer-labels";
 import { soldItemIds } from "./sales";
 import { normalizeLanguage } from "./languages";
+import { getCollectionLanguageChoices } from "./contacts";
+import { offerTitlesInLanguage } from "./offers";
 import { isTerminalState, type OfferState } from "./offer-rules";
 import {
   specificationCopyOrder,
@@ -24,9 +26,13 @@ export interface OfferSpecification {
   offerNo: number;
   /** The offer's title, or the label derived from its sets when it was never given one (#209). */
   title: string;
-  /** The offer's language — its platform's listing language, else the collection's own (#293). The
-   *  rows are written in it and the page's own words follow it (`offer-specification-labels.ts`). */
+  /** The language it is written in — the one asked for (#2605), else the offer's: its platform's
+   *  listing language, else the collection's own (#293). The rows are written in it and the page's
+   *  own words follow it (`offer-specification-labels.ts`). */
   language: string | null;
+  /** The offer's own language — its platform's listing language, else the collection's — which the
+   *  specification is written in unless another is asked for (#2605). */
+  offerLanguage: string | null;
   /** Whether the offer is closed — sold or withdrawn. A buyer's link shows no specification for a
    *  closed offer (#1760); the collector's own page still does. */
   closed: boolean;
@@ -49,7 +55,10 @@ const SIDE_PHOTO_SELECT = {
  */
 export async function readOfferSpecification(
   ownerId: string,
-  offerId: string
+  offerId: string,
+  /** Another language to write it in (#2605) — null or absent for the offer's own. The caller has
+   *  checked it is one of {@link readSpecificationLanguages}' choices. */
+  language: string | null = null
 ): Promise<OfferSpecification | null> {
   const offer = await prisma.offer.findFirst({
     where: { id: offerId, collection: { ownerId } },
@@ -90,6 +99,10 @@ export async function readOfferSpecification(
   });
   if (!offer) return null;
 
+  const offerLanguage =
+    normalizeLanguage(offer.platform.titleLanguage) ?? normalizeLanguage(offer.collection.defaultLanguage);
+  const target = normalizeLanguage(language) ?? offerLanguage;
+
   const copies = offer.sets.flatMap((set) => set.items);
   const [sold, slots, toCopy, title] = await Promise.all([
     soldItemIds(copies.map((li) => li.itemId)),
@@ -100,8 +113,8 @@ export async function readOfferSpecification(
           copies.map((li) => ({ itemId: li.itemId, stampId: li.item.stampId }))
         )
       : Promise.resolve(null),
-    makeTitleCopyMapper(ownerId, offer.collectionId, offer.platform.titleLanguage),
-    offer.name?.trim() ? Promise.resolve(offer.name.trim()) : derivedTitle(offer.id, offer.collectionId),
+    makeTitleCopyMapper(ownerId, offer.collectionId, target),
+    titleOf(ownerId, offer, target === offerLanguage ? null : target),
   ]);
 
   const sets: SpecificationSet[] = offer.sets.map((set) => ({
@@ -129,12 +142,74 @@ export async function readOfferSpecification(
     collectionId: offer.collectionId,
     offerNo: offer.offerNo,
     title,
-    language:
-      normalizeLanguage(offer.platform.titleLanguage) ??
-      normalizeLanguage(offer.collection.defaultLanguage),
+    language: target,
+    offerLanguage,
     closed: isTerminalState(offer.state as OfferState),
     rows,
   };
+}
+
+/**
+ * The offer's title, in `language` where one other than the offer's own is asked for (#2605): rendered
+ * from its title template as a proposal renders its lots' (`offerTitlesInLanguage`, #2603) — a title
+ * written by hand stays as written, and nothing is stored. An offer with no title is named by its sets.
+ */
+async function titleOf(
+  ownerId: string,
+  offer: { id: string; collectionId: string; name: string | null },
+  language: string | null
+): Promise<string> {
+  const name = language
+    ? (await offerTitlesInLanguage(ownerId, offer.collectionId, [offer.id], language)).get(offer.id)
+    : offer.name;
+  return name?.trim() ? name.trim() : derivedTitle(offer.id, offer.collectionId);
+}
+
+/** The languages a specification can be written in (#2605): those a material for a buyer can be put
+ *  into (#2603), the offer's own first-in-line as the default. Null when the offer is not the owner's. */
+export async function readSpecificationLanguages(
+  ownerId: string,
+  offerId: string
+): Promise<{ offerLanguage: string | null; languages: string[] } | null> {
+  const offer = await prisma.offer.findFirst({
+    where: { id: offerId, collection: { ownerId } },
+    select: {
+      collectionId: true,
+      platform: { select: { titleLanguage: true } },
+      collection: { select: { defaultLanguage: true } },
+    },
+  });
+  if (!offer) return null;
+  const offerLanguage =
+    normalizeLanguage(offer.platform.titleLanguage) ?? normalizeLanguage(offer.collection.defaultLanguage);
+  const languages = await getCollectionLanguageChoices(ownerId, offer.collectionId, [offerLanguage]);
+  return { offerLanguage, languages };
+}
+
+/** A language asked of a specification that is not one of its choices (#2605). */
+export class SpecificationLanguageError extends Error {
+  constructor() {
+    super("That language is not one this collection uses. Add it to a platform or an album first.");
+    this.name = "SpecificationLanguageError";
+  }
+}
+
+/**
+ * The language asked for, checked against {@link readSpecificationLanguages}' choices (#2605) and
+ * normalised; null for a blank, which is the offer's own. Throws {@link SpecificationLanguageError}
+ * for a language outside the choices, and a plain error when the offer is not the owner's.
+ */
+export async function checkSpecificationLanguage(
+  ownerId: string,
+  offerId: string,
+  requested: string | null | undefined
+): Promise<string | null> {
+  const code = normalizeLanguage(requested);
+  if (!code) return null;
+  const choices = await readSpecificationLanguages(ownerId, offerId);
+  if (!choices) throw new Error("Offer not found or access denied.");
+  if (!choices.languages.includes(code)) throw new SpecificationLanguageError();
+  return code;
 }
 
 /** The label an untitled offer is shown under everywhere else (#209, #379). */

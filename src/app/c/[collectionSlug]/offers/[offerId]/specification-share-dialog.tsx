@@ -16,8 +16,8 @@ import type {
 } from "@/lib/offer-specification-share";
 import type { ShareAddressRefusal } from "@/lib/share-address";
 import { offerSpecificationSharePath } from "@/lib/offer-specification-share-rules";
-import { hasSpecificationLabels } from "@/lib/offer-specification-labels";
 import { languageLabel } from "@/lib/languages";
+import { SpecificationLanguageSelect } from "./specification-language-select";
 import {
   createOfferSpecificationShareLinkAction,
   revokeOfferSpecificationShareLinkAction,
@@ -31,7 +31,11 @@ import { ShareLinkVisitsLine } from "@/app/c/[collectionSlug]/shared/share-link-
 //
 // It says when the link no longer shows its specification — the offer changed or closed, and a buyer
 // opening it is asked to contact the seller — because that is exactly when the collector needs to
-// send a new one. And it says when the offer's language is one the buyer's page has no words in.
+// send a new one.
+//
+// **A link is made in a chosen language** (#2605), the offer's own by default, and keeps it. The
+// selector shows the link's; choosing another means a *New link*, which replaces the address — an
+// offer still has one link. It says when the language is one the buyer's page has no words in.
 //
 // **The address is on the dialog whenever it can be** (#681): a link that could not be shown again
 // could not be sent twice or checked, and replacing it would break the address a buyer is holding.
@@ -101,7 +105,11 @@ export function SpecificationShareDialog({
     },
   });
   const share = data?.link ?? null;
-  const language = data?.language ?? null;
+  // The language chosen here, until which the selector shows the link's — or, with no link, the
+  // offer's own.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const language = chosen ?? share?.language ?? data?.offerLanguage ?? null;
+  const newLanguage = !!share && language !== share.language;
 
   // The address of a link minted in this dialog, on screen before the refetch lands.
   const [minted, setMinted] = useState<string | null>(null);
@@ -120,12 +128,13 @@ export function SpecificationShareDialog({
   function mint() {
     setError(undefined);
     startTransition(async () => {
-      const result = await createOfferSpecificationShareLinkAction(offerId);
+      const result = await createOfferSpecificationShareLinkAction(offerId, language);
       if (result.status === "success") {
         setMinted(`${window.location.origin}${offerSpecificationSharePath(result.token)}`);
         setConfirmRegenerate(false);
         setCopied(false);
         await queryClient.invalidateQueries({ queryKey: shareLinkKey(offerId) });
+        setChosen(null);
       } else setError(result.message);
     });
   }
@@ -149,9 +158,24 @@ export function SpecificationShareDialog({
         <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           <p style={META}>
             A link a buyer opens without an account: this offer&apos;s specification as it is now,
-            in the offer&apos;s language, and nothing else from your collection. If the
+            in the language you choose, and nothing else from your collection. If the
             specification changes or the offer closes, the link asks the buyer to contact you instead.
           </p>
+
+          {data && (
+            <SpecificationLanguageSelect
+              id="specification-share-language"
+              value={language}
+              offerLanguage={data.offerLanguage}
+              languages={data.languages}
+              disabled={isPending}
+              onChange={(next) => {
+                setChosen(next);
+                // Another language is another link.
+                if (share && next !== share.language) setConfirmRegenerate(true);
+              }}
+            />
+          )}
 
           {link && (
             <div>
@@ -197,17 +221,11 @@ export function SpecificationShareDialog({
             <p style={{ ...META, color: "var(--color-warning)" }}>{STANDING_MESSAGE[share.standing]}</p>
           )}
 
-          {data && !hasSpecificationLabels(language) && (
-            <p style={{ ...META, color: "var(--color-warning)" }}>
-              The specification&apos;s data is in {language ? languageLabel(language) : "this offer's language"},
-              but its headings and notices have no translation into it, so the buyer sees them in English.
-            </p>
-          )}
-
           {confirmRegenerate && (
             <p style={{ ...META, color: "var(--color-warning)" }}>
-              Generating a new link stops the old one working. Anyone holding it will need the new
-              address.
+              {newLanguage && share?.language && language
+                ? `This link is in ${languageLabel(share.language)}. A link in ${languageLabel(language)} is a new link: it stops the old one working, and anyone holding it will need the new address.`
+                : "Generating a new link stops the old one working. Anyone holding it will need the new address."}
             </p>
           )}
         </div>
