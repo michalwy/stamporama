@@ -951,6 +951,23 @@ The **Sets** switch, above the sheet, chooses how much of each set prints:
 The totals are the same in either mode. The switch starts on **Set contents**; it and the columns are
 remembered once, for every sale, as the packing list's are — separately from the packing list's own.
 
+### The order summary's language
+
+The order summary is printed **in the buyer's language**. The **Language** selector above the sheet
+opens in the [language set on the buyer](contacts.md#language), else the sale's platform's listing
+language, else the collection's. It offers the languages your collection already uses.
+
+- **Choosing another language saves it on the buyer**, so their next order summary — and their next
+  proposal — opens in it. A sale with no buyer keeps the choice for that page alone.
+- The sheet's **own words** follow it: its heading, the date, buyer, shipping and status labels, the
+  column names, *3 copies* under a set, *Free extras*, and the totals. In a language the sheet has no
+  words in, they print in English, and the selector says **Sheet words in English**.
+- The **areas, series, stamps, conditions and certificates** are named in that language where your
+  collection has a translation, and in your own wording where it has none. An area
+  is named by its own translated title name, each level of its path apart.
+- Each set keeps its **offer's title** as it is: the sale names what was sold as it was listed. The
+  footer, which is yours, stays as it is.
+
 Apart from the collection's name in the footer, the order summary never prints anything of yours:
 no locations, tick boxes, refs, copy numbers, packed counts, costs, profit or [note](#note). It is
 only a printout — nothing is sent from the app, and printing it changes nothing on the sale. A **cancelled** sale can still print one, from its own

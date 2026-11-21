@@ -60,6 +60,7 @@ import { kickOfferPhotoWorker } from "@/lib/offer-photo-worker";
 // so it reuses that normaliser rather than restating it.
 import { normalizeUrl } from "@/lib/offer-rules";
 import { normalizeTrackingCode } from "@/lib/tracking-rules";
+import { setOrderSummaryLanguage } from "@/lib/order-summary-language";
 // The form → domain parsing lives beside the domain (`sale-header-input.ts`) rather than here,
 // because the Allegro order flow (#463) writes the same header through its own action and a
 // `"use server"` module cannot export a shared parser.
@@ -204,6 +205,18 @@ export async function updateSaleNoteAction(saleId: string, raw: string): Promise
     return { status: "success" };
   } catch (e) {
     return fail(e, "Failed to save the note.");
+  }
+}
+
+/** Put the sale's order summary in another language (#2604) — saved on the sale's buyer, so their next
+ *  material opens in it too. */
+export async function setOrderSummaryLanguageAction(saleId: string, language: string): Promise<SaleActionState> {
+  const session = await getSession();
+  try {
+    await setOrderSummaryLanguage(session.user.id, saleId, language);
+    return { status: "success" };
+  } catch (e) {
+    return fail(e, "Failed to change the language. Please try again.");
   }
 }
 

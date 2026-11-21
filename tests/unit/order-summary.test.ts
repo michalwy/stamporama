@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { orderSummarySetOrder, orderSummaryTotals, sortCopiesInSetOrder } from "../../src/lib/order-summary";
+import { areasInLanguage, orderSummarySetOrder, orderSummaryTotals, sortCopiesInSetOrder } from "../../src/lib/order-summary";
 
 describe("orderSummaryTotals (#2512)", () => {
   it("adds the sets and the handling the buyer paid", () => {
@@ -59,5 +59,24 @@ describe("sortCopiesInSetOrder (#2512)", () => {
       sortCopiesInSetOrder(copies, order).map((c) => c.id),
       ["hand0", "hand1", "cat1", "cat2", "x"]
     );
+  });
+});
+
+describe("areasInLanguage (#2604)", () => {
+  const areas = [
+    { id: "pl", name: "Polska", titleNameByLanguage: { de: "Polen" } },
+    { id: "ii", name: "II RP", titleNameByLanguage: {} },
+    { id: "gg", name: "GG", titleNameByLanguage: { de: "  " } },
+  ];
+
+  it("names each area by its own translation, else its own name — no roll-up to a parent", () => {
+    assert.deepEqual(
+      areasInLanguage(areas, "de").map((a) => a.name),
+      ["Polen", "II RP", "GG"]
+    );
+  });
+
+  it("changes nothing in the collection's own language", () => {
+    assert.deepEqual(areasInLanguage(areas, null), areas);
   });
 });

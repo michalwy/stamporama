@@ -60,10 +60,12 @@ languages your collection already uses: its own language, your platforms' listin
 albums' languages. To use another, give a platform or an album that language first.
 
 What you send a buyer opens in their language: a [proposal](offers.md#the-language)'s message,
-document and link, and a [trade's shared page](trades.md#showing-the-trade-to-your-partner). With none
-set, a proposal opens in the language it always has — the Direct platform's listing language, else the
-collection's — and a trade's page in the collection's. **Choosing another language on a proposal or in a
-trade's share dialog saves it here**, so the next thing for that person opens in it.
+document and link, a sale's [order summary](sales.md#the-order-summarys-language), and a [trade's shared
+page](trades.md#showing-the-trade-to-your-partner). With none set, each opens in the language it always
+has — a proposal in the Direct platform's listing language, an order summary in its sale's platform's,
+else the collection's, and a trade's page in the collection's. **Choosing another language on a
+proposal, an order summary or in a trade's share dialog saves it here**, so the next thing for that
+person opens in it.
 
 ### Free extras
 
