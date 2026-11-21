@@ -18,6 +18,16 @@ import {
   keepRowsAcrossTreeChange,
   type AreaSelection,
 } from "@/app/c/[collectionSlug]/shared/area-scope-placeholder";
+import type { SortOption } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+
+/** The orders an issue list can be read in — the Issues list's and the stamp picker's (#2669), one
+ *  list so the picker offers exactly what the Issues list does and nothing of its own. */
+export const ISSUE_SORT_KEYS: readonly IssueSortBy[] = ["year", "name", "catalogNumber"];
+export const ISSUE_SORT_OPTIONS: readonly SortOption[] = [
+  { value: "year", label: "Year" },
+  { value: "name", label: "Name" },
+  { value: "catalogNumber", label: "Catalog number" },
+];
 
 interface IssuesPage {
   items: IssueListItem[];

@@ -21,6 +21,7 @@ import {
 import type {
   IssueListItem,
   IssueChecklistSummary,
+  IssueSortBy,
   StampNodeData,
 } from "@/lib/issues";
 import type { SpanningChecklistSummary } from "@/lib/checklists";
@@ -67,10 +68,14 @@ import {
   useIssuesInfinite,
   useIssueYears,
   useIssueAreaFacets,
+  ISSUE_SORT_KEYS,
+  ISSUE_SORT_OPTIONS,
   type IssueListFilters,
   type IssueYearFacetFilters,
   type IssueAreaFacetFilters,
 } from "@/app/c/[collectionSlug]/issues/use-issues-query";
+import { SortControl } from "@/app/c/[collectionSlug]/shared/list-toolbar";
+import { usePersistedSort } from "@/app/c/[collectionSlug]/shared/use-persisted-sort";
 import { ChecklistBranch } from "@/app/c/[collectionSlug]/issues/checklist-branch";
 import {
   ChecklistDisplaySwitcher,
@@ -336,6 +341,13 @@ export function StampPickerBrowser({
   // only, not remembered, like every other picker's own filters.
   const [issueFormatIds, setIssueFormatIds] = useState<string[]>([]);
   const search = useDebouncedValue(filter);
+  // The order the issues are read in (#2669): the Issues list's choices, remembered on their own key
+  // rather than the list's, since the two are used for different work. Year ascending until changed.
+  const {
+    sortBy: issueSortBy,
+    sortDir: issueSortDir,
+    persistSort: persistIssueSort,
+  } = usePersistedSort<IssueSortBy>("stamp-picker-issues", "year", "asc", null, null, ISSUE_SORT_KEYS);
 
   // The catalogues a number is searched in (#2529) — the one remembered choice every list and
   // picker shares, ticked beside the box; a typed prefix still wins over it.
@@ -359,8 +371,10 @@ export function StampPickerBrowser({
       catalogScope: sentCatalogScope,
       year: year || undefined,
       issueFormatIds,
+      sortBy: issueSortBy,
+      sortDir: issueSortDir,
     }),
-    [areaIds, search, parsedSearch, sentCatalogScope, year, issueFormatIds]
+    [areaIds, search, parsedSearch, sentCatalogScope, year, issueFormatIds, issueSortBy, issueSortDir]
   );
 
   // The facets drop the year and keep everything else, so each count says what picking that year
@@ -546,6 +560,9 @@ export function StampPickerBrowser({
               onFilterChange={setFilter}
               issueFormatIds={issueFormatIds}
               onIssueFormatIdsChange={setIssueFormatIds}
+              sortBy={issueSortBy}
+              sortDir={issueSortDir}
+              onSortChange={persistIssueSort}
               search={search}
               hasMore={!!hasNextPage}
               isFetchingMore={isFetchingNextPage}
@@ -682,6 +699,9 @@ function IssueBrowser({
   onFilterChange,
   issueFormatIds,
   onIssueFormatIdsChange,
+  sortBy,
+  sortDir,
+  onSortChange,
   search,
   hasMore,
   isFetchingMore,
@@ -712,6 +732,10 @@ function IssueBrowser({
   /** The issue-format filter (#2440), held by the picker beside the search it narrows with. */
   issueFormatIds: string[];
   onIssueFormatIdsChange: (ids: string[]) => void;
+  /** The order the issues are listed in (#2669), the Issues list's choices on the picker's own key. */
+  sortBy: IssueSortBy;
+  sortDir: "asc" | "desc";
+  onSortChange: (sortBy: IssueSortBy, sortDir: "asc" | "desc") => void;
   /** The debounced text the loaded rows were actually fetched with; what a row measures its own
    *  match against, so a row never dims itself on a query the server has not answered yet. */
   search: string;
@@ -814,8 +838,8 @@ function IssueBrowser({
     releasePin.current = release;
     return release;
   }, [isLoading, lastPickedIssueId]);
-  // A new search or area is the collector moving on too: the list is theirs from there.
-  useEffect(() => () => releasePin.current?.(), [filter, selectedAreaId]);
+  // A new search, area or order is the collector moving on too: the list is theirs from there.
+  useEffect(() => () => releasePin.current?.(), [filter, selectedAreaId, sortBy, sortDir]);
 
   function handlePick(node: StampNodeData, unknownVariant: boolean, issue: IssueListItem) {
     // Browsing for a checklist (#1225): the stamp pressed picks one only where that says which — the
@@ -885,6 +909,12 @@ function IssueBrowser({
           collectionId={collectionId}
           selected={issueFormatIds}
           onChange={onIssueFormatIdsChange}
+        />
+        <SortControl
+          sortBy={sortBy}
+          sortDir={sortDir}
+          sortOptions={ISSUE_SORT_OPTIONS}
+          onSortChange={(sb, sd) => onSortChange(sb as IssueSortBy, sd)}
         />
         <ChecklistDisplaySwitcher value={checklistDisplay} onChange={setChecklistDisplay} />
         {/* Specialised checklists (#1617): out of the rows, the branches and the set buttons until on. */}

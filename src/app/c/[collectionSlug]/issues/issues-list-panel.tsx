@@ -57,6 +57,8 @@ import {
   useIssueYears,
   useIssueAreaFacets,
   useInvalidateIssues,
+  ISSUE_SORT_KEYS,
+  ISSUE_SORT_OPTIONS,
   type IssueListFilters,
   type IssueYearFacetFilters,
   type IssueAreaFacetFilters,
@@ -87,7 +89,6 @@ import { useCatalogSearchScope } from "@/app/c/[collectionSlug]/shared/catalog-s
 import {
   ListToolbar,
   LIST_BANNER_STYLE,
-  type SortOption,
 } from "@/app/c/[collectionSlug]/shared/list-toolbar";
 import { TagFilterControl } from "@/app/c/[collectionSlug]/shared/tag-filter-control";
 import { IssueFormatFilter } from "@/app/c/[collectionSlug]/shared/issue-format-filter";
@@ -180,12 +181,6 @@ interface IssuesListPanelProps {
   baseCurrency: string;
 }
 
-const ISSUE_SORT_OPTIONS: SortOption[] = [
-  { value: "year", label: "Year" },
-  { value: "name", label: "Name" },
-  { value: "catalogNumber", label: "Catalog number" },
-];
-
 export function IssuesListPanel({
   collectionId,
   collectionSlug,
@@ -235,7 +230,7 @@ export function IssuesListPanel({
     "issues", "year", "asc",
     searchParams.get("sortBy"),
     searchParams.get("sortDir"),
-    ["year", "name", "catalogNumber"]
+    ISSUE_SORT_KEYS
   );
   // The catalogues a number is searched in (#2529) — one remembered choice every list and picker
   // shares, ticked beside the catalogue box; it replaced the single remembered vendor (#115).
