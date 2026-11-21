@@ -11,6 +11,7 @@ import { createFacebookGroup } from "../../src/lib/facebook-groups";
 import { FACEBOOK_GROUP_DEFAULTS } from "../../src/lib/facebook-group-rules";
 import { createFacebookPost, publishOfferOrPost, rejectOfferOrPost } from "../../src/lib/facebook-posts";
 import { getPhonePost } from "../../src/lib/phone-posts";
+import { getFacebookPostKit } from "../../src/lib/facebook-auctions";
 import { facebookPostMoves, facebookPostLink } from "../../src/lib/facebook-post-rules";
 import { facebookPostPublishVia } from "../../src/lib/facebook-post-publish-rules";
 
@@ -190,6 +191,59 @@ describe("a Facebook post on the phone (#2626)", () => {
     assert.equal(back?.stage, "ready");
     assert.ok(facebookPostMoves(back!.kit.lots).activate);
     assert.equal(facebookPostLink(back!.kit.lots), null);
+  });
+
+  // Bids lot by lot on the post's screen (#2630): each through the offer's own price write, the one
+  // `patchOfferAction(…, "price")` makes for the phone and the desk, so the desk's post read shows them
+  // as recorded bids with their times. A sold lot has no field.
+  it("records bids on lots 2, 5 and 9 from the post's screen, and gives a sold lot no field", async () => {
+    const lots: string[] = [];
+    for (let i = 0; i < 10; i++) lots.push(await auction());
+    const { postId, postNo } = await createFacebookPost(userId, collectionId, lots, "Ten lots");
+    await publishOfferOrPost(userId, lots[0], "https://www.facebook.com/groups/2626/posts/80");
+    await prisma.offer.updateMany({
+      where: { id: { in: lots } },
+      data: { endsAt: new Date(Date.now() + 6 * 60 * 60 * 1000) },
+    });
+    await prisma.offer.update({ where: { id: lots[6] }, data: { state: "sold" } });
+
+    const up = await getPhonePost(userId, collectionId, postNo);
+    assert.ok(up);
+    const byNo = new Map(up.lots.map((l) => [l.lotNo, l]));
+    assert.deepEqual(byNo.get(2)?.bidding, { closed: false, hasBid: false, priceCheckedAt: null });
+    assert.equal(byNo.get(7)?.state, "sold");
+    assert.equal(byNo.get(7)?.bidding, null);
+
+    const before = Date.now();
+    const bids = new Map([
+      [2, "11.00"],
+      [5, "7.50"],
+      [9, "23.00"],
+    ]);
+    for (const [lotNo, bid] of bids) await patchOffer(userId, byNo.get(lotNo)!.offerId, { price: bid });
+
+    const after = await getPhonePost(userId, collectionId, postNo);
+    for (const lot of after!.lots) {
+      const bid = bids.get(lot.lotNo);
+      if (bid) {
+        assert.deepEqual(lot.price, { label: "Bid", amount: bid, currency: "PLN" });
+        assert.equal(lot.bidding?.hasBid, true);
+        assert.ok(lot.bidding?.priceCheckedAt && Date.parse(lot.bidding.priceCheckedAt) >= before - 1000);
+      } else if (lot.lotNo !== 7) {
+        assert.deepEqual(lot.bidding, { closed: false, hasBid: false, priceCheckedAt: null });
+      }
+    }
+
+    // The desk's post read: the three recorded bids, each with when it was recorded.
+    const desk = await getFacebookPostKit(postId);
+    const recorded = desk!.lots
+      .filter((l) => l.price !== "0.00")
+      .map((l) => ({ lotNo: l.lotNo, price: l.price, timed: l.priceCheckedAt !== null }));
+    assert.deepEqual(recorded, [
+      { lotNo: 2, price: "11.00", timed: true },
+      { lotNo: 5, price: "7.50", timed: true },
+      { lotNo: 9, price: "23.00", timed: true },
+    ]);
   });
 
   it("finds no post the collection does not number, and none for somebody else", async () => {

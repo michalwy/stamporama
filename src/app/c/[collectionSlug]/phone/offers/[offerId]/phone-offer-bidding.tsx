@@ -1,21 +1,19 @@
 "use client";
 
-import { useState, useTransition, type CSSProperties } from "react";
-import { useRouter } from "next/navigation";
+import type { CSSProperties } from "react";
 import type { PhoneOffer } from "@/lib/phone-offers";
 import { FACEBOOK_CLOSED_ADVICE, recordBidLabel } from "@/lib/facebook-bidding-rules";
 import { DialogError } from "@/app/dialog-shell";
 import { PHONE_TAP_TARGET, phoneButton } from "@/app/phone-screen";
-import { useToast } from "@/app/toast-provider";
 import { TextInput } from "@/app/c/[collectionSlug]/shared/text-input";
 import { NO_AUTOFILL } from "@/app/c/[collectionSlug]/shared/no-autofill";
 import { useHydrated } from "@/app/c/[collectionSlug]/shared/lot-view-prefs";
 import { formatRelative } from "@/app/c/[collectionSlug]/auctions/auction-format";
-import { useInvalidateOffers } from "@/app/c/[collectionSlug]/offers/use-offers-query";
+import { useRecordBid } from "../../use-record-bid";
 
 /**
  * A Facebook group auction's bidding on the phone (#2010, ADR-0072): the standing bid typed as it
- * comes in, through the desk card's own write (`patchOfferAction(…, "price")`, #1545), so the desk
+ * comes in, through the desk card's own write (`useRecordBid`, shared with the post's screen), so the desk
  * shows it exactly as if typed there — the offer's price, dated by `priceCheckedAt`. Once the closing
  * time has passed the screen says so in the desk's words, and the bid typed is the winning one: the
  * figure *Sell* offers as the price. The closing itself is the screen's own *Sell* or *Withdraw*
@@ -32,28 +30,9 @@ export function PhoneOfferBidding({
   offer: PhoneOffer;
   bidding: NonNullable<PhoneOffer["bidding"]>;
 }) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const { invalidateAll } = useInvalidateOffers();
   const hydrated = useHydrated();
-  const [isPending, startTransition] = useTransition();
-  const [bid, setBid] = useState("");
-  const [error, setError] = useState<string | undefined>();
+  const { bid, setBid, error, isPending, record, canRecord } = useRecordBid(collectionId, offer.id, "Bid recorded");
   const now = new Date();
-
-  function record() {
-    setError(undefined);
-    startTransition(async () => {
-      const { patchOfferAction } = await import("@/app/actions/offers");
-      const result = await patchOfferAction(offer.id, "price", bid);
-      if (result.status === "success") {
-        setBid("");
-        void invalidateAll(collectionId);
-        router.refresh();
-        toast({ message: "Bid recorded" });
-      } else setError(result.message);
-    });
-  }
 
   return (
     <form
@@ -68,7 +47,7 @@ export function PhoneOfferBidding({
       }}
       onSubmit={(e) => {
         e.preventDefault();
-        if (!isPending && bid.trim()) record();
+        record();
       }}
     >
       <p style={{ margin: 0, fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -103,13 +82,13 @@ export function PhoneOfferBidding({
         aria-label="Highest bid"
         disabled={isPending}
         {...NO_AUTOFILL}
-        style={fieldStyle}
+        style={bidFieldStyle}
       />
       <DialogError>{error}</DialogError>
       <button
         type="submit"
-        style={{ ...recordBtn, opacity: isPending || !bid.trim() ? 0.6 : 1 }}
-        disabled={isPending || !bid.trim()}
+        style={{ ...recordBidButton, opacity: canRecord ? 1 : 0.6 }}
+        disabled={!canRecord}
       >
         {isPending ? "Recording…" : recordBidLabel(bidding.closed)}
       </button>
@@ -123,14 +102,16 @@ const lineStyle: CSSProperties = {
   color: "var(--color-text-secondary)",
 };
 
-const recordBtn: CSSProperties = {
+/** The bid's button, shared with each lot's bid on the post's screen (#2630). */
+export const recordBidButton: CSSProperties = {
   ...phoneButton,
   background: "var(--color-bg-elevated)",
   color: "var(--color-text-primary)",
   border: "1px solid var(--color-border-strong)",
 };
 
-const fieldStyle: CSSProperties = {
+/** The bid's field, shared with each lot's bid on the post's screen (#2630). */
+export const bidFieldStyle: CSSProperties = {
   width: "100%",
   minHeight: PHONE_TAP_TARGET,
   padding: "0.5rem 0.75rem",

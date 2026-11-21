@@ -92,6 +92,8 @@ guide's phone page states the requirement.
 - **#2629** (added 2026-11-21) — publishing a Facebook post: its text and captions copied, its photos
   handed to the share menu or saved in lot order, its link pasted; a post waiting for the group's
   approval approved or rejected.
+- **#2630** (added 2026-11-21) — a Facebook post's bids recorded lot by lot on the post's screen, the
+  same bid #2010 records on each lot's own screen.
 
 **#2002** is the shell all of them stand on: the path, the manifest and icon, the phone frame, the
 links both ways and a sign-in screen usable at phone width.

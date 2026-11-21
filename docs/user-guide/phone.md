@@ -203,7 +203,14 @@ post screen shows — its title, its state and its price. An auction's price is 
 until you record a bid, then the bid; a quick buy's is its price. If a proposal was made from the
 post, the screen names it and links to it.
 
-Tap a lot to open its offer screen, where you record bids and sell or withdraw it, as for
+While a post is up, each auction lot still bidding has a **Record bid** field under its row, with
+when you last recorded its bid — *Bid recorded 5 minutes ago* — or that none is recorded yet. Type the
+highest bid you see under that lot and tap **Record bid**: it is the same as recording it on the lot's
+own screen or at the desk. Each lot saves on its own, so you can type the next lot's bid while the
+last one is being recorded. Once a lot has closed the button reads **Record winning bid**. Sold and
+withdrawn lots and quick buys have no field.
+
+Tap a lot to open its offer screen, where you can also record its bid and sell or withdraw it, as for
 [a Facebook group auction](#a-facebook-group-auction). **Full app** opens the same post at the desk.
 
 ### Publishing a post

@@ -63,7 +63,9 @@ export async function getPhonePost(ownerId: string, collectionId: string, postNo
             }))
           )
         : null,
-    lots: phonePostLots(kit.lots, photos),
+    // Whether a lot's auction has closed is decided here, at the read, so the server render and
+    // hydration agree — as the offer's phone screen decides it (#2010).
+    lots: phonePostLots(kit.lots, photos, new Date()),
     proposal,
     kit,
     photos,
