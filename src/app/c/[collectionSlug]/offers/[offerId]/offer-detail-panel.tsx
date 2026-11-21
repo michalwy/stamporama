@@ -39,6 +39,7 @@ import { ActivateOfferDialog, type PublishTarget } from "../activate-offer-dialo
 import { RepostOfferDialog } from "./repost-offer-dialog";
 import { renderFacebookKitPost } from "./facebook-kit-post";
 import { SpecificationShareDialog } from "./specification-share-dialog";
+import { SpecificationTextDialog } from "./specification-text-dialog";
 import { RemoveSoldElsewhereDialog } from "./remove-sold-elsewhere-dialog";
 import { LISTING_ELEMENT_ID, useAssistantHandoff, useAssistantPresence } from "../assistant-handoff";
 import { CLOSE_ELEMENT_ID, useAssistantClose } from "../assistant-close-handoff";
@@ -282,6 +283,8 @@ export function OfferDetailPanel({
   const [reposting, setReposting] = useState(false);
   // *Share specification…* (#1760): the buyer's link to the specification.
   const [sharingSpecification, setSharingSpecification] = useState(false);
+  // *Copy specification as text…* (#1759): its dialog, where the language is chosen (#2605).
+  const [copyingSpecification, setCopyingSpecification] = useState(false);
   const [removeSet, setRemoveSet] = useState<OfferDetailSet | null>(null);
   // *Remove sets sold elsewhere* (#1805): its confirmation, listing what goes.
   const [removingSoldElsewhere, setRemovingSoldElsewhere] = useState(false);
@@ -614,47 +617,6 @@ export function OfferDetailPanel({
     });
   }
 
-  /**
-   * *Copy specification as text* (#1759): the printable specification's contents as plain text, for a
-   * buyer asking in a chat. The text is read on the click, so it lists what the offer holds then.
-   *
-   * The clipboard is handed a **promise** of the text where the browser takes one: the read is a round
-   * trip, and a browser that ties clipboard writes to the click itself would refuse a `writeText`
-   * made after it. `writeText` is the fallback where `ClipboardItem` is missing.
-   */
-  function copySpecificationText() {
-    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-    if (!clipboard) {
-      toast({ message: "Could not copy — this browser offers no clipboard here", tone: "error" });
-      return;
-    }
-    let count = 0;
-    const text = fetch(`/api/collections/${collectionId}/offers/${offerId}/specification`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<{ text: string; count: number }>;
-      })
-      .then((body) => {
-        count = body.count;
-        return body.text;
-      });
-    const written =
-      typeof ClipboardItem !== "undefined" && clipboard.write
-        ? clipboard.write([
-            new ClipboardItem({
-              "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })),
-            }),
-          ])
-        : text.then((t) => clipboard.writeText(t));
-    written.then(
-      () =>
-        toast({
-          message: `Specification copied as text — ${count} ${count === 1 ? "copy" : "copies"}`,
-        }),
-      () => toast({ message: "Could not copy the specification", tone: "error" })
-    );
-  }
-
   function setState(next: ManualOfferTarget) {
     if (next === "withdrawn") {
       setConfirm("withdraw");
@@ -873,12 +835,13 @@ export function OfferDetailPanel({
       icon: "print",
       href: `/c/${collectionSlug}/offers/${offerId}/specification`,
     },
-    // The same specification as plain text (#1759), beside the page it mirrors.
+    // The same specification as plain text (#1759), beside the page it mirrors — through a dialog,
+    // where its language is chosen (#2605).
     {
       key: "specification-text",
-      label: "Copy specification as text",
+      label: "Copy specification as text…",
       icon: "copy",
-      onSelect: copySpecificationText,
+      onSelect: () => setCopyingSpecification(true),
     },
     // And as a link a buyer opens without an account (#1760) — the specification's third form.
     {
@@ -1905,6 +1868,14 @@ export function OfferDetailPanel({
             setActionError(undefined);
           }}
           onConfirm={repost}
+        />
+      )}
+
+      {copyingSpecification && (
+        <SpecificationTextDialog
+          collectionId={collectionId}
+          offerId={offerId}
+          onClose={() => setCopyingSpecification(false)}
         />
       )}
 

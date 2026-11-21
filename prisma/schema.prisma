@@ -5976,6 +5976,9 @@ model OfferSpecificationShareToken {
   // (`specificationContentsKey`): the offer's number, title and language, and every row with every
   // field. The page shows the specification only while today's contents hash the same.
   contentsHash String
+  // The language the link shows the specification in, chosen when it was made (#2605). Null on a
+  // link made before the choice existed: the offer's own language, as it always was.
+  language    String?
   createdAt   DateTime  @default(now())
   // When a buyer last opened it — the collector's one sign that the link reached anybody.
   lastUsedAt  DateTime?

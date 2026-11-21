@@ -1258,20 +1258,37 @@ catalogue order (or the order you set by hand). If the offer
 [groups its photos by checklist](#series-in-a-lot), each checklist's copies come together in the
 same way, so the page reads in the order a buyer sees the stamps in the photos.
 
-The page is written in **the offer's language** — its platform's listing language, the same one the
+The page opens in **the offer's language** — its platform's listing language, the same one the
 title and description use. Stamp, series, area, condition, fault and certificate names are
 translated where your collection has a translation for that language. Where it doesn't, the
 collection's own wording is used, just as in the title. The page's own words — its heading, the
 column headings and the copy count — are in that language too, for each of the languages offered in
-a platform's language list. For a language outside that list, they are in English.
+a platform's language list. For a language outside that list, they are in English, and the
+**Language** selector says *Page words in English*.
+
+### In another language
+
+A specification has no buyer of its own, so it starts in its platform's language — a Colnect offer
+in English, say. When the buyer at hand reads another language, choose it in **Language**: on the
+printed page it sits beside the **Print** button, and the text copy and the link have one of their
+own. The languages offered are the ones your collection already uses — its default language, its
+platforms' listing languages and its albums' languages — with the offer's own marked *the offer's*.
+To use a new language, add it to a platform or an album first.
+
+In another language, the names are translated just as above, and the title is written in that
+language from the offer's title template. A title you wrote by hand is shown as you wrote it. The
+choice applies to that one printout, copy or link, and is saved nowhere: the offer's own title, its
+platform and its language stay as they are, and the next specification starts in the platform's
+language again. The page's address carries the language you chose, so reloading it keeps it.
 
 ### As plain text
 
 When a buyer asks in a chat, pasting a list is quicker than attaching a PDF. Choose **Copy
-specification as text** from the offer's **⋮** menu: the whole specification goes to the clipboard
-in one click, and a message confirms how many copies it lists.
+specification as text…** from the offer's **⋮** menu. The dialog shows the text in the offer's
+language; pick another **Language** if the buyer reads one, and press **Copy**. The whole
+specification goes to the clipboard, and a message confirms how many copies it lists.
 
-The text holds the same copies as the page, in the same order and the same language. Its first line
+The text holds the same copies as the page, in the same order, in the language you chose. Its first line
 names the offer by its number and title; after it comes **one line per copy**, with the page's
 fields in the page's order, separated by `·` — catalogue number, area, series, year, stamp,
 condition with any faults in brackets, and certificate. A field the copy doesn't have is simply
@@ -1280,29 +1297,33 @@ left out. The thumbnail is the only thing the text cannot carry.
 ### As a link
 
 Instead of attaching a PDF or pasting a list, you can send a buyer just a link. Choose **Share
-specification…** from the offer's **⋮** menu and press **Generate link**. The dialog shows the
-address: **Copy link** puts it on the clipboard, and **Open as the buyer sees it** opens the page in a
-new tab.
+specification…** from the offer's **⋮** menu, choose its **Language** — the offer's own to begin
+with — and press **Generate link**. The dialog shows the address: **Copy link** puts it on the
+clipboard, and **Open as the buyer sees it** opens the page in a new tab.
 
 The buyer opens the link **without an account** and sees the same specification as the printed
-page — the same rows, fields and thumbnails, in the same order and in the offer's language — and
+page — the same rows, fields and thumbnails, in the same order and in the link's language — and
 nothing else from your collection: no other offers, no prices and no way into the app.
 
+**A link keeps the language it was made in.** It stays in it even if the platform's language changes
+later. To send the specification in another language, choose it in **Language**: the dialog says
+that this makes a new link, and **Generate new link** replaces the address.
+
 **A link shows the specification it was made with, and only that.** If anything on the
-specification changes afterwards — a copy sells or is added, a condition or a title is edited, the
-platform's language changes — or the offer is sold or withdrawn, the link still opens, but instead
-of the specification it shows the offer's number and a message, in the offer's language, that the
-offer has changed and the buyer should contact you for a current specification. Changes the
-specification doesn't show, such as the price or the listing's texts, don't affect the link.
+specification changes afterwards — a copy sells or is added, a condition or a title is edited — or
+the offer is sold or withdrawn, the link still opens, but instead of the specification it shows the
+offer's number and a message, in the link's language, that the offer has changed and the buyer
+should contact you for a current specification. Changes the specification doesn't show, such as the
+price or the listing's texts, don't affect the link.
 
 An offer has **one link**. Reopening the dialog shows it again, with when it was created, when a
 buyer last opened it and how many times, and **Visit history** lists every opening with its time, IP
 address and browser — see [Who opened a share link](share-links.md). If the specification has changed since the link was made, or the offer has
-closed, the dialog says so. If the offer's language is one the page has no headings in, the dialog
+closed, the dialog says so. If the link's language is one the page has no headings in, the dialog
 says that the buyer will see them in English.
 
-- **New link** replaces the address and records the specification as it is now — this is how you
-  send a buyer an updated specification. The old address stops working, so anyone holding it needs
+- **New link** replaces the address and records the specification as it is now, in the language
+  chosen — this is how you send a buyer an updated specification, or one in another language. The old address stops working, so anyone holding it needs
   the new one.
 - **Withdraw** removes the link. From then on its address shows only that the link is not valid —
   nothing of the offer.

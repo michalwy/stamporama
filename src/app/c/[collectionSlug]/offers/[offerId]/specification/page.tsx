@@ -5,25 +5,45 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getCollectionBySlug } from "@/lib/collections";
-import { readOfferSpecification } from "@/lib/offer-specification";
+import {
+  checkSpecificationLanguage,
+  readOfferSpecification,
+  readSpecificationLanguages,
+} from "@/lib/offer-specification";
 import { formatEntityNo } from "@/lib/quick-jump";
 import { specificationLabels } from "@/lib/offer-specification-labels";
 import { PrintButton } from "@/app/c/[collectionSlug]/shared/print-button";
 import { SpecificationDocument, specificationThumbs } from "./specification-document";
+import { SpecificationPageLanguage } from "./specification-page-language";
 import { Screen } from "@/app/screen";
 
 interface PageProps {
   params: Promise<{ collectionSlug: string; offerId: string }>;
+  searchParams: Promise<{ language?: string | string[] }>;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+/** The language the page is asked for (#2605) — `?language=`, one of the specification's choices — or
+ *  null for the offer's own, which is also what an address naming any other language gets. */
+async function askedLanguage(
+  ownerId: string,
+  offerId: string,
+  searchParams: PageProps["searchParams"]
+): Promise<string | null> {
+  const { language } = await searchParams;
+  return checkSpecificationLanguage(ownerId, offerId, typeof language === "string" ? language : null).catch(
+    () => null
+  );
+}
+
+export async function generateMetadata({ params, searchParams }: PageProps): Promise<Metadata> {
   const { offerId } = await params;
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) return {};
-  const spec = await readOfferSpecification(session.user.id, offerId);
+  const language = await askedLanguage(session.user.id, offerId, searchParams);
+  const spec = await readOfferSpecification(session.user.id, offerId, language);
   if (!spec) return {};
   // The tab title is what the browser offers as the PDF's file name, so it leads with the number —
-  // and it is the buyer's file, so it is named in the offer's language (#1760).
+  // and it is the buyer's file, so it is named in its language (#1760, #2605).
   const word = specificationLabels(spec.language).specification;
   return { title: `${word} ${formatEntityNo(spec.offerNo)} — ${spec.title}` };
 }
@@ -37,7 +57,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * copies. Nothing about the collector, the platform, the price, the value, packing or the sale — so
  * no generated-at footer naming the collection either, which the collector's own sheets carry.
  */
-export default async function OfferSpecificationPage({ params }: PageProps) {
+export default async function OfferSpecificationPage({ params, searchParams }: PageProps) {
   const { collectionSlug, offerId } = await params;
 
   const session = await auth.api.getSession({ headers: await headers() });
@@ -46,8 +66,12 @@ export default async function OfferSpecificationPage({ params }: PageProps) {
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
 
-  const spec = await readOfferSpecification(session.user.id, offerId);
-  if (!spec || spec.collectionId !== collection.id) notFound();
+  const language = await askedLanguage(session.user.id, offerId, searchParams);
+  const [spec, choices] = await Promise.all([
+    readOfferSpecification(session.user.id, offerId, language),
+    readSpecificationLanguages(session.user.id, offerId),
+  ]);
+  if (!spec || !choices || spec.collectionId !== collection.id) notFound();
 
   return (
     <Screen cap="specification" className="print-sheet">
@@ -62,6 +86,11 @@ export default async function OfferSpecificationPage({ params }: PageProps) {
         >
           ← Offer {formatEntityNo(spec.offerNo)}
         </Link>
+        <SpecificationPageLanguage
+          language={spec.language}
+          offerLanguage={choices.offerLanguage}
+          languages={choices.languages}
+        />
         <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
           To keep it as a PDF, choose “Save as PDF” in the print dialog.
         </span>

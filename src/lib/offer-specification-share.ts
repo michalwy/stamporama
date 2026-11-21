@@ -4,7 +4,12 @@ import { prisma } from "./db";
 import { readShareAddress, sealShareToken, type ShareAddress } from "./share-address";
 import { recordShareLinkMinted, recordShareLinkWithdrawn } from "./share-link-visits";
 import { soldItemIds } from "./sales";
-import { readOfferSpecification, type OfferSpecification } from "./offer-specification";
+import {
+  checkSpecificationLanguage,
+  readOfferSpecification,
+  readSpecificationLanguages,
+  type OfferSpecification,
+} from "./offer-specification";
 import { specificationContentsKey } from "./offer-specification-rules";
 import { CLOSED_OFFER_STATES } from "./offer-rules";
 import {
@@ -24,7 +29,7 @@ import {
 // hashed when the link is made (`contentsHash`), and the page shows the specification only while
 // today's read hashes the same and the offer is still open. Once anything a buyer reads has changed —
 // a copy sold or added, a condition, the title — or the offer has closed, the address still opens
-// and says so in the offer's language, rather than showing a buyer something they were not sent. A
+// and says so in the link's language, rather than showing a buyer something they were not sent. A
 // new link records the specification afresh.
 
 const HASH_ALGO = "sha256";
@@ -80,6 +85,8 @@ export interface OfferSpecificationShareLinkData {
   /** When a buyer last opened it, or null if nobody has. */
   lastUsedAt: string | null;
   standing: OfferSpecificationShareStanding;
+  /** The language the link shows the specification in — the one it was made in (#2605). */
+  language: string | null;
 }
 
 function standingOf(spec: OfferSpecification, contentsHash: string): OfferSpecificationShareStanding {
@@ -87,39 +94,51 @@ function standingOf(spec: OfferSpecification, contentsHash: string): OfferSpecif
   return hashesEqual(contentsHashOf(spec), contentsHash) ? "current" : "changed";
 }
 
-/** What the collector's dialog reads: the link, if there is one, and the offer's language — which
- *  the buyer's page speaks, and which the dialog warns about when the page has no words in it. */
+/** What the collector's dialog reads: the link, if there is one, the offer's own language — a new
+ *  link's default — and the languages a link can be made in (#2605). The dialog warns when the
+ *  chosen one is a language the buyer's page has no words in. */
 export interface OfferSpecificationShareState {
   link: OfferSpecificationShareLinkData | null;
-  language: string | null;
+  offerLanguage: string | null;
+  languages: string[];
 }
 
-/** The offer's specification link and language. Throws when the offer is not the caller's, or not in
- *  `collectionId` where one is named. */
+/** The offer's specification link and the languages one can be made in. Throws when the offer is not
+ *  the caller's, or not in `collectionId` where one is named. */
 export async function readOfferSpecificationShareState(
   ownerId: string,
   offerId: string,
   collectionId?: string
 ): Promise<OfferSpecificationShareState> {
   await assertOfferOwner(ownerId, offerId, collectionId);
-  const [row, spec] = await Promise.all([
+  const [row, choices] = await Promise.all([
     prisma.offerSpecificationShareToken.findUnique({
       where: { offerId },
-      select: { tokenSealed: true, createdAt: true, lastUsedAt: true, contentsHash: true },
+      select: { tokenSealed: true, createdAt: true, lastUsedAt: true, contentsHash: true, language: true },
     }),
-    readOfferSpecification(ownerId, offerId),
+    readSpecificationLanguages(ownerId, offerId),
   ]);
-  if (!spec) throw new Error("Offer not found or access denied.");
+  if (!choices) throw new Error("Offer not found or access denied.");
+  // The link is compared with today's specification in the language it was made in.
+  const spec = row ? await readOfferSpecification(ownerId, offerId, row.language) : null;
+  if (row && !spec) throw new Error("Offer not found or access denied.");
   return {
-    language: spec.language,
-    link: row
-      ? {
-          address: readShareAddress(row.tokenSealed),
-          createdAt: row.createdAt.toISOString(),
-          lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
-          standing: standingOf(spec, row.contentsHash),
-        }
-      : null,
+    offerLanguage: choices.offerLanguage,
+    // A link's own language stays among the choices, so its selector can show it.
+    languages:
+      spec?.language && !choices.languages.includes(spec.language)
+        ? [...choices.languages, spec.language]
+        : choices.languages,
+    link:
+      row && spec
+        ? {
+            address: readShareAddress(row.tokenSealed),
+            createdAt: row.createdAt.toISOString(),
+            lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
+            standing: standingOf(spec, row.contentsHash),
+            language: spec.language,
+          }
+        : null,
   };
 }
 
@@ -132,13 +151,19 @@ export async function readOfferSpecificationShareState(
  * re-sends a specification that has changed. An upsert on the unique `offerId`, so there is never a
  * window with two live links. The raw token is returned as well as sealed, because the dialog that
  * pressed the button shows the address before any refetch lands.
+ *
+ * **The link is made in `language`** (#2605) — one of the specification's choices, or null for the
+ * offer's own — and keeps it: the language is recorded with the link, so a buyer's page stays in it
+ * whatever the platform lists in later. Another language is another link.
  */
 export async function createOfferSpecificationShareToken(
   ownerId: string,
-  offerId: string
+  offerId: string,
+  language: string | null = null
 ): Promise<{ token: string }> {
   const { collectionId } = await assertOfferOwner(ownerId, offerId);
-  const spec = await readOfferSpecification(ownerId, offerId);
+  const chosen = await checkSpecificationLanguage(ownerId, offerId, language);
+  const spec = await readOfferSpecification(ownerId, offerId, chosen);
   if (!spec) throw new Error("Offer not found or access denied.");
   const rawToken = OFFER_SPECIFICATION_SHARE_TOKEN_PREFIX + randomBytes(32).toString("base64url");
   const tokenHash = sha256(rawToken);
@@ -149,9 +174,10 @@ export async function createOfferSpecificationShareToken(
     await recordShareLinkMinted(tx, { collectionId, kind: "offer_specification", subjectId: offerId, tokenHash });
     await tx.offerSpecificationShareToken.upsert({
       where: { offerId },
-      create: { offerId, tokenHash, tokenSealed, contentsHash },
+      create: { offerId, tokenHash, tokenSealed, contentsHash, language: spec.language },
       update: {
         tokenHash,
+        language: spec.language,
         // Written on every regeneration, null included: a stale seal would show the address of the
         // link just replaced.
         tokenSealed,
@@ -194,6 +220,8 @@ export interface OfferSpecificationShareAccess {
   collectionId: string;
   /** The specification's contents when the link was made. */
   contentsHash: string;
+  /** The language it was made in (#2605); null on a link older than the choice — the offer's own. */
+  language: string | null;
 }
 
 /**
@@ -216,6 +244,7 @@ export async function verifyOfferSpecificationShareToken(
       id: true,
       tokenHash: true,
       contentsHash: true,
+      language: true,
       offer: { select: { id: true, collectionId: true, collection: { select: { ownerId: true } } } },
     },
   });
@@ -232,6 +261,7 @@ export async function verifyOfferSpecificationShareToken(
     ownerId: row.offer.collection.ownerId,
     collectionId: row.offer.collectionId,
     contentsHash: row.contentsHash,
+    language: row.language,
   };
 }
 
@@ -249,7 +279,7 @@ export type SharedOfferSpecification =
 export async function readSharedOfferSpecification(
   access: OfferSpecificationShareAccess
 ): Promise<SharedOfferSpecification | null> {
-  const spec = await readOfferSpecification(access.ownerId, access.offerId);
+  const spec = await readOfferSpecification(access.ownerId, access.offerId, access.language);
   if (!spec) return null;
   const standing = standingOf(spec, access.contentsHash);
   if (standing === "current") return { standing, spec };
