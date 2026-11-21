@@ -33,8 +33,8 @@
 // held — then the offer workflow in the order it is walked, finding what is unlisted before
 // drafting a listing and drafting one before pricing and wording it, and recording it sold last
 // (#1949): the sales already recorded, the buyer, and the sale — then proposals (#2303), in the
-// order one is put together for a buyer who asked for more: the proposals kept, one read, a new one,
-// its lots added or made, priced and taken out, and last what the buyer took — then the contact read in full
+// order one is put together for a buyer who asked for more: the proposals kept, one read, a new one —
+// or one made from a Facebook post not yet up, the post read first (#2608) — its lots added or made, priced and taken out, and last what the buyer took — then the contact read in full
 // (#2610): found, then read with everything done with them — then the conversation with the
 // buyer (#2149): what is already in the log, a conversation recorded, a correction, a move, a
 // deletion, and an entry's files attached and removed (#2150) — then the exchange workflow in
@@ -120,6 +120,7 @@ import { addSaleAttachmentsOperation, listSaleAttachmentsOperation } from "./ope
 import {
   addProposalLotsOperation,
   convertProposalToSaleOperation,
+  createProposalFromPostOperation,
   createProposalOperation,
   getProposalOperation,
   getProposalSaleOptionsOperation,
@@ -128,6 +129,7 @@ import {
   removeProposalLotOperation,
   setProposalLotPriceOperation,
 } from "./operations/proposals";
+import { getFacebookPostOperation } from "./operations/facebook-posts";
 import {
   createContactOperation,
   findContactsOperation,
@@ -315,6 +317,8 @@ export const OPERATIONS: readonly Operation[] = [
   listProposalsOperation,
   getProposalOperation,
   createProposalOperation,
+  getFacebookPostOperation,
+  createProposalFromPostOperation,
   addProposalLotsOperation,
   makeProposalLotsOperation,
   setProposalLotPriceOperation,

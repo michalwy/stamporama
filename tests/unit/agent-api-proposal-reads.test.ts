@@ -109,6 +109,7 @@ describe("what a proposal is told as (#2303)", () => {
         sentOn: null,
         closedOn: null,
         platform: { id: "d1", name: "Direct" },
+        post: null,
         sale: null,
         lots: [
           {
@@ -149,6 +150,7 @@ describe("what a proposal is told as (#2303)", () => {
     assert.equal(record.buyerPicks, null);
     assert.equal(record.message, "Lot 1 …");
     assert.equal(record.sale, null);
+    assert.equal(record.post, null);
     assert.ok(!JSON.stringify(record).includes("example.com"));
   });
 });
@@ -170,6 +172,7 @@ describe("what a proposal can be sold as (#2303, #2336)", () => {
       lots: [lot(1, "ready"), lot(2, "sold"), lot(3, "withdrawn"), lot(4, "preparing")],
       sales: [],
       platformName: "Direct",
+      post: null,
     });
     assert.deepEqual(
       options.lots.map((l) => [l.lotNo, l.state]),
@@ -214,6 +217,7 @@ describe("the buyer's picks (#2607)", () => {
         sentOn: "2026-11-02",
         closedOn: null,
         platform: { id: "d1", name: "Direct" },
+        post: null,
         sale: null,
         lots: [lot(1, "ready", null), lot(2, "ready", "picked"), lot(5, "sold", "unavailable"), lot(7, "ready", "picked")],
         total: "20.00",
@@ -279,5 +283,44 @@ describe("the buyer's picks (#2607)", () => {
       /— 3 — are no longer available/
     );
     assert.match(refusal(() => proposalSaleLotsWithPicks(["picked", "PICKED"], lots, "lots", 4)), /named twice/);
+  });
+});
+
+describe("a proposal made from a Facebook post (#2608)", () => {
+  it("names its post — by number, title and group", () => {
+    const record = proposalRecord(
+      {
+        proposalId: "p1",
+        proposalNo: 9,
+        status: "preparing",
+        contact: { id: "c1", name: "Jan Kowalski" },
+        createdOn: "2026-11-21",
+        sentOn: null,
+        closedOn: null,
+        platform: { id: "d1", name: "Direct" },
+        post: { postId: "fp1", postNo: 12, title: "Poland 1950s", groupName: "Stamps PL" },
+        sale: null,
+        lots: [],
+        total: "0.00",
+        unpriced: 0,
+        currency: "PLN",
+        buyerPicks: null,
+      },
+      new Map(),
+      null,
+      "/c/x/offers/proposals/9"
+    );
+    assert.deepEqual(record.post, { id: "fp1", postNo: 12, title: "Poland 1950s", group: "Stamps PL" });
+  });
+
+  it("says in the sale options that the lots not taken stay in the post", () => {
+    const options = proposalSaleOptions({
+      lots: [],
+      sales: [],
+      platformName: "Facebook",
+      post: { postNo: 12, groupName: "Stamps PL" },
+    });
+    assert.equal(options.newSalePlatform, "Facebook");
+    assert.deepEqual(options.post, { postNo: 12, group: "Stamps PL" });
   });
 });

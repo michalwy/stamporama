@@ -384,6 +384,8 @@ describe("the want, checklist and trade operations (#712)", () => {
       //     prepares for one contact — and not a trade proposal to a partner, which `proposal` is
       //     here for. None of them reaches the buyer: marking one sent, declining it and its link stay
       //     in the app, and the import guard holds `moveProposal` and the link's writers out.
+      //     `create_proposal_from_post` (#2608) is one more: a Facebook post not yet up made into such
+      //     a Proposal for one contact, as the post's own *Make a proposal…* does.
       //   - `cancel_sale` (#2500) cancels one of the collector's own sales the buyer never paid for:
       //     it is kept as a record in this collection and nothing goes to the buyer — `cancel` is
       //     forbidden here for a trade, which is a partner's too.
@@ -400,6 +402,7 @@ describe("the want, checklist and trade operations (#712)", () => {
         "remove_proposal_lot",
         "get_proposal_sale_options",
         "convert_proposal_to_sale",
+        "create_proposal_from_post",
       ]);
       const offenders = OPERATIONS.filter((operation) => {
         if (exempt.has(operation.name)) return false;
@@ -464,8 +467,11 @@ describe("the want, checklist and trade operations (#712)", () => {
       // The other half of *absence, not a flag*: there is no status parameter on `create_trade` and
       // no operation that takes one.
       // `/proposals` is a Proposal's (#2303, ADR-0075) — an offer prepared for one contact, not a
-      // trade proposal — and has its own boundary: no send, no decline, no link.
-      const paths = OPERATIONS.filter((operation) => !operation.path.startsWith("/proposals")).map(
+      // trade proposal — and has its own boundary: no send, no decline, no link. So is a Facebook post
+      // made into one (#2608), `create_proposal_from_post`.
+      const paths = OPERATIONS.filter(
+        (operation) => !operation.path.startsWith("/proposals") && operation.name !== "create_proposal_from_post"
+      ).map(
         (operation) => `${operation.method} ${operation.path}`
       );
       assert.ok(

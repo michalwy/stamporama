@@ -1407,12 +1407,15 @@ describe("the agent API's operation modules (#2198)", () => {
  * *Convert to sale…* in its API form, which marks the sale *to review* (#1948) in its transaction.
  * Marking a proposal sent, declining it, the buyer's link, and the screen's unmarked conversion stay
  * in the app: each writer of `proposals.ts` and `proposal-handout.ts` is read off its exports by verb,
- * so one added later has to be placed. A lot's price is `patchOffer`, the offers' own write. The
+ * so one added later has to be placed. A post made into a proposal (#2608) is the post's own *Make a
+ * proposal…*, `createProposalFromPost`. A lot's price is `patchOffer`, the offers' own write. The
  * buyer's picks (#2601) are read and sold from (#2607) but never written: `saveProposalBuyerPick` is
  * the buyer's own route's.
  */
 const PROPOSAL_API_WRITES = [
   "createProposal",
+  // A Facebook post not yet up made into a proposal (#2608): the post's *Make a proposal…* (#2602).
+  "createProposalFromPost",
   "addProposalLots",
   "makeProposalLots",
   "removeProposalLot",

@@ -8,6 +8,7 @@ import {
   convertProposalToSaleThroughApi,
   countProposals,
   createProposal,
+  createProposalFromPost,
   getProposalSaleOptions,
   getProposalScreen,
   listProposalsPaginated,
@@ -36,6 +37,7 @@ import {
   proposalSaleOptions,
 } from "../proposal-reads";
 import { readSaleById } from "./sales";
+import { FACEBOOK_POST_PARAMETER, resolveFacebookPost } from "./facebook-posts";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
 import type { AgentProposal, AgentProposalRow, AgentProposalSaleOptions, ProposalLotFacts } from "../proposal-reads";
 import type { AgentSale } from "../sale-reads";
@@ -64,6 +66,13 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // `convert_proposal_to_sale` takes `picked` for the picks still for sale — as *Convert to sale…*
 // opens with them ticked. `saveProposalBuyerPick` is the buyer's route's alone, held out of every
 // operation module by the boundary test.
+//
+// **A proposal made from a Facebook post** (#2608) is `create_proposal_from_post` — the post's
+// *Make a proposal…* (#2602), `createProposalFromPost`, refused where the post's screen refuses it and
+// with its sentence. Its lots are the post's own under the post's numbers, so adding, making or taking
+// out lots is refused by the domain (*add or take them out on the post*), and converting it sells the
+// lots taken in the post and leaves the rest there — nothing is withdrawn. Publishing the post stays
+// with the collector.
 //
 // **No send, no decline, no link.** Marking a proposal sent, declining it, and the buyer's link and
 // document stay in the app — the collector decided on 2026-11-01 that what reaches the buyer is
@@ -252,7 +261,7 @@ export const listProposalsOperation: Operation = {
 // ── get_proposal ─────────────────────────────────────────────────────────────
 
 const PROPOSAL_RESULT_DESCRIPTION =
-  "The proposal: its status, its contact, the Direct platform its lots are on, and the sale it became once `sold`. Each lot carries its `lotNo` — the number the buyer is sent and answers with — its offer's number and id, title, state, listing type, price (null while it has none), sets, the copies on it by copy number, and `pick` — `picked` where the buyer ticked it on the proposal's link, `unavailable` where they did but it has since sold elsewhere or been withdrawn, null where they did not. `buyerPicks` lists the lots the buyer ticked by number and `changedAt`, when they last ticked or unticked one; it is null while nothing is ticked. Picks are the buyer's: nothing here changes them. `total` is the lots not withdrawn at their prices and `unpriced` counts those with no price. `message` is the text for the buyer from the Direct platform's template in the buyer's language — null when the platform has none for that language, since nothing is generated without one; reading it here does not mark the proposal sent.";
+  "The proposal: its status, its contact, the Direct platform whose template the message is written from, `post` — the Facebook post it was made from, by number, title and group, whose own lots its lots are (null for a proposal of Direct offers) — and the sale it became once `sold`. Each lot carries its `lotNo` — the number the buyer is sent and answers with — its offer's number and id, title, state, listing type, price (null while it has none), sets, the copies on it by copy number, and `pick` — `picked` where the buyer ticked it on the proposal's link, `unavailable` where they did but it has since sold elsewhere or been withdrawn, null where they did not. `buyerPicks` lists the lots the buyer ticked by number and `changedAt`, when they last ticked or unticked one; it is null while nothing is ticked. Picks are the buyer's: nothing here changes them. `total` is the lots not withdrawn at their prices and `unpriced` counts those with no price. `message` is the text for the buyer from the Direct platform's template in the buyer's language — null when the platform has none for that language, since nothing is generated without one; reading it here does not mark the proposal sent.";
 
 export const getProposalOperation: Operation = {
   name: "get_proposal",
@@ -288,7 +297,7 @@ export const getProposalSaleOptionsOperation: Operation = {
   result: {
     kind: "object",
     description:
-      "`lots` are the open lots, by `lotNo`, each with its price (null while it has none), `setsToSell` — the sets whose copies have not left, each selling at the lot's price — and `picked`, whether the buyer ticked it on the proposal's link. `sales` are the contact's sales still open, newest first, each with its marketplace, day, status, currency and line count; a sale in another currency than the lots is refused. `newSalePlatform` is where a new sale is recorded.",
+      "`lots` are the open lots, by `lotNo`, each with its price (null while it has none), `setsToSell` — the sets whose copies have not left, each selling at the lot's price — and `picked`, whether the buyer ticked it on the proposal's link. `sales` are the contact's sales still open, newest first, each with its marketplace, day, status, currency and line count; a sale in another currency than the lots is refused. `newSalePlatform` is where a new sale is recorded — the Direct platform, or the post's for a proposal made from a Facebook post. `post` names that post and its group, the lots not taken staying in it; null for any other proposal.",
   },
   handler: async (context, params) => readProposalSaleOptions(context, params),
 };
@@ -320,6 +329,37 @@ export const createProposalOperation: Operation = {
   ],
   result: { kind: "object", description: `The new proposal, in \`get_proposal\`'s shape. ${PROPOSAL_RESULT_DESCRIPTION}` },
   handler: async (context, params) => startProposal(context, params),
+};
+
+// ── create_proposal_from_post ────────────────────────────────────────────────
+
+export async function startProposalFromPost(context: OperationContext, params: ParsedParams): Promise<AgentProposal> {
+  const post = await resolveFacebookPost(context, requiredString(params, "post"));
+  const contactId = await resolveContactParam(context, requiredString(params, "contact"), "contact");
+  const { proposalId } = await refusingDomainGuards(() => createProposalFromPost(context.ownerId, post.id, contactId));
+  return loadProposal(context, proposalId);
+}
+
+export const createProposalFromPostOperation: Operation = {
+  name: "create_proposal_from_post",
+  method: "POST",
+  path: "/facebook-posts/{post}/proposal",
+  description:
+    "Make a Facebook post not yet up into a proposal for one contact, as the post's Make a proposal… does — so that buyer sees its lots first. The proposal shares the post's lots: they stay on Facebook in the post, keep the post's numbers, and join and leave the proposal as they join and leave the post, so its lots are changed on the post, never with `add_proposal_lots`, `make_proposal_lots` or `remove_proposal_lot`. Refused, with the reason, once the post is up and while a proposal made from it is still open. Converting it sells the lots the buyer took in the post and leaves the others in it. Publishing the post stays with the collector. Read `get_facebook_post` first.",
+  writes: true,
+  parameters: [
+    FACEBOOK_POST_PARAMETER,
+    {
+      name: "contact",
+      in: "body",
+      type: "string",
+      required: true,
+      description:
+        "Who it is for: a contact's name or id. A name that matches nobody is refused with the close ones — nothing is created from here; a new buyer is added with `find_or_create_buyer`.",
+    },
+  ],
+  result: { kind: "object", description: `The new proposal, in \`get_proposal\`'s shape. ${PROPOSAL_RESULT_DESCRIPTION}` },
+  handler: async (context, params) => startProposalFromPost(context, params),
 };
 
 // ── add_proposal_lots ────────────────────────────────────────────────────────
@@ -574,7 +614,7 @@ export const convertProposalToSaleOperation: Operation = {
   method: "POST",
   path: "/proposals/{proposal}/sale",
   description:
-    "Record which lots of a proposal the buyer took, as the app's Convert to sale… does — named by number, or `picked` for the lots the buyer ticked on the proposal's link: every set each still has is sold at the lot's price — or the price agreed — into a new Direct sale for the proposal's contact, dated today, or into one of their sales not yet sent on any marketplace, in the lots' currency. The lots not named are withdrawn and the proposal becomes `sold`; none of it can be undone from here. The sale waits for the collector's review. Read `get_proposal_sale_options` first.",
+    "Record which lots of a proposal the buyer took, as the app's Convert to sale… does — named by number, or `picked` for the lots the buyer ticked on the proposal's link: every set each still has is sold at the lot's price — or the price agreed — into a new Direct sale for the proposal's contact, dated today, or into one of their sales not yet sent on any marketplace, in the lots' currency. The lots not named are withdrawn and the proposal becomes `sold`; none of it can be undone from here. A proposal made from a Facebook post sells into a new sale on the post's platform instead, and its lots not named are not withdrawn — they stay in the post, to go up with it. The sale waits for the collector's review. Read `get_proposal_sale_options` first.",
   writes: true,
   parameters: [
     PROPOSAL_PARAMETER,
@@ -591,7 +631,7 @@ export const convertProposalToSaleOperation: Operation = {
       in: "body",
       type: "string",
       required: true,
-      description: `Where the lots go: \`${NEW_SALE}\` for a new sale on the Direct platform, or the number (\`12\` or \`s12\`) or id of one of the contact's sales not yet sent, from \`get_proposal_sale_options\`.`,
+      description: `Where the lots go: \`${NEW_SALE}\` for a new sale — on the Direct platform, or the post's for a proposal made from a Facebook post — or the number (\`12\` or \`s12\`) or id of one of the contact's sales not yet sent, from \`get_proposal_sale_options\`.`,
     },
   ],
   result: {
