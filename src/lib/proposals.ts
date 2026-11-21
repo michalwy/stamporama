@@ -624,11 +624,13 @@ export async function getProposalLot(
 }
 
 /** The proposal's open lots as Prepare rows — what its screen prices them with, as a post's screen
- *  does (#2031). Empty unless the proposal is being prepared: a sent one is fixed (#2307). */
+ *  does (#2031). Empty unless the proposal is being prepared: a sent one is fixed (#2307). `only`
+ *  answers for those lots alone — what the screen asks after while their photos are made (#2639). */
 export async function getProposalLotsPrepare(
   ownerId: string,
   collectionId: string,
-  proposalId: string
+  proposalId: string,
+  only?: readonly string[]
 ): Promise<Record<string, PrepareOffer>> {
   const proposal = await prisma.proposal.findFirst({
     where: { id: proposalId, collectionId },
@@ -640,7 +642,7 @@ export async function getProposalLotsPrepare(
   const rows = await readPrepareOffers(
     ownerId,
     collectionId,
-    proposal.lots.map((lot) => lot.id),
+    proposal.lots.map((lot) => lot.id).filter((id) => !only || only.includes(id)),
     OPEN_OFFER_STATES
   );
   return Object.fromEntries(rows.map((row) => [row.id, row]));

@@ -170,6 +170,8 @@ describe("Proposals (#2287)", () => {
     // The lots are priced as a post's are, through their Prepare rows.
     const prepare = await getProposalLotsPrepare(userId, collectionId, proposalId);
     assert.deepEqual(Object.keys(prepare).sort(), [a, b].sort());
+    // A lot waiting on its photos is asked after alone (#2639).
+    assert.deepEqual(Object.keys(await getProposalLotsPrepare(userId, collectionId, proposalId, [b])), [b]);
   });
 
   it("refuses an offer elsewhere, closed, or in another proposal, and adds none of a refused batch", async () => {
