@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   checklistBranches,
   countOffChecklist,
+  drawsChecklistBranches,
   withIssueAncestors,
   withIssueAncestorsAndVariants,
 } from "../../src/lib/checklist-branches";
@@ -118,6 +119,60 @@ describe("checklistBranches (#1520)", () => {
       assert.deepEqual(ids(none.tree), ["20"]);
       assert.equal(countOffChecklist(IMPERF_TREE), 1);
     });
+  });
+});
+
+describe("drawsChecklistBranches (#2681)", () => {
+  const SHEET = "cl-souvenir-sheet";
+  const MAIN = "cl-main";
+
+  it("draws several checklists as branches", () => {
+    assert.equal(drawsChecklistBranches(TREE, CHECKLISTS), true);
+  });
+
+  it("draws one checklist as branches when stamps sit off it", () => {
+    // *Pastoral Visits*: the souvenir sheets are on the checklist, the stamps are not.
+    const tree: Node[] = [
+      node("3950", []),
+      node("3951", []),
+      node("BL188", [SHEET]),
+      node("BL189", [SHEET]),
+    ];
+    assert.equal(drawsChecklistBranches(tree, [{ id: SHEET }]), true);
+    const branches = checklistBranches(tree, [{ id: SHEET }], null);
+    assert.deepEqual(
+      branches.map((b) => [b.checklistId, ids(b.tree)]),
+      [
+        [SHEET, ["BL188", "BL189"]],
+        [null, ["3950", "3951"]],
+      ]
+    );
+  });
+
+  it("keeps one checklist flat when it holds every stamp", () => {
+    const tree: Node[] = [node("1", [MAIN]), node("2", [MAIN])];
+    assert.equal(drawsChecklistBranches(tree, [{ id: MAIN }]), false);
+  });
+
+  it("keeps one checklist flat when only its stamps' variants are off it, at any depth", () => {
+    const tree: Node[] = [
+      node("1", [MAIN], [node("1a", [], [node("1a1", [])])]),
+      node("2", [MAIN], [node("2a", [])]),
+    ];
+    assert.equal(drawsChecklistBranches(tree, [{ id: MAIN }]), false);
+  });
+
+  it("counts an unlisted parent of a listed stamp as off the checklist", () => {
+    const tree: Node[] = [node("20", [], [node("20A", [MAIN])])];
+    assert.equal(drawsChecklistBranches(tree, [{ id: MAIN }]), true);
+  });
+
+  it("never draws an issue without checklists as branches", () => {
+    assert.equal(drawsChecklistBranches([node("1", [])], []), false);
+  });
+
+  it("keeps a one-checklist issue whose stamps are not loaded yet flat", () => {
+    assert.equal(drawsChecklistBranches([], [{ id: MAIN }]), false);
   });
 });
 

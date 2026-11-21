@@ -31,8 +31,8 @@ export interface ChecklistBranch<T> extends FilteredStampTree<T> {
  * as it is to the flat tree. A branch it empties is still returned; whether to draw an empty branch
  * is the caller's decision.
  *
- * Only for an issue with more than one checklist: with one, the stamps are listed straight under
- * the issue in both modes, and the caller does not ask.
+ * Only for an issue {@link drawsChecklistBranches} says is drawn as branches; otherwise the stamps
+ * are listed straight under the issue, and the caller does not ask.
  */
 export function checklistBranches<T extends ChecklistTreeNode<T>>(
   tree: T[],
@@ -55,6 +55,20 @@ export function checklistBranches<T extends ChecklistTreeNode<T>>(
     });
   }
   return branches;
+}
+
+/**
+ * Whether tree mode draws an issue as branches (#1520, #2681). Always with several checklists. With
+ * one, only when *Not on a checklist* would hold something — a stamp off the checklist that is not a
+ * variant, at any depth, of a stamp on it — since otherwise the single branch would hold every row
+ * and add a level that shows nothing. With none, never.
+ */
+export function drawsChecklistBranches<T extends ChecklistTreeNode<T>>(
+  tree: T[],
+  checklists: readonly unknown[]
+): boolean {
+  if (checklists.length > 1) return true;
+  return checklists.length === 1 && offChecklistIds(tree).size > 0;
 }
 
 /** How many stamps the *Not on a checklist* branch holds — its heading's count. */

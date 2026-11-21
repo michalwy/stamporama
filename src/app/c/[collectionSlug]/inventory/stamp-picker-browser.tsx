@@ -33,7 +33,11 @@ import {
   toggleUnderExpandAll,
   type PickerExpandAll,
 } from "@/lib/picker-tree-state";
-import { checklistBranches, countOffChecklist } from "@/lib/checklist-branches";
+import {
+  checklistBranches,
+  countOffChecklist,
+  drawsChecklistBranches,
+} from "@/lib/checklist-branches";
 import { getIssueChecklistHeadlinesAction } from "@/app/actions/checklists";
 import {
   createIssueAction,
@@ -1221,15 +1225,19 @@ function PickIssueRow({
   // An inner-stamp match forces the issue open (so the matching stamp is visible, #186); when the
   // filter clears, the row falls back to the user's own toggle.
   const isExpanded = userExpanded || openedByAll || matchedStampIds !== null;
-  // Several checklists are drawn as branches in tree mode, as on the Issues list (#1520, #1585), and
-  // the chip filter has nothing to do beside them, the branches already separating the checklists.
+  const fullTree = useMemo(() => buildStampTree(members), [members]);
+  // Checklists are drawn as branches in tree mode, as on the Issues list (#1520, #1585) — several
+  // always, one only when stamps sit off it (#2681) — and the chip filter has nothing to do beside
+  // them, the branches already separating the checklists.
   const multiChecklist = issue.checklists.length > 1;
-  const asBranches = checklistDisplay === "tree" && multiChecklist;
+  const asBranches = useMemo(
+    () => checklistDisplay === "tree" && drawsChecklistBranches(fullTree, issue.checklists),
+    [checklistDisplay, fullTree, issue.checklists]
+  );
   // Narrowing the tree by checklist (#531), as on the issues list and the issue detail page.
   // Local to the row and not remembered: a picker is opened to answer one question.
   const [treeChecklistIds, setTreeChecklistIds] = useState<string[]>([]);
   const effectiveChecklistIds = asBranches ? NO_CHECKLIST_IDS : treeChecklistIds;
-  const fullTree = useMemo(() => buildStampTree(members), [members]);
   // Both narrowings in one walk, the Issues list' own call (#631): the stamps the search did not
   // match are **hidden**, not faded, and the ancestors they hang under come back in `contextIds`
   // to be dimmed.

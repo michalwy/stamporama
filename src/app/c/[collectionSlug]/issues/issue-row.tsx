@@ -77,7 +77,11 @@ import {
 } from "@/app/c/[collectionSlug]/inventory/use-rows-in-view";
 import { descendantsAmongMembers, stampIdsInTree } from "@/lib/stamp-tree-selection";
 import { checklistColorMap } from "@/lib/checklist-colors";
-import { checklistBranches, countOffChecklist } from "@/lib/checklist-branches";
+import {
+  checklistBranches,
+  countOffChecklist,
+  drawsChecklistBranches,
+} from "@/lib/checklist-branches";
 import { useQuery } from "@tanstack/react-query";
 import {
   ChecklistChips,
@@ -688,17 +692,21 @@ export function IssueRow({
     () => (stampFilter ? matchedStampsInIssue(issue, loadedMembers, stampFilter, vendorMap) : null),
     [issue, loadedMembers, stampFilter, vendorMap]
   );
-  // Several checklists are drawn as branches in tree mode (#1520) — except while reordering, which
-  // works on the issue's one tree: a drag inside a branch would move a stamp past a sibling the
-  // branch does not show, and the server refuses a partial group. The chip filter has nothing to do
-  // beside branches, which already separate the checklists, so it is not applied there.
+  const fullTree = buildStampTree(treeReorder.members);
+  // Checklists are drawn as branches in tree mode (#1520) — several always, one only when stamps sit
+  // off it (#2681) — except while reordering, which works on the issue's one tree: a drag inside a
+  // branch would move a stamp past a sibling the branch does not show, and the server refuses a
+  // partial group. The chip filter has nothing to do beside branches, which already separate the
+  // checklists, so it is not applied there.
   const multiChecklist = issue.checklists.length > 1;
-  const asBranches = checklistDisplay === "tree" && multiChecklist && !treeReorder.active;
+  const asBranches =
+    checklistDisplay === "tree" &&
+    !treeReorder.active &&
+    drawsChecklistBranches(fullTree, issue.checklists);
   // Both narrowings are dropped while reordering: dragging inside a narrowed tree would move a
   // stamp past a sibling that was never on screen, and the server refuses a partial group.
   const effectiveChecklistIds = treeReorder.active || asBranches ? [] : treeChecklistIds;
   const effectiveMatchedIds = treeReorder.active ? null : matchedStampIds;
-  const fullTree = buildStampTree(treeReorder.members);
   const { tree: stampTree, contextIds: treeContextIds } = filterStampTreeBy(
     fullTree,
     effectiveChecklistIds,
