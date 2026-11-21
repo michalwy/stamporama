@@ -14,6 +14,7 @@ import { ROW_CHIP } from "@/app/c/[collectionSlug]/shared/chip-styles";
 import { InlineText } from "@/app/c/[collectionSlug]/shared/inline-text";
 import {
   auctionLotName,
+  closesFromRow,
   closingUrgency,
   isTerminalLotStatus,
   type ClosingUrgency,
@@ -162,6 +163,24 @@ const BID_THIS: React.CSSProperties = {
   borderRadius: "0.375rem",
   border: "1px solid var(--color-accent)",
   color: "var(--color-accent)",
+  background: "var(--color-bg-page)",
+  whiteSpace: "nowrap",
+  cursor: "pointer",
+};
+
+/**
+ * *Close the lot* on the row (#2677), under the closing time of an open lot that has passed it. The
+ * row's chip shape, like *Bid this*, but **neutral** rather than accent: it is a secondary action,
+ * and after an auction ends several rows carry it at once, so none of them may read as the screen's
+ * primary one.
+ */
+const CLOSE_THIS: React.CSSProperties = {
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  padding: "0.125rem 0.5rem",
+  borderRadius: "0.375rem",
+  border: "1px solid var(--color-border-strong)",
+  color: "var(--color-text-primary)",
   background: "var(--color-bg-page)",
   whiteSpace: "nowrap",
   cursor: "pointer",
@@ -1477,23 +1496,39 @@ export function AuctionLotRow({
             )}
           </div>
 
-          <Tooltip content={`Closes ${formatInstant(lot.endsAt)}`}>
-            {/* Fixed width for the same reason: "in 3 days" and "in 368 days" must not shunt the
-                actions button left and right from row to row. */}
-            <span
-              style={{
-                display: "inline-block",
-                width: "8.5rem",
-                textAlign: "right",
-                fontSize: "0.8125rem",
-                whiteSpace: "nowrap",
-                ...CLOSING_STYLE[urgency],
-              }}
-            >
-              {hasClosed ? "closed " : "closes "}
-              {formatRelative(lot.endsAt, now)}
-            </span>
-          </Tooltip>
+          {/* Fixed width for the same reason: "in 3 days" and "in 368 days" must not shunt the
+              actions button left and right from row to row. *Close the lot* (#2677) stacks **under**
+              the time rather than beside it, inside the same width, so a row carrying it lines its
+              figures up with one that does not. */}
+          <div
+            style={{
+              width: "8.5rem",
+              flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: "0.25rem",
+            }}
+          >
+            <Tooltip content={`Closes ${formatInstant(lot.endsAt)}`}>
+              <span
+                style={{
+                  fontSize: "0.8125rem",
+                  whiteSpace: "nowrap",
+                  ...CLOSING_STYLE[urgency],
+                }}
+              >
+                {hasClosed ? "closed " : "closes "}
+                {formatRelative(lot.endsAt, now)}
+              </span>
+            </Tooltip>
+            {/* The menu's own entry, by the same door — the entry stays in the ⋮ as well. */}
+            {editable && closesFromRow({ status: lot.status, endsAt: new Date(lot.endsAt) }, now) && (
+              <button type="button" onClick={outcome.openClose} style={CLOSE_THIS}>
+                Close the lot
+              </button>
+            )}
+          </div>
           {/* The busiest menu of the set on the densest row, so the promotion is **two** icons and
               they are the watchlist pass itself: check the listing, then either type the new figure
               into the row — already inline, which is why no bid-fill entry is promoted — or say the

@@ -225,6 +225,20 @@ export function closingUrgency(
   return "later";
 }
 
+/**
+ * Whether a lot's row offers *Close the lot* as a button of its own, beside the closing time (#2677),
+ * rather than only in its `⋮` menu: a lot that is **still open after its closing time**. That is the
+ * lot whose outcome is the one thing missing, and the collector goes through these right after the
+ * auction ends — one menu per lot was the slow part. Not before the closing time, since nothing says
+ * it has ended; and not once it is closed or cancelled, when there is nothing left to close.
+ */
+export function closesFromRow(
+  lot: { status: AuctionLotStatus; endsAt: Date },
+  now: Date
+): boolean {
+  return lot.status === "open" && closingUrgency(lot, now) === "past";
+}
+
 // ── Parsing ─────────────────────────────────────────────────────────────────
 
 /** Validate and normalise an **optional** non-negative auction amount (a bid, a ceiling, shipping,

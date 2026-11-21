@@ -392,7 +392,10 @@ A lot that is current shows no mark at all.
 
 ### Closing a lot
 
-Once a lot has closed, the row's ⋮ menu files it:
+Once a lot has closed, the row's ⋮ menu files it. A lot that is **still open after its closing
+time** also shows a **Close the lot** button on its row, under the closing time, so going through
+the lots right after an auction ends takes one click each rather than a trip to the menu. It opens
+the same dialog as the menu entry, and it is gone once the lot is closed or cancelled.
 
 - **Close the lot** — asks for **what it went for**: the hammer price, before the seller's premium,
   in the sale's currency. The premium and the shipping belong to the parcel and are added there,
