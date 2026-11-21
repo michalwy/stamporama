@@ -538,8 +538,9 @@ read together, and #1671 (ADR-0061 §8) adds quick buys beside the auctions.
   post-wide part (layout, text, ZIP, gaps) and takes a `renderLots` prop; its `PostLots` hands the post
   panel a `lotKit(lot)` → `FacebookLotKit` (`photos`, and `caption` when captioned, under the kit's own
   Source switch), and the panel's lot row (`GroupLotRow`, #2313) draws one flex-wrapping row per lot —
-  photos, lot and offer with its `⋮`, type, price, state, link, sale, caption — that wraps rather than
-  shrinking the photo.
+  photos, lot and offer, type, price, state, link, sale, caption — that wraps rather than shrinking the
+  photo. The row's `⋮` is outside that wrapping body, in the row's top-right corner (#2636): inside the
+  details column it sat between the details and the caption, in the middle of the row.
   The kit still owns what a lot puts up; the panel owns where it stands and what it can do.
 
 - **Every multi-lot post has a title** (#1862, decided with the collector on 2026-10-12; ADR-0061 §2).
