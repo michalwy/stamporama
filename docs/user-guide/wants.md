@@ -405,6 +405,25 @@ the depth.
 The entry is unavailable on an issue with no checklists — nothing is required of it yet, so
 there is nothing to want.
 
+### Everything missing across the Issue list
+
+To start collecting a whole area, use **Add missing to want list…** in the Issue list's
+toolbar instead of going issue by issue. It covers **every issue the list is showing**: the
+selected area with its sub-areas, the years you picked and any other filter in force. Narrow
+the list first and the run narrows with it.
+
+What it wants is exactly what the one-issue add wants, over all those issues at once: the
+stamps on their checklists that you do not hold and do not already want on the chosen terms.
+Stamps on no checklist (extra entries, varieties, errors) are not wanted, and checklists that
+span several issues are not part of the run. Specialised checklists are included only while
+**Specialised** is switched on in the dialog.
+
+The dialog asks the same questions as the one-issue add — **Want** (main stamps or
+variants), **Terms** and **Priority** — once for the whole run. Before anything is written it
+says how many issues the run covers, how many of them are missing something, how many have
+no checklist and so add nothing, and how many wants it will create. Running it a second time
+on the same terms creates nothing, and it never closes or changes a want you already have.
+
 ### Main stamps or variants
 
 A set is wanted at one of two depths, and the dialog asks which at the top, under **Want**:

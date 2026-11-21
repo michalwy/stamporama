@@ -15,6 +15,8 @@ import {
   findWantsSatisfiedBy,
   createWantsForIssue,
   previewIssueMissingWants,
+  createWantsForIssues,
+  previewIssuesMissingWants,
   loadStampWantSummaries,
   loadItemWantSummaries,
   type WantInput,
@@ -30,6 +32,12 @@ import { narrowConditionSeed, wantMatchesCopy } from "../../src/lib/want-rules";
 import { NO_ISSUE } from "../../src/lib/issue-groups";
 import { parseCatalogSearch } from "../../src/lib/catalog-number";
 import { listStampsPaginated } from "../../src/lib/stamps";
+import { listIssueIds } from "../../src/lib/issues";
+import {
+  appendIssueListScopeParams,
+  readIssueListScopeParams,
+  type IssueListScope,
+} from "../../src/lib/issue-list-params";
 
 async function seedFixtures(suffix: string) {
   const user = await prisma.user.create({
@@ -1792,5 +1800,145 @@ describe("the want list search by a catalogue number typed with its prefix (#126
     assert.deepEqual(await wantedStampIds("3637"), [f.stamp.id, fischerStamp].sort());
     assert.deepEqual(await wantedStampIds("3638"), [f.otherStamp.id]);
     assert.deepEqual(await wantedStampIds("Stamp 310"), [f.otherStamp.id]);
+  });
+});
+
+describe("want everything missing across the issues the list shows (#2664)", () => {
+  let f: Fixtures;
+  let poland: string;
+  let gg: string;
+  let france: string;
+  const stamps: Record<string, string> = {};
+  const issues: Record<string, string> = {};
+
+  /** The issues the list shows for `scope`, through the very string the screen sends. */
+  async function shown(scope: IssueListScope) {
+    const params = new URLSearchParams();
+    appendIssueListScopeParams(params, scope);
+    return listIssueIds(f.userId, f.collectionId, readIssueListScopeParams(params));
+  }
+
+  before(async () => {
+    f = await seedFixtures(`shown-issues-${Date.now()}`);
+    const c = f.collectionId;
+    poland = (await prisma.collectionArea.create({ data: { collectionId: c, name: "Poland" } })).id;
+    gg = (
+      await prisma.collectionArea.create({ data: { collectionId: c, name: "GG", parentId: poland } })
+    ).id;
+    france = (await prisma.collectionArea.create({ data: { collectionId: c, name: "France" } })).id;
+    for (const name of ["A", "B", "X", "C", "D", "E", "F"]) {
+      stamps[name] = (await prisma.stamp.create({ data: { collectionId: c, name } })).id;
+    }
+    const issue = async (key: string, issueNo: number, areaId: string, year: number, members: string[]) => {
+      issues[key] = (
+        await prisma.issue.create({
+          data: {
+            collectionId: c,
+            issueNo,
+            collectionAreaId: areaId,
+            name: key,
+            year,
+            members: { create: members.map((m) => ({ stampId: stamps[m] })) },
+          },
+        })
+      ).id;
+    };
+    // P1: A held, B missing, X in the issue but on no checklist.
+    await issue("P1", 9601, poland, 1950, ["A", "B", "X"]);
+    // P2, in the sub-area: C on the standard checklist, D only on a specialised one.
+    await issue("P2", 9602, gg, 1960, ["C", "D"]);
+    // P3: no checklist at all.
+    await issue("P3", 9603, poland, 1970, []);
+    // F1: another area entirely.
+    await issue("F1", 9604, france, 1950, ["E"]);
+    const checklist = async (issueId: string | null, name: string, members: string[], kind = "standard") =>
+      prisma.checklist.create({
+        data: {
+          collectionId: c,
+          issueId,
+          name,
+          kind,
+          stamps: { create: members.map((m) => ({ stampId: stamps[m] })) },
+        },
+      });
+    await checklist(issues.P1, "Basic", ["A", "B"]);
+    await checklist(issues.P2, "Basic", ["C"]);
+    await checklist(issues.P2, "Specialised", ["D"], "specialised");
+    await checklist(issues.F1, "Basic", ["E"]);
+    // A checklist spanning issues belongs to none of them, so no run over issues reads it.
+    await checklist(null, "Spanning", ["F", "B"]);
+    await createItem(f.userId, c, { stampId: stamps.A, conditionId: f.used.id });
+  });
+  after(() => cleanup(f.userId));
+
+  it("counts the issues of an area and its sub-areas, those with gaps, and those with no checklist", async () => {
+    const ids = await shown({ areaIds: [poland, gg] });
+    assert.deepEqual([...ids].sort(), [issues.P1, issues.P2, issues.P3].sort());
+    const gap = await previewIssuesMissingWants(f.userId, f.collectionId, ids);
+    assert.equal(gap.issueCount, 3);
+    assert.equal(gap.issuesWithGaps, 2);
+    assert.equal(gap.issuesWithoutChecklist, 1);
+    // Not A (held), not X (on no checklist), not D (specialised, switched off), not F (spanning).
+    assert.deepEqual([...gap.toCreateStampIds].sort(), [stamps.B, stamps.C].sort());
+  });
+
+  it("reads the specialised checklists only when they are switched on", async () => {
+    const ids = await shown({ areaIds: [poland, gg] });
+    const gap = await previewIssuesMissingWants(f.userId, f.collectionId, ids, undefined, "main", true);
+    assert.deepEqual([...gap.toCreateStampIds].sort(), [stamps.B, stamps.C, stamps.D].sort());
+  });
+
+  it("narrowing the list by years first limits the run to those years", async () => {
+    const ids = await shown({ areaIds: [poland, gg], year: "1955-1975" });
+    assert.deepEqual([...ids].sort(), [issues.P2, issues.P3].sort());
+    const gap = await previewIssuesMissingWants(f.userId, f.collectionId, ids);
+    assert.deepEqual(gap.toCreateStampIds, [stamps.C]);
+    assert.equal(gap.issuesWithoutChecklist, 1);
+  });
+
+  it("wants every missing checklist stamp, wide open, at the stated priority — and nothing else", async () => {
+    const ids = await shown({ areaIds: [poland, gg] });
+    const result = await createWantsForIssues(f.userId, f.collectionId, ids, undefined, "high");
+    assert.deepEqual(result, { created: 2, missing: 2 });
+    const rows = await listWants(f.userId, f.collectionId);
+    assert.deepEqual(rows.map((r) => r.stampId).sort(), [stamps.B, stamps.C].sort());
+    assert.ok(rows.every((r) => r.priority === "high" && r.conditionIds.length === 0));
+  });
+
+  it("creates nothing the second time", async () => {
+    const ids = await shown({ areaIds: [poland, gg] });
+    const result = await createWantsForIssues(f.userId, f.collectionId, ids);
+    assert.deepEqual(result, { created: 0, missing: 2 });
+    assert.equal((await listWants(f.userId, f.collectionId)).length, 2);
+  });
+
+  it("writes the run's terms onto every want, and leaves a want on other terms as it was", async () => {
+    const ids = await shown({ areaIds: [poland, gg] });
+    const mnh = { conditionIds: [f.mnh.id], certificateStatusIds: [null], formatIds: [null] };
+    const result = await createWantsForIssues(f.userId, f.collectionId, ids, mnh);
+    // A is held used, which these terms would not take — so on MNH it is missing too.
+    assert.deepEqual(result, { created: 3, missing: 3 });
+    const rows = await listWants(f.userId, f.collectionId);
+    assert.equal(rows.length, 5);
+    const onTerms = rows.filter((r) => r.conditionIds.length > 0);
+    assert.deepEqual(onTerms.map((r) => r.stampId).sort(), [stamps.A, stamps.B, stamps.C].sort());
+    for (const r of onTerms) {
+      assert.deepEqual(r.conditionIds, [f.mnh.id]);
+      assert.deepEqual(r.certificateStatusIds, [null]);
+      assert.deepEqual(r.formatIds, [null]);
+    }
+    assert.equal(rows.filter((r) => r.conditionIds.length === 0 && r.closedAt === null).length, 2);
+  });
+
+  it("an empty list covers nothing", async () => {
+    const gap = await previewIssuesMissingWants(f.userId, f.collectionId, []);
+    assert.deepEqual(gap, {
+      issueCount: 0,
+      issuesWithoutChecklist: 0,
+      issuesWithGaps: 0,
+      missingStampIds: [],
+      toCreateStampIds: [],
+    });
+    assert.deepEqual(await createWantsForIssues(f.userId, f.collectionId, []), { created: 0, missing: 0 });
   });
 });

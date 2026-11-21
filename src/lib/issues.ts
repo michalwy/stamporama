@@ -1396,6 +1396,22 @@ export async function countIssues(
   return prisma.issue.count({ where: buildIssueListWhere(collectionId, opts) });
 }
 
+/** The ids of every issue {@link listIssuesPaginated} would list over all its pages, for the same
+ *  narrowing — the set a run over *the issues the list shows* covers (#2664). One `where` with the
+ *  list, so the run and the rows on screen cannot disagree about which issues there are. */
+export async function listIssueIds(
+  ownerId: string,
+  collectionId: string,
+  opts: Omit<IssueListFilterOpts, "offset" | "pageSize" | "sortBy" | "sortDir" | "displayConditionId" | "displayFormatId">
+): Promise<string[]> {
+  await assertCollectionOwner(ownerId, collectionId);
+  const rows = await prisma.issue.findMany({
+    where: buildIssueListWhere(collectionId, opts),
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 /**
  * One issue enriched exactly as the Issues list enriches a row — same required-stamps total, same
  * range suggestions, same representative gallery. The issue detail screen (#519) reads through
