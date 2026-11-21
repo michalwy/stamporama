@@ -149,6 +149,7 @@ describe("deleting a Facebook post with its offers (#2060)", () => {
       offerCount: 3,
       soldLots: [],
       submitted: false,
+      declinedProposals: [],
     });
 
     assert.deepEqual(await deleteFacebookPost(userId, postId), { postNo, offerCount: 3 });

@@ -10,6 +10,7 @@ import {
   createFacebookPost,
   deleteFacebookPost,
   getFacebookPostScreen,
+  readFacebookPostDeletion,
   publishOfferOrPost,
   removeFacebookLot,
   reorderFacebookLots,
@@ -230,6 +231,59 @@ describe("a Facebook post made into a proposal (#2602)", () => {
     assert.deepEqual(
       (await rows(lots)).map((r) => [r.proposalId, r.proposalLotNo]),
       lots.map((_, i) => [next.proposalId, i + 1])
+    );
+  });
+
+  it("deletes a declined proposal with its post, and still refuses while one is sent (#2643)", async () => {
+    const { postId, postNo, lots } = await post(8);
+    const contactId = await contact();
+    const contactName = (await prisma.contact.findUniqueOrThrow({ where: { id: contactId } })).name;
+    const { proposalId, proposalNo } = await createProposalFromPost(userId, postId, contactId);
+    await moveProposal(userId, proposalId, "send");
+    // Sent, it still keeps the post from being deleted, with today's sentence.
+    await assert.rejects(
+      () => deleteFacebookPost(userId, postId),
+      new RegExp(`Proposal #${proposalNo} for ${contactName} was made from this post and is still open`)
+    );
+    assert.equal(await prisma.proposal.count({ where: { id: proposalId } }), 1);
+
+    await moveProposal(userId, proposalId, "decline");
+    const deletion = await readFacebookPostDeletion(userId, postId);
+    assert.deepEqual(deletion.declinedProposals, [{ proposalNo, contactName }]);
+    assert.deepEqual(await deleteFacebookPost(userId, postId), { postNo, offerCount: 8 });
+    assert.equal(await prisma.facebookPost.count({ where: { id: postId } }), 0);
+    assert.equal(await prisma.offer.count({ where: { id: { in: lots } } }), 0);
+    assert.equal(await prisma.proposal.count({ where: { id: proposalId } }), 0);
+  });
+
+  it("deletes every declined proposal a post has had, leaving a lot taken out of the post alone (#2643)", async () => {
+    const { postId, lots } = await post(3);
+    const first = await createProposalFromPost(userId, postId, await contact());
+    await moveProposal(userId, first.proposalId, "decline");
+    // Taken out of the post after the decline — into a post of its own — lot 3 keeps naming the
+    // declined proposal.
+    await removeFacebookLot(userId, lots[2]!);
+    assert.equal((await rows([lots[2]!]))[0]!.proposalId, first.proposalId);
+    const second = await createProposalFromPost(userId, postId, await contact());
+    await moveProposal(userId, second.proposalId, "decline");
+
+    const deletion = await readFacebookPostDeletion(userId, postId);
+    assert.deepEqual(
+      deletion.declinedProposals.map((p) => p.proposalNo),
+      [first.proposalNo, second.proposalNo]
+    );
+    await deleteFacebookPost(userId, postId);
+    assert.equal(await prisma.proposal.count({ where: { id: { in: [first.proposalId, second.proposalId] } } }), 0);
+    assert.equal(await prisma.offer.count({ where: { id: { in: lots.slice(0, 2) } } }), 0);
+    // Lot 3, in a post of its own since, stays there, no longer in a proposal.
+    const kept = await prisma.offer.findUniqueOrThrow({
+      where: { id: lots[2]! },
+      select: { facebookPostId: true, proposalId: true, proposalLotNo: true, proposalPickedAt: true },
+    });
+    assert.ok(kept.facebookPostId && kept.facebookPostId !== postId);
+    assert.deepEqual(
+      { proposalId: kept.proposalId, proposalLotNo: kept.proposalLotNo, proposalPickedAt: kept.proposalPickedAt },
+      { proposalId: null, proposalLotNo: null, proposalPickedAt: null }
     );
   });
 

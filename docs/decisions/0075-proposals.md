@@ -5,7 +5,7 @@
 Accepted. Decided in #2287 on 2026-11-01, which built it; the design was settled with the collector
 in the issue, and its *to be confirmed* points were implemented as written. #2288 (what the buyer is
 sent) and #2289 (a proposal becomes a sale, §6 — built 2026-11-01) build on it; #2601 lets the buyer
-tick the lots they want (§10); #2602 makes a Facebook post into a proposal sharing its lots (§11); #2603 sends it in the buyer's language (§12); #2641 deletes one that is not sold (§13).
+tick the lots they want (§10); #2602 makes a Facebook post into a proposal sharing its lots (§11); #2603 sends it in the buyer's language (§12); #2641 deletes one that is not sold, and #2643 deletes a declined one with its post (§13).
 
 ## Context
 
@@ -257,6 +257,13 @@ proposal's screen and on its row in the list — deletes it outright:
 The confirmation names the proposal and its contact, counts the lots going, any sold lot staying and a
 post's lots staying, and — for a Sent proposal, or any with a link — says the buyer's link stops
 working (`proposalDeletionText`). The agent API deletes proposals too, in #2642.
+
+*Amended by #2643 (2026-11-21):* **deleting a post deletes the declined proposals made from it**, in
+the same confirmation (*Proposal #4 for Jan Kowalski, declined, is deleted with the post.*), since
+their lots are the post's and they would be left empty. Every declined one the post has had goes; a
+lot of one no longer in the post stays where it is, no longer naming it, as above. **An open proposal
+still refuses the post's deletion**, and a post with a sold lot — a converted proposal's included — is
+still refused for that lot.
 
 ## Consequences
 

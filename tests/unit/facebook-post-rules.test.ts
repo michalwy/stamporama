@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   describeFacebookAuctionCopies,
+  declinedPostProposalsText,
   describeRefusedLots,
   facebookPostDeleteRefusal,
   facebookPostWithdrawalPlan,
@@ -1302,6 +1303,30 @@ describe("words added to or removed from every lot's title (#2033)", () => {
   it("changes nothing for blank words", () => {
     assert.equal(facebookTitleWithWords("Mercury", "  ", "start", "add"), null);
     assert.equal(facebookTitleWithWords("Mercury", "", "end", "remove"), null);
+  });
+});
+
+describe("declinedPostProposalsText (#2643)", () => {
+  it("says nothing when no declined proposal was made from the post", () => {
+    assert.equal(declinedPostProposalsText([]), null);
+  });
+
+  it("names the one declined proposal and its contact", () => {
+    assert.equal(
+      declinedPostProposalsText([{ proposalNo: 4, contactName: "Jan Kowalski" }]),
+      "Proposal #4 for Jan Kowalski, declined, is deleted with the post."
+    );
+  });
+
+  it("names every declined proposal, in the order given", () => {
+    assert.equal(
+      declinedPostProposalsText([
+        { proposalNo: 2, contactName: "Anna Nowak" },
+        { proposalNo: 4, contactName: "Jan Kowalski" },
+        { proposalNo: 7, contactName: "Ewa Lis" },
+      ]),
+      "Proposals #2 for Anna Nowak, #4 for Jan Kowalski and #7 for Ewa Lis, declined, are deleted with the post."
+    );
   });
 });
 
