@@ -3640,8 +3640,9 @@ While the proposal is open, the card above its lots holds everything for the buy
   number, title, price and photos, and the total, in the proposal's language — nothing else from your
   collection. Open it to print or save as a PDF, or make a **link** the buyer opens without an
   account. The link stays live: it follows your price changes, marks a withdrawn lot *No longer
-  available*, and once the proposal is sold or declined it says only that the offer is closed. A new
-  link replaces the old one; **Withdraw** ends it.
+  available*, and once the proposal is sold or declined it says only that the offer is closed — once
+  it is [deleted](#deleting-a-proposal), that the offer is no longer available. A new link replaces
+  the old one; **Withdraw** ends it.
 
 **None of them marks the proposal Sent.** Copying the message or a photo, downloading photos, opening
 the document and making its link all leave it as it is, so you can check anything before it goes —
@@ -3779,10 +3780,32 @@ declined.
   still open — publish anyway?* Going on publishes the post and leaves the proposal open: the buyer can
   still be sold whatever is unsold, and a lot sold on Facebook shows as no longer available on their
   page.
-- A post with an open proposal can't be deleted; decline the proposal first.
+- A post with an open proposal can't be deleted; decline or [delete](#deleting-a-proposal) the
+  proposal first.
 
-Once a proposal made from a post is closed, the post can be made into a new one; the lots still for
-sale move to it.
+Once a proposal made from a post is closed or deleted, the post can be made into a new one; the lots
+still for sale move to it.
+
+### Deleting a proposal
+
+A proposal made by mistake, a test, or one of no more use can be deleted outright: **Delete
+proposal…** in the **⋮** on its screen, or in the **⋮** on its row in the list of proposals. It is
+offered for a proposal that is **Preparing**, **Sent** or **Declined**. A **Sold** proposal can't be
+deleted — it is the record of how its sale came about.
+
+The confirmation names the proposal and its contact, says how many lots go with it, and that it can't
+be undone. For a Sent proposal — or any with a link — it also says the buyer's link stops working.
+
+- **Its lots are deleted with it**, as deleting those offers would, and their copies are free to go
+  into a new offer.
+- **A lot already sold is kept** with its sale; it just no longer belongs to a proposal.
+- **A proposal made from a Facebook post deletes no lot**: the lots are the post's and stay in it as
+  they are. The post can then be made into a new proposal.
+- **The buyer's link** then says the offer is no longer available, and the buyer's picks go with the
+  proposal.
+
+A deleted proposal's number is not given again: the next proposal keeps counting from the highest
+number ever given.
 
 ## Related
 

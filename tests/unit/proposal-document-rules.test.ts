@@ -72,6 +72,8 @@ describe("the document's words (#2288)", () => {
     assert.equal(proposalDocumentLabels("pl").total, "Razem");
     assert.equal(proposalDocumentLabels("de-AT").offer, "Angebot");
     assert.equal(proposalDocumentLabels("xx").closed, "This offer is closed.");
+    assert.equal(proposalDocumentLabels("xx").gone, "This offer is no longer available.");
+    assert.equal(proposalDocumentLabels("pl").gone, "Ta oferta nie jest już dostępna.");
     assert.equal(proposalDocumentLabels(null).lot, "Lot");
     assert.equal(proposalDocumentLabelLanguage("xx"), "en");
     assert.equal(hasProposalDocumentLabels("xx"), false);

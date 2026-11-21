@@ -23,6 +23,7 @@ import {
   type PrepareOffer,
 } from "./offers";
 import { readKitLots } from "./facebook-auctions";
+import { deleteVariants } from "./offer-photo-generation";
 import { readLotCopyPhotos, readLotGroupTitles, readLotSales, type LotGroupTitles } from "./offer-lot-groups";
 import { DIRECT_PLATFORM_MODULE } from "./platform-modules";
 import { ensureModulePlatforms } from "./platforms";
@@ -35,6 +36,7 @@ import { readOpenPostProposal, syncPostProposalLots } from "./post-proposal-lots
 import {
   postProposalRefusal,
   proposalConversionRefusal,
+  proposalDeleteRefusal,
   proposalRenumbersLots,
   proposalTakesLots,
   proposalLotCurrency,
@@ -49,6 +51,7 @@ import {
   proposalStatusOf,
   proposalLotPick,
   proposalTotal,
+  type ProposalDeletion,
   type ProposalLotPacking,
   type ProposalLotPick,
   type ProposalMove,
@@ -915,6 +918,93 @@ export async function moveProposal(ownerId: string, proposalId: string, move: Pr
       ...(move === "send" ? { sentAt: now } : move === "decline" ? { closedAt: now } : {}),
     },
   });
+}
+
+// ── Deleting (#2641) ─────────────────────────────────────────────────────────────────────────────
+
+/** A proposal's lots split as deleting it treats them: the ones that go with it, and the ones that stay
+ *  — a lot with a sold set (its sale keeps it), and every lot of a proposal made from a post (the
+ *  post's). */
+async function readDeletionLots(db: DbTransaction | typeof prisma, proposalId: string, postId: string | null) {
+  const lots = await db.offer.findMany({ where: { proposalId }, select: { id: true } });
+  const ids = lots.map((l) => l.id);
+  const sold = await db.saleLine.findMany({
+    where: { offerSet: { offerId: { in: ids } } },
+    select: { offerSet: { select: { offerId: true } } },
+  });
+  const soldIds = new Set(sold.map((s) => s.offerSet?.offerId));
+  if (postId) return { deleted: [] as string[], soldKept: [] as string[], postKept: ids };
+  return {
+    deleted: ids.filter((id) => !soldIds.has(id)),
+    soldKept: ids.filter((id) => soldIds.has(id)),
+    postKept: [] as string[],
+  };
+}
+
+/** What *Delete proposal…* shows before the collector confirms (#2641). */
+export async function readProposalDeletion(ownerId: string, proposalId: string): Promise<ProposalDeletion> {
+  const { postId } = await assertProposalOwner(ownerId, proposalId);
+  const proposal = await prisma.proposal.findUniqueOrThrow({
+    where: { id: proposalId },
+    select: {
+      proposalNo: true,
+      status: true,
+      contact: { select: { name: true } },
+      facebookPost: { select: { postNo: true } },
+      shareToken: { select: { id: true } },
+    },
+  });
+  const { deleted, soldKept, postKept } = await readDeletionLots(prisma, proposalId, postId);
+  return {
+    proposalNo: proposal.proposalNo,
+    contactName: proposal.contact.name,
+    status: proposalStatusOf(proposal.status),
+    lotCount: deleted.length,
+    soldLotCount: soldKept.length,
+    post: proposal.facebookPost ? { postNo: proposal.facebookPost.postNo, lotCount: postKept.length } : null,
+    hasLink: proposal.shareToken !== null,
+  };
+}
+
+/**
+ * Delete a proposal that is not sold (#2641) — one made by mistake, a test, one of no more use. Its
+ * lots go with it, as deleting those offers would take them, and their copies are free again; a lot
+ * with a sold set stays with its sale. A proposal made from a post (#2602) deletes no lot: they are the
+ * post's and stay in it as they are. Every lot that stays stops naming the proposal — its lot number
+ * and the buyer's pick go too (#2601's rule) — so the post can have a new proposal made from it. The
+ * buyer's live link is kept, pointing at nothing, and says the offer is no longer available. The
+ * proposal's number is never given again (`allocateEntityNumber`).
+ */
+export async function deleteProposal(
+  ownerId: string,
+  proposalId: string
+): Promise<{ proposalNo: number; deletedLots: number }> {
+  await assertProposalOwner(ownerId, proposalId);
+  const done = await prisma.$transaction(async (tx) => {
+    // Asked again here, inside the write, so a sale made since the dialog opened still refuses.
+    const proposal = await tx.proposal.findUniqueOrThrow({
+      where: { id: proposalId },
+      select: { proposalNo: true, status: true, facebookPostId: true },
+    });
+    const refusal = proposalDeleteRefusal(proposalStatusOf(proposal.status));
+    if (refusal) throw new OfferActionBlockedError("bad-transition", refusal);
+    const { deleted, soldKept, postKept } = await readDeletionLots(tx, proposalId, proposal.facebookPostId);
+    await tx.offer.updateMany({
+      where: { id: { in: [...soldKept, ...postKept] } },
+      data: { proposalId: null, proposalLotNo: null, proposalPickedAt: null },
+    });
+    // Every image the offers own goes with their rows by cascade, but never its file: read now, deleted
+    // once the write is in.
+    const photos = await tx.photo.findMany({
+      where: { offerId: { in: deleted } },
+      select: { storageBackend: true, storageKey: true, mime: true },
+    });
+    await tx.offer.deleteMany({ where: { id: { in: deleted } } });
+    await tx.proposal.delete({ where: { id: proposalId } });
+    return { proposalNo: proposal.proposalNo, deletedLots: deleted.length, photos };
+  });
+  await Promise.all(done.photos.map((p) => deleteVariants(p.storageBackend, p.storageKey, p.mime)));
+  return { proposalNo: done.proposalNo, deletedLots: done.deletedLots };
 }
 
 // ── Becoming a sale (#2289) ──────────────────────────────────────────────────────────────────────

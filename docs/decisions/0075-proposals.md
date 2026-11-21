@@ -5,7 +5,7 @@
 Accepted. Decided in #2287 on 2026-11-01, which built it; the design was settled with the collector
 in the issue, and its *to be confirmed* points were implemented as written. #2288 (what the buyer is
 sent) and #2289 (a proposal becomes a sale, §6 — built 2026-11-01) build on it; #2601 lets the buyer
-tick the lots they want (§10); #2602 makes a Facebook post into a proposal sharing its lots (§11); #2603 sends it in the buyer's language (§12).
+tick the lots they want (§10); #2602 makes a Facebook post into a proposal sharing its lots (§11); #2603 sends it in the buyer's language (§12); #2641 deletes one that is not sold (§13).
 
 ## Context
 
@@ -233,6 +233,30 @@ contact's, and `get_proposal` the one its message is in with the collection's ch
 be asked for in another of those languages; **that saves nothing on the contact**, unlike the card's
 selector, as reading the message does not mark the proposal sent. A language asked for with no
 template in it is refused with the reason rather than read as no message.
+
+### 13. A proposal that is not sold can be deleted (#2641)
+
+Added by #2641, built on 2026-11-21, settled with the collector that day; its *to be confirmed* points
+were implemented as written. Before it a proposal went only with its contact, and *Decline* kept it on
+the list for good. **Delete proposal…** (`deleteProposal`, its read `readProposalDeletion`) — on the
+proposal's screen and on its row in the list — deletes it outright:
+
+- **Any but a Sold proposal** (`proposalDeleteRefusal`): a Sold one is the record of how its sale came
+  about. Asked again inside the write, so a sale made since the dialog opened still refuses.
+- **Its lots go with it**, as deleting those offers would — their images' files deleted once the write
+  is in — and their copies are free again. **A lot with a sold set stays** with its sale, no longer
+  naming the proposal: the sale record must survive, as it does when an offer is deleted.
+- **A proposal made from a post (§11) deletes no lot**: they are the post's and stay in it as they are.
+  The post can then have a new proposal made from it.
+- Every lot that stays loses `proposalId`, `proposalLotNo` and `proposalPickedAt` (§10's rule): the
+  buyer's picks go with the proposal.
+- **The live link is kept, pointing at nothing**, and says *the offer is no longer available* — a third
+  standing of the shared page (`gone`), worded in §8's eighteen languages — rather than an error.
+- **Numbers are not reused**: `Collection.nextProposalNo` only grows (§1).
+
+The confirmation names the proposal and its contact, counts the lots going, any sold lot staying and a
+post's lots staying, and — for a Sent proposal, or any with a link — says the buyer's link stops
+working (`proposalDeletionText`). The agent API deletes proposals too, in #2642.
 
 ## Consequences
 

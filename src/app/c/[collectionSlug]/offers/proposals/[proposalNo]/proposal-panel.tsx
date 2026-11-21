@@ -2,17 +2,20 @@
 
 import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { baseBtn } from "@/app/button-style";
 import { ConfirmDialog } from "@/app/dialog-shell";
 import { useToast } from "@/app/toast-provider";
 import { DialogSecondaryButton } from "@/app/dialog-shell";
-import { type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { RowActionsMenu, type RowAction } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
 import { showLineAt } from "@/app/c/[collectionSlug]/shared/reorder-list";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   DEFAULT_PROPOSAL_LOT_PACKING,
   declineProposalMessage,
+  deletedProposalMessage,
   isProposalOpen,
+  proposalDeleteRefusal,
   parseProposalLotPacking,
   proposalHasOpenLot,
   proposalMoveRefusal,
@@ -43,6 +46,7 @@ import { PostPriceTotalsBar } from "../../posts/[postNo]/post-price-totals-bar";
 import { postPriceTotals, statedPrice, type PriceDraft } from "@/lib/facebook-post-price-totals";
 import { AddProposalLotsDialog } from "./add-proposal-lots-dialog";
 import { ConvertProposalDialog } from "./convert-proposal-dialog";
+import { DeleteProposalDialog } from "../delete-proposal-dialog";
 import { LotPhotos, ProposalBuyerCard } from "./proposal-buyer-parts";
 import { ProposalDocumentDialog } from "./proposal-document-dialog";
 import { Callout } from "../../lot-builder/lot-builder-chrome";
@@ -134,7 +138,8 @@ export function ProposalPanel({
   const { invalidateAll } = useInvalidateOffers();
   const { invalidateAll: invalidateSales } = useInvalidateSales();
   const { toast } = useToast();
-  const [dialog, setDialog] = useState<"add" | "new" | "decline" | "convert" | "document" | null>(null);
+  const [dialog, setDialog] = useState<"add" | "new" | "decline" | "convert" | "document" | "delete" | null>(null);
+  const router = useRouter();
   const [storedPacking, rememberPacking] = usePersistedCollectionValue(PACKING_KEY, collectionId);
   const packing = parseProposalLotPacking(storedPacking) ?? DEFAULT_PROPOSAL_LOT_PACKING;
   const [error, setError] = useState<string | undefined>();
@@ -350,6 +355,15 @@ export function ProposalPanel({
               Decline…
             </button>
           </div>
+        )}
+        {/* Any proposal but a Sold one can be deleted (#2641). */}
+        {proposalDeleteRefusal(screen.status) === null && (
+          <RowActionsMenu
+            ariaLabel="Proposal actions"
+            actions={[
+              { key: "delete", label: "Delete proposal…", icon: "delete", danger: true, onSelect: () => setDialog("delete") },
+            ]}
+          />
         )}
       </div>
 
@@ -583,6 +597,17 @@ export function ProposalPanel({
         />
       )}
       {tools.dialogs}
+      {dialog === "delete" && (
+        <DeleteProposalDialog
+          proposalId={proposalId}
+          onClose={() => setDialog(null)}
+          onDeleted={(deleted) => {
+            toast({ message: deletedProposalMessage(deleted) });
+            router.push(`/c/${collectionSlug}/offers/proposals`);
+            void invalidateAll(collectionId);
+          }}
+        />
+      )}
       {dialog === "decline" && (
         <ConfirmDialog
           title="Decline the proposal?"

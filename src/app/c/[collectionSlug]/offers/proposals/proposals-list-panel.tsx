@@ -11,9 +11,20 @@ import { STICKY_TOOLBAR_STYLE } from "@/app/c/[collectionSlug]/shared/list-toolb
 import { FilterChip } from "@/app/c/[collectionSlug]/shared/filter-chip";
 import { ROW_LINK_ABOVE, RowLink } from "@/app/c/[collectionSlug]/shared/row-link";
 import { useRowOpen } from "@/app/c/[collectionSlug]/shared/row-open";
+import { RowActionsMenu } from "@/app/c/[collectionSlug]/shared/row-actions-menu";
+import { useToast } from "@/app/toast-provider";
 import type { ProposalListItem } from "@/lib/proposals";
-import { PROPOSAL_STATUSES, PROPOSAL_STATUS_LABEL, isProposalStatus, type ProposalStatus } from "@/lib/proposal-rules";
+import {
+  PROPOSAL_STATUSES,
+  PROPOSAL_STATUS_LABEL,
+  deletedProposalMessage,
+  isProposalStatus,
+  proposalDeleteRefusal,
+  type ProposalStatus,
+} from "@/lib/proposal-rules";
+import { useInvalidateOffers } from "../use-offers-query";
 import { useProposalsInfinite } from "./use-proposals-query";
+import { DeleteProposalDialog } from "./delete-proposal-dialog";
 import { BuyerPickedChip, NewProposalDialog, ProposalStatusChip, proposalTotalText } from "./proposal-parts";
 
 const META: React.CSSProperties = {
@@ -126,6 +137,7 @@ export function ProposalsListPanel({ collectionId, collectionSlug }: { collectio
               <ProposalRow
                 key={proposal.proposalId}
                 proposal={proposal}
+                collectionId={collectionId}
                 collectionSlug={collectionSlug}
                 isLast={idx === rows.length - 1 && !hasNextPage}
               />
@@ -148,65 +160,95 @@ export function ProposalsListPanel({ collectionId, collectionSlug }: { collectio
 
 function ProposalRow({
   proposal,
+  collectionId,
   collectionSlug,
   isLast,
 }: {
   proposal: ProposalListItem;
+  collectionId: string;
   collectionSlug: string;
   isLast: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const { invalidateAll } = useInvalidateOffers();
+  const { toast } = useToast();
   const href = `/c/${collectionSlug}/offers/proposals/${proposal.proposalNo}`;
   const rowOpen = useRowOpen(href);
+  // Any proposal but a Sold one (#2641).
+  const deletable = proposalDeleteRefusal(proposal.status) === null;
 
   return (
-    <div
-      {...rowOpen}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        position: "relative",
-        padding: "0.75rem 1.25rem",
-        borderBottom: isLast ? undefined : "1px solid var(--color-border)",
-        background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
-        transition: "background 0.1s ease",
-        cursor: "pointer",
-      }}
-    >
-      <RowLink href={href} label={`Proposal #${proposal.proposalNo} for ${proposal.contact.name}`} />
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", minWidth: 0 }}>
-        <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
-          Proposal #{proposal.proposalNo}
-        </span>
-        <span
-          style={{
-            fontSize: "0.9375rem",
-            color: "var(--color-text-secondary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+    <>
+      <div
+        {...rowOpen}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          position: "relative",
+          padding: "0.75rem 1.25rem",
+          borderBottom: isLast ? undefined : "1px solid var(--color-border)",
+          background: hovered ? "var(--color-bg-row-hover)" : "var(--color-bg-elevated)",
+          transition: "background 0.1s ease",
+          cursor: "pointer",
+        }}
+      >
+        <RowLink href={href} label={`Proposal #${proposal.proposalNo} for ${proposal.contact.name}`} />
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", minWidth: 0 }}>
+          <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
+            Proposal #{proposal.proposalNo}
+          </span>
+          <span
+            style={{
+              fontSize: "0.9375rem",
+              color: "var(--color-text-secondary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {proposal.contact.name}
+          </span>
+          <span style={{ flex: 1 }} />
+          <Tooltip content="The lots not withdrawn, at their prices">
+            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
+              {proposalTotalText(proposal.total, proposal.currency, proposal.unpriced)}
+            </span>
+          </Tooltip>
+          {deletable && (
+            <span style={ROW_LINK_ABOVE}>
+              <RowActionsMenu
+                ariaLabel={`Proposal #${proposal.proposalNo} actions`}
+                actions={[
+                  { key: "delete", label: "Delete proposal…", icon: "delete", danger: true, onSelect: () => setDeleting(true) },
+                ]}
+              />
+            </span>
+          )}
+        </div>
+        <div style={{ ...ROW_LINK_ABOVE, display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.3rem", flexWrap: "wrap" }}>
+          <ProposalStatusChip status={proposal.status} />
+          <Tooltip content="Lots in the proposal, and how many are neither sold nor withdrawn">
+            <span style={CHIP}>
+              {proposal.lotCount} {proposal.lotCount === 1 ? "lot" : "lots"} · {proposal.openLotCount} open
+            </span>
+          </Tooltip>
+          {proposal.pickedLotCount > 0 && <BuyerPickedChip count={proposal.pickedLotCount} />}
+          <span style={META}>made {proposal.createdOn}</span>
+          {proposal.sentOn && <span style={META}>sent {proposal.sentOn}</span>}
+        </div>
+      </div>
+      {deleting && (
+        <DeleteProposalDialog
+          proposalId={proposal.proposalId}
+          onClose={() => setDeleting(false)}
+          onDeleted={(deleted) => {
+            setDeleting(false);
+            toast({ message: deletedProposalMessage(deleted) });
+            void invalidateAll(collectionId);
           }}
-        >
-          {proposal.contact.name}
-        </span>
-        <span style={{ flex: 1 }} />
-        <Tooltip content="The lots not withdrawn, at their prices">
-          <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", whiteSpace: "nowrap" }}>
-            {proposalTotalText(proposal.total, proposal.currency, proposal.unpriced)}
-          </span>
-        </Tooltip>
-      </div>
-      <div style={{ ...ROW_LINK_ABOVE, display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.3rem", flexWrap: "wrap" }}>
-        <ProposalStatusChip status={proposal.status} />
-        <Tooltip content="Lots in the proposal, and how many are neither sold nor withdrawn">
-          <span style={CHIP}>
-            {proposal.lotCount} {proposal.lotCount === 1 ? "lot" : "lots"} · {proposal.openLotCount} open
-          </span>
-        </Tooltip>
-        {proposal.pickedLotCount > 0 && <BuyerPickedChip count={proposal.pickedLotCount} />}
-        <span style={META}>made {proposal.createdOn}</span>
-        {proposal.sentOn && <span style={META}>sent {proposal.sentOn}</span>}
-      </div>
-    </div>
+        />
+      )}
+    </>
   );
 }

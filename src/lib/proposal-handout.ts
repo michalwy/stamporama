@@ -595,15 +595,17 @@ export async function verifyProposalShareToken(
   return { proposalId: row.proposalId, ownerId: row.collection.ownerId, collectionId: row.collectionId, language };
 }
 
-/** What the buyer's page shows: the document while the proposal is open, else only the notice. */
+/** What the buyer's page shows: the document while the proposal is open, else only a notice — that it
+ *  is closed once sold or declined, that it is no longer available once deleted (#2641). */
 export type SharedProposalDocument =
   | { standing: "shown"; document: ProposalDocument }
-  | { standing: "closed"; proposalNo: number | null; language: string | null };
+  | { standing: "closed"; proposalNo: number; language: string | null }
+  | { standing: "gone"; language: string | null };
 
 export async function readSharedProposalDocument(access: ProposalShareAccess): Promise<SharedProposalDocument> {
   const head = access.proposalId ? await readProposalHead(access.proposalId) : null;
   if (!head || head.collectionId !== access.collectionId) {
-    return { standing: "closed", proposalNo: null, language: access.language };
+    return { standing: "gone", language: access.language };
   }
   const document = await buildDocument(access.ownerId, await withBuyerTitles(head));
   if (document.standing === "shown") return { standing: "shown", document };

@@ -32,6 +32,10 @@ import {
   type PostProposalLotFacts,
   type ProposalTotalLot,
   declineProposalMessage,
+  deletedProposalMessage,
+  proposalDeleteRefusal,
+  proposalDeletionText,
+  type ProposalDeletion,
   proposalBuyerPickTicks,
   proposalConversionOutcomeText,
   proposalConversionWithdrawn,
@@ -429,5 +433,52 @@ describe("the conversion's shared rules (#2627 — the desk's dialog and the pho
   it("asks before declining in the desk's words, a post's lots staying in it", () => {
     assert.match(declineProposalMessage(7, null), /^Proposal #7 is closed as declined, and every lot still open is withdrawn/);
     assert.match(declineProposalMessage(7, { postNo: 3 }), /Its lots stay in post #3 as they are/);
+  });
+});
+
+describe("Deleting a proposal (#2641)", () => {
+  const base: ProposalDeletion = {
+    proposalNo: 7,
+    contactName: "Jan Kowalski",
+    status: "preparing",
+    lotCount: 5,
+    soldLotCount: 0,
+    post: null,
+    hasLink: false,
+  };
+
+  it("refuses a Sold proposal only", () => {
+    assert.match(proposalDeleteRefusal("sold") ?? "", /sold proposal cannot be deleted/);
+    for (const status of ["preparing", "sent", "declined"] as const) assert.equal(proposalDeleteRefusal(status), null);
+  });
+
+  it("names the proposal and its contact, counts the lots going, and says it cannot be undone", () => {
+    const text = proposalDeletionText(base);
+    assert.match(text[0], /Proposal #7 for Jan Kowalski and all 5 of its lots/);
+    assert.match(text[0], /copies stay in your inventory/);
+    assert.equal(text.at(-1), "This cannot be undone.");
+    assert.ok(!text.some((l) => /live link/.test(l)));
+    assert.match(proposalDeletionText({ ...base, lotCount: 1 })[0], /and its lot —/);
+  });
+
+  it("says a sold lot stays with its sale", () => {
+    assert.ok(proposalDeletionText({ ...base, soldLotCount: 1 }).includes("Its sold lot is kept with its sale, no longer in a proposal."));
+    assert.ok(proposalDeletionText({ ...base, soldLotCount: 2 }).some((l) => /Its 2 sold lots are kept with their sales/.test(l)));
+  });
+
+  it("says a Sent proposal's live link stops working, and any proposal's that has one", () => {
+    assert.ok(proposalDeletionText({ ...base, status: "sent" }).some((l) => /sent to the buyer: their live link stops working/.test(l)));
+    assert.ok(proposalDeletionText({ ...base, hasLink: true }).some((l) => /live link stops working/.test(l)));
+  });
+
+  it("says a post's lots stay in the post", () => {
+    const text = proposalDeletionText({ ...base, lotCount: 0, post: { postNo: 3, lotCount: 4 } });
+    assert.match(text[0], /Its 4 lots stay in post #3 as they are/);
+  });
+
+  it("toasts what went", () => {
+    assert.equal(deletedProposalMessage({ proposalNo: 7, deletedLots: 5 }), "Proposal #7 deleted with its 5 lots");
+    assert.equal(deletedProposalMessage({ proposalNo: 7, deletedLots: 1 }), "Proposal #7 deleted with its lot");
+    assert.equal(deletedProposalMessage({ proposalNo: 7, deletedLots: 0 }), "Proposal #7 deleted");
   });
 });
