@@ -96,3 +96,21 @@ function cents(amount: string): number {
 function fmt(cents: number): string {
   return (cents / 100).toFixed(2);
 }
+
+/**
+ * The collection's areas named in the summary's language (#2604), for the *Area* column's path: each
+ * area by the name it carries **itself** in that language — its translated title name — else its own
+ * name. No roll-up to a parent, as a generated title would do: every level of the path is printed, so
+ * a parent's name standing in for a child's would print it twice. Null (the collection's own language)
+ * changes nothing.
+ */
+export function areasInLanguage<T extends { name: string; titleNameByLanguage: Record<string, string> }>(
+  areas: readonly T[],
+  language: string | null
+): T[] {
+  if (!language) return [...areas];
+  return areas.map((area) => {
+    const translated = area.titleNameByLanguage[language]?.trim();
+    return translated ? { ...area, name: translated } : area;
+  });
+}

@@ -18,6 +18,8 @@ import {
 import { PrintGroup } from "@/app/c/[collectionSlug]/shared/print-group";
 import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import { Icon } from "@/app/icons";
+import { orderSummaryLabels } from "@/lib/order-summary-labels";
+import { specificationCopyCount, specificationLabels } from "@/lib/offer-specification-labels";
 
 // The body of the buyer's order summary (#2512): the sets the buyer bought, each with its copies or
 // by its title only. The switch and the columns are screen-only and remembered **globally**, as the
@@ -26,6 +28,10 @@ import { Icon } from "@/app/icons";
 // The copy rows draw the packing list's own descriptive columns, so a copy reads alike on both
 // printouts; the ones that belong to the collector (quantity, ref, location, copy and offer numbers)
 // are not offered at all, and there is no tick box.
+//
+// The sheet is in the buyer's language (#2604): its column names and copy counts are the offer
+// specification's words for the same columns, the *Titles only* table's are the summary's own. The
+// chips above it are the collector's and stay English.
 
 const MODE_KEY = "stamporama:orderSummary:mode:v1";
 const COLUMNS_KEY = "stamporama:orderSummary:columns:v1";
@@ -47,10 +53,25 @@ const COLUMNS: PackingColumnSpec[] = [
   PACKING_COLUMN.certificate,
 ];
 
+/** A column's header in the sheet's language — the specification's word for the same column. */
+function headerIn(column: PackingColumnSpec, language: string | null): string {
+  const words = specificationLabels(language);
+  const header: Record<string, string> = {
+    catalog: words.catalog,
+    area: words.area,
+    issue: words.series,
+    stamp: words.stamp,
+    condition: words.condition,
+    certificate: words.certificate,
+  };
+  return header[column.key] ?? column.header;
+}
+
 /** One set as the summary prints it. */
 export interface OrderSummarySet {
   id: string;
-  /** Named as the sale screen names the set (#2189) — or *Free extras* (#2420). */
+  /** Named as the sale screen names the set (#2189), by its offer's stored title — or *Free extras*
+   *  (#2420) in the sheet's language. */
   title: string;
   /** The set's catalogue numbers, muted under the title; null where the title says them. */
   numbers: string | null;
@@ -65,13 +86,22 @@ export interface OrderSummarySet {
   rows: PackingListRow[];
 }
 
-export function OrderSummarySheet({ collectionId, sets }: { collectionId: string; sets: OrderSummarySet[] }) {
+export function OrderSummarySheet({
+  collectionId,
+  sets,
+  language,
+}: {
+  collectionId: string;
+  sets: OrderSummarySet[];
+  /** The language the sheet is printed in (#2604). */
+  language: string | null;
+}) {
   const [storedMode, setMode] = usePersistentString(MODE_KEY, "contents");
   const mode: Mode = storedMode === "titles" ? "titles" : "contents";
   const [raw, setRaw] = usePersistentString(COLUMNS_KEY, defaultPackingColumns(COLUMNS));
   const [issueFormat, setIssueFormat] = usePersistentToggle(ISSUE_FORMAT_KEY, false);
   const selected = new Set(raw.split(",").filter(Boolean));
-  const enabled = COLUMNS.filter((c) => selected.has(c.key));
+  const enabled = COLUMNS.filter((c) => selected.has(c.key)).map((c) => ({ ...c, header: headerIn(c, language) }));
 
   function toggle(key: string) {
     const next = new Set(selected);
@@ -125,12 +155,13 @@ export function OrderSummarySheet({ collectionId, sets }: { collectionId: string
       </div>
 
       {mode === "titles" ? (
-        <TitlesTable sets={sets} />
+        <TitlesTable sets={sets} language={language} />
       ) : (
         sets.map((set) => (
           <SetSection
             key={set.id}
             set={set}
+            language={language}
             columns={enabled}
             ctx={{ collectionId, issueFormat }}
           />
@@ -140,19 +171,20 @@ export function OrderSummarySheet({ collectionId, sets }: { collectionId: string
   );
 }
 
-function copiesLabel(n: number | null): string | null {
-  return n === null ? null : `${n} ${n === 1 ? "copy" : "copies"}`;
+function copiesLabel(language: string | null, n: number | null): string | null {
+  return n === null ? null : specificationCopyCount(language, n);
 }
 
 /** *Titles only*: one row per set — its title, how many copies it holds, its price. */
-function TitlesTable({ sets }: { sets: OrderSummarySet[] }) {
+function TitlesTable({ sets, language }: { sets: OrderSummarySet[]; language: string | null }) {
+  const labels = orderSummaryLabels(language);
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1.25rem" }}>
       <thead>
         <tr>
-          <th style={TH}>Set</th>
-          <th style={{ ...TH, textAlign: "right", whiteSpace: "nowrap" }}>Copies</th>
-          <th style={{ ...TH, textAlign: "right", whiteSpace: "nowrap" }}>Price</th>
+          <th style={TH}>{labels.set}</th>
+          <th style={{ ...TH, textAlign: "right", whiteSpace: "nowrap" }}>{labels.copies}</th>
+          <th style={{ ...TH, textAlign: "right", whiteSpace: "nowrap" }}>{labels.price}</th>
         </tr>
       </thead>
       <tbody>
@@ -180,17 +212,19 @@ function TitlesTable({ sets }: { sets: OrderSummarySet[] }) {
 /** *Set contents*: the set as a heading with its price, its copies under it. */
 function SetSection({
   set,
+  language,
   columns,
   ctx,
 }: {
   set: OrderSummarySet;
+  language: string | null;
   columns: readonly PackingColumnSpec[];
   ctx: { collectionId: string; issueFormat: boolean };
 }) {
   const rows = set.rows.length > 0 && columns.length > 0;
   return (
     <PrintGroup
-      heading={{ title: set.title, meta: copiesLabel(set.copyCount), aside: set.price, subline: set.numbers }}
+      heading={{ title: set.title, meta: copiesLabel(language, set.copyCount), aside: set.price, subline: set.numbers }}
       columns={columns.length}
       columnHeader={
         rows && (
