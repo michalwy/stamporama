@@ -7,6 +7,7 @@ import {
   parseCatalogNumberSpec,
   parseVariantNumberSpec,
   type CatalogNumberSpec,
+  type VariantNumberMode,
 } from "../../catalog-number";
 import { getCollectionTranslationContext } from "../../contacts";
 import {
@@ -782,14 +783,21 @@ export async function addStampVariantsFromParams(
 
   const raw = requiredString(params, "numbers");
   const baseNumber = await getStampCatalogNumber(context.ownerId, context.collectionId, stamp.id, catalogVendorId);
-  // Until #2672 gives the operation the dialog's choice (#2671), a spec carrying any digit is read
-  // as full numbers and one without as suffixes — the reading the operation has always documented.
-  const parsed = parseVariantNumberSpec(raw, baseNumber ?? "", {
-    mode: /\d/.test(raw) ? "full" : "suffixes",
-  });
+  // The dialog's choice (#2671, #2672): suffixes unless the agent says full numbers, never guessed
+  // from the spec — `x2` under `88B` is `88Bx2`, as in the dialog.
+  const mode: VariantNumberMode = optionalString(params, "number_mode") === "full" ? "full" : "suffixes";
+  const base = baseNumber?.trim() ?? "";
+  if (mode === "suffixes" && !base) {
+    throw invalidRequest(
+      'The base stamp has no number in this catalogue, so suffixes have nothing to hang off. Send "number_mode": "full" and write each variant\'s number in full.'
+    );
+  }
+  const parsed = parseVariantNumberSpec(raw, base, { mode });
   if ("error" in parsed) {
     throw invalidRequest(
-      `"numbers" cannot be read: ${parsed.error}${baseNumber === null ? " The base stamp has no number in this catalogue, so write each variant's full number." : ""}`
+      mode === "suffixes"
+        ? `"numbers" cannot be read as suffixes of ${base}: ${parsed.error} If they are full catalogue numbers, send "number_mode": "full".`
+        : `"numbers" cannot be read as full numbers: ${parsed.error} If they are suffixes of ${base || "the base stamp's number"}, leave "number_mode" out or send "suffixes".`
     );
   }
   if (parsed.numbers.length > AUTO_CREATE_MAX_STAMPS) {
@@ -831,7 +839,7 @@ export const addStampVariantsOperation: Operation = {
   method: "POST",
   path: "/stamps/{stamp_id}/variants",
   description:
-    "Add a run of variants under one stamp, the way the collector's variant range dialog does: `a-f` under `240` makes `240a` … `240f`, `I-III` makes Roman-numbered ones, and full numbers (`240a-240f`, `309AP`) are taken as written. Every variant carries the same subtype, the base stamp's year, no name and no checklist entry, and goes at the end of the issue's order. A catalogue number this collection already has is refused with the stamp that has it.",
+    "Add a run of variants under one stamp, the way the collector's variant range dialog does. `numbers` is read as `number_mode` says, as the dialog's Suffixes / Full numbers choice: by default every piece is a suffix hung off the base stamp's number, digits or not — `a-f` under `240` makes `240a` … `240f`, `I-III` makes Roman-numbered ones, `x2, y3` under `88B` makes `88Bx2` and `88By3`; with `number_mode` `full` every piece is a full number taken as written (`240a-240c`, `309AP`). Every variant carries the same subtype, the base stamp's year, no name and no checklist entry, and goes at the end of the issue's order. A catalogue number this collection already has is refused with the stamp that has it.",
   writes: true,
   parameters: [
     { name: "stamp_id", in: "path", type: "string", required: true, description: "The base stamp's id, as `search_collection` or `resolve_catalog_numbers` reports it. A stamp may also be named by its short number, `st 123`." },
@@ -841,7 +849,16 @@ export const addStampVariantsOperation: Operation = {
       type: "string",
       required: true,
       description:
-        "The variants' numbers: a suffix run hung off the base stamp's number (`a-f`, `A-C`, `I-III`), full numbers (`240a-240f`), or several of either separated by commas. A lone suffix is taken literally: `P` under `309A` is `309AP`.",
+        "The variants' numbers, several separated by commas. As suffixes (the default): a run hung off the base stamp's number (`a-f`, `A-C`, `I-III`, `x2-x5`) or a lone suffix taken literally (`P` under `309A` is `309AP`, `x2` under `88B` is `88Bx2`). As full numbers: each written in full (`240a-240f`, `309AP`).",
+    },
+    {
+      name: "number_mode",
+      in: "body",
+      type: "string",
+      required: false,
+      description:
+        "How `numbers` is read, as the dialog's Suffixes / Full numbers choice: `suffixes` hangs every piece off the base stamp's number, digits or not; `full` takes every piece as a full catalogue number. Defaults to `suffixes`. A base stamp with no number in the catalogue needs `full`.",
+      values: ["suffixes", "full"],
     },
     {
       name: "catalogue",

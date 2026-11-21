@@ -2621,6 +2621,14 @@ are `"de: Freimarken"` the same way. **Every catalogue named generates stamps** 
 names fewer — the form ticks its boxes itself and an agent has no boxes, so the default is stated on
 the parameter and a mismatched span is refused pointing at `stamps_from`, never silently narrowed.
 
+**`add_stamp_variants` reads its `numbers` in the mode it is told** (#2672): `number_mode` is the
+dialog's Suffixes / Full numbers choice (#2671), and left out it is `suffixes`, as the dialog opens.
+It used to read any spec carrying a digit as full numbers, so `x2` under `88B` became a stamp
+numbered `x2`; an agent and the dialog given the same input now read it the same way. The default
+was kept at the dialog's even though an agent sending full numbers unannounced is read differently
+from before — the refusals say which reading applied and name the other, and a base with no number
+in the catalogue is refused before parsing, pointing at `full`.
+
 **A catalogue must be one the area keeps** (`effectiveVendorsForArea`, the forms' own set), and a
 translated name one of `getCollectionTranslationContext`'s languages: a number or a name the forms
 offer no field for would be one the collector could neither see nor correct on the record's screen.
