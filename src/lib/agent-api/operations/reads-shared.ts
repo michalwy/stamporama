@@ -141,7 +141,8 @@ export async function loadIssueLabelling(collectionId: string): Promise<IssueLab
         name: true,
         parentId: true,
         catalogPrefix: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+        catalogPrefixJoined: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
       },
     }),
     loadIssuePrefixMap(collectionId),
@@ -154,13 +155,21 @@ export async function loadIssueLabelling(collectionId: string): Promise<IssueLab
     issuePrefixes,
     areaName: (areaId) => names.get(areaId) ?? null,
     catalogRanges: (issue) =>
-      issue.catalogNumbers.map((range) =>
-        formatIssueCatalogNumber(
+      issue.catalogNumbers.map((range) => {
+        const prefix = effectivePrefixFor(
+          issue.collectionAreaId,
+          range.catalogVendorId,
+          nodes,
+          issue.id,
+          issuePrefixes
+        );
+        return formatIssueCatalogNumber(
           range.firstNumber,
           range.lastNumber,
           abbrOf.get(range.catalogVendorId) ?? "",
-          effectivePrefixFor(issue.collectionAreaId, range.catalogVendorId, nodes, issue.id, issuePrefixes)
-        )
-      ),
+          prefix?.prefix,
+          prefix?.joined ?? false
+        );
+      }),
   };
 }

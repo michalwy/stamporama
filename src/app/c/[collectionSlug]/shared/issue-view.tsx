@@ -203,7 +203,13 @@ export function IssueCatalogChips({
   ) => {
     const v = vendorMap.get(c.catalogVendorId);
     const warn = warnById.get(c.catalogVendorId);
-    const label = formatIssueCatalogNumber(c.firstNumber, c.lastNumber, v?.vendorAbbreviation ?? "", v?.prefix);
+    const label = formatIssueCatalogNumber(
+      c.firstNumber,
+      c.lastNumber,
+      v?.vendorAbbreviation ?? "",
+      v?.prefix,
+      v?.prefixJoined ?? false
+    );
     if (!warn) {
       return <CatalogNumberChip key={c.catalogVendorId} label={label} style={style} />;
     }

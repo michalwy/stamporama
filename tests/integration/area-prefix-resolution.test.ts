@@ -27,15 +27,17 @@ const NODES = buildAreaPrefixNodes(prefixAreasAsServerRows());
 const CLIENT_AREAS = prefixAreasAsClientData();
 
 describe("resolveEffectivePrefix (#675)", () => {
-  for (const { areaId, vendorId, expected } of PREFIX_CASES) {
-    it(`resolves (${areaId}, ${vendorId}) to ${expected === null ? "no prefix" : expected}`, () => {
-      assert.equal(resolveEffectivePrefix(areaId, vendorId, NODES), expected);
+  for (const { areaId, vendorId, expected, joined = false } of PREFIX_CASES) {
+    it(`resolves (${areaId}, ${vendorId}) to ${expected === null ? "no prefix" : expected}${joined ? ", joined" : ""}`, () => {
+      const resolved = resolveEffectivePrefix(areaId, vendorId, NODES);
+      assert.equal(resolved?.prefix ?? null, expected);
+      assert.equal(resolved?.joined ?? false, joined);
     });
   }
 
   it("agrees with the client mirror on every case", () => {
     for (const { areaId, vendorId } of PREFIX_CASES) {
-      assert.equal(
+      assert.deepEqual(
         resolveEffectivePrefix(areaId, vendorId, NODES),
         resolveAreaVendorPrefix(CLIENT_AREAS, areaId, vendorId),
         `server and client disagree on (${areaId}, ${vendorId})`
@@ -45,17 +47,36 @@ describe("resolveEffectivePrefix (#675)", () => {
 });
 
 describe("effectivePrefixFor keeps the issue override ahead of the area levels (#377)", () => {
-  const overrides = new Map([["issue-1", new Map([[MICHEL, "SP"]])]]);
+  const overrides = new Map([
+    ["issue-1", new Map([[MICHEL, { prefix: "SP", joined: false }]])],
+    ["issue-3", new Map([[MICHEL, { prefix: "DR D", joined: true }]])],
+  ]);
 
   it("uses the issue's override where it sets one", () => {
-    assert.equal(effectivePrefixFor("gg", MICHEL, NODES, "issue-1", overrides), "SP");
+    assert.deepEqual(effectivePrefixFor("gg", MICHEL, NODES, "issue-1", overrides), {
+      prefix: "SP",
+      joined: false,
+    });
+  });
+
+  it("brings the override's own joining, not the area's (#2657)", () => {
+    assert.deepEqual(effectivePrefixFor("pl", MICHEL, NODES, "issue-3", overrides), {
+      prefix: "DR D",
+      joined: true,
+    });
   });
 
   it("falls back to the area levels for a vendor the issue is silent about", () => {
-    assert.equal(effectivePrefixFor("gg", FISCHER, NODES, "issue-1", overrides), "GG");
+    assert.deepEqual(effectivePrefixFor("gg", FISCHER, NODES, "issue-1", overrides), {
+      prefix: "GG",
+      joined: false,
+    });
   });
 
   it("falls back to the area levels for an issue with no overrides at all", () => {
-    assert.equal(effectivePrefixFor("sl", MICHEL, NODES, "issue-2", overrides), "PL");
+    assert.deepEqual(effectivePrefixFor("sl", MICHEL, NODES, "issue-2", overrides), {
+      prefix: "PL",
+      joined: false,
+    });
   });
 });

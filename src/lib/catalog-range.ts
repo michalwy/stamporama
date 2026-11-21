@@ -20,7 +20,7 @@
 // agreeing to. Shortening belongs where a range is an **identity** being read: a generated listing
 // title, an offer set or auction lot name, an issue's catalog chip.
 
-import { parseCatalogNumberParts, parseSuffixOrdinal } from "./catalog-number";
+import { joinCatalogPrefix, parseCatalogNumberParts, parseSuffixOrdinal } from "./catalog-number";
 
 /** The default separator. Generated listing texts use the plain hyphen (a platform's form is typed
  *  into, so an en dash is a paste hazard); the on-screen issue chip passes `–`. */
@@ -160,8 +160,11 @@ export function formatIssueCatalogNumber(
   firstNumber: string,
   lastNumber: string | null | undefined,
   vendorAbbr: string,
-  areaPrefix: string | null | undefined
+  areaPrefix: string | null | undefined,
+  joined: boolean
 ): string {
-  const prefix = areaPrefix ? `${vendorAbbr}·${areaPrefix}` : vendorAbbr;
-  return `${prefix} ${formatCatalogRange(firstNumber, lastNumber, "–")}`;
+  const span = formatCatalogRange(firstNumber, lastNumber, "–");
+  return areaPrefix
+    ? `${vendorAbbr}·${joinCatalogPrefix(areaPrefix, span, joined)}`
+    : `${vendorAbbr} ${span}`;
 }

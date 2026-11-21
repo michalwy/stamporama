@@ -38,6 +38,7 @@ function area(id: string, parentId: string | null, sortOrder: number, extra: Par
     primaryCatalogNameId: null,
     primaryCatalogVendorId: null,
     catalogPrefix: null,
+    catalogPrefixJoined: false,
     anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
@@ -60,16 +61,16 @@ const EUROPE = area("europe", null, 0, {
   primaryCatalogNameId: "mi-book",
   primaryCatalogVendorId: "mi",
   catalogEntries: [
-    { catalogVendorId: "mi", vendorName: "Michel", vendorAbbreviation: "Mi", prefix: null, catalogNameId: "mi-book", catalogName: "Michel Europa" },
+    { catalogVendorId: "mi", vendorName: "Michel", vendorAbbreviation: "Mi", prefix: null, prefixJoined: false, catalogNameId: "mi-book", catalogName: "Michel Europa" },
   ],
-  vendorEntries: [{ catalogVendorId: "mi", vendorName: "Michel", vendorAbbreviation: "Mi", areaPrefix: null }],
+  vendorEntries: [{ catalogVendorId: "mi", vendorName: "Michel", vendorAbbreviation: "Mi", areaPrefix: null, prefixJoined: false }],
 });
 const POLAND = area("poland", "europe", 1, {
   catalogPrefix: "PL",
-  vendorEntries: [{ catalogVendorId: "fi", vendorName: "Fischer", vendorAbbreviation: "Fi", areaPrefix: null }],
+  vendorEntries: [{ catalogVendorId: "fi", vendorName: "Fischer", vendorAbbreviation: "Fi", areaPrefix: null, prefixJoined: false }],
 });
 const GG = area("gg", "poland", 0, {
-  vendorEntries: [{ catalogVendorId: "fi", vendorName: "Fischer", vendorAbbreviation: "Fi", areaPrefix: "" }],
+  vendorEntries: [{ catalogVendorId: "fi", vendorName: "Fischer", vendorAbbreviation: "Fi", areaPrefix: "", prefixJoined: false }],
 });
 const AUSTRIA = area("austria", "europe", 0, { catalogPrefix: "A" });
 const ASIA = area("asia", null, 1);

@@ -232,6 +232,17 @@ export interface IssueCatalogNumberData {
 export interface IssueCatalogPrefixData {
   catalogVendorId: string;
   areaPrefix: string;
+  /** Whether the prefix joins the number with no space (#2657): `DR D12` rather than `PL 123`. */
+  prefixJoined: boolean;
+}
+
+/** One per-vendor prefix override as a write states it (#377). `prefixJoined` (#2657) omitted keeps
+ * what the vendor's stored row had, so a caller restating the prefixes for another reason cannot
+ * split a prefix from its joining. */
+export interface IssueCatalogPrefixInput {
+  catalogVendorId: string;
+  areaPrefix: string;
+  prefixJoined?: boolean;
 }
 
 /** A checklist as a list row needs it: named, counted, and identified so an action can act on it. */
@@ -647,7 +658,7 @@ const ISSUE_LIST_SELECT = {
   catalogNumbers: { select: { catalogVendorId: true, firstNumber: true, lastNumber: true } },
   // Per-vendor prefix overrides (#377) — at most one row per vendor the issue overrides, and none
   // at all for the ordinary issue that follows its area's prefix.
-  catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true } },
+  catalogPrefixes: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
   // Per-language names (#295), so the edit dialog can seed its translation fields from the row it
   // already has. At most one row per translation language — a handful, not a payload concern.
   translations: { select: { language: true, name: true } },
@@ -843,11 +854,23 @@ export async function getSpanningChecklistTotals(
 async function writeIssueCatalogPrefixes(
   tx: DbTransaction,
   issueId: string,
-  prefixes: { catalogVendorId: string; areaPrefix: string }[] | undefined
+  prefixes: IssueCatalogPrefixInput[] | undefined
 ): Promise<void> {
   if (prefixes === undefined) return;
+  const previouslyJoined = new Set(
+    (
+      await tx.issueCatalogPrefix.findMany({
+        where: { issueId, prefixJoined: true },
+        select: { catalogVendorId: true },
+      })
+    ).map((r) => r.catalogVendorId)
+  );
   const clean = prefixes
-    .map((p) => ({ catalogVendorId: p.catalogVendorId, areaPrefix: p.areaPrefix.trim() }))
+    .map((p) => ({
+      catalogVendorId: p.catalogVendorId,
+      areaPrefix: p.areaPrefix.trim(),
+      prefixJoined: p.prefixJoined ?? previouslyJoined.has(p.catalogVendorId),
+    }))
     .filter((p) => p.catalogVendorId && p.areaPrefix);
   await tx.issueCatalogPrefix.deleteMany({ where: { issueId } });
   if (clean.length > 0) {
@@ -894,7 +917,7 @@ function toIssueListItem(
     stillValidForPostage: boolean | null;
     translations: { language: string; name: string | null }[];
     catalogNumbers: { catalogVendorId: string; firstNumber: string; lastNumber: string | null }[];
-    catalogPrefixes: { catalogVendorId: string; areaPrefix: string }[];
+    catalogPrefixes: { catalogVendorId: string; areaPrefix: string; prefixJoined: boolean }[];
     members: {
       stampId: string;
       stamp: {
@@ -2020,7 +2043,7 @@ export async function createIssue(
     catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
     /** Per-vendor overrides of the area-resolved catalog prefix (#377). Blank values are dropped —
      * a blank field means "inherit the area's prefix", which is the absence of a row. */
-    catalogPrefixes?: { catalogVendorId: string; areaPrefix: string }[];
+    catalogPrefixes?: IssueCatalogPrefixInput[];
     /** Per-language `name` overrides (#295), keyed by ISO 639-1 code then field key. A blank / null
      * value removes that language's row; languages absent from the record are left untouched. */
     translations?: TranslationValueMap;
@@ -2565,7 +2588,7 @@ export async function updateIssue(
     catalogNumbers?: { catalogVendorId: string; firstNumber: string; lastNumber?: string | null }[];
     /** Per-vendor prefix overrides (#377); see {@link createIssue}. Passing an array replaces the
      * issue's whole set, so a vendor left out of it goes back to inheriting the area's prefix. */
-    catalogPrefixes?: { catalogVendorId: string; areaPrefix: string }[];
+    catalogPrefixes?: IssueCatalogPrefixInput[];
     /** Per-language `name` overrides (#295); see {@link createIssue}. */
     translations?: TranslationValueMap;
   }

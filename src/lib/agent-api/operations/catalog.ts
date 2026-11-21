@@ -92,7 +92,7 @@ function collectPrefixKeys(
     for (const prefix of node.vendorPrefix.values()) add(prefix);
   }
   for (const byVendor of issuePrefixes.values()) {
-    for (const prefix of byVendor.values()) add(prefix);
+    for (const override of byVendor.values()) add(override.prefix);
   }
   return keys;
 }
@@ -181,7 +181,8 @@ export async function resolveCatalogStrings(
         name: true,
         parentId: true,
         catalogPrefix: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+        catalogPrefixJoined: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
       },
     }),
     loadIssuePrefixMap(context.collectionId),
@@ -277,13 +278,15 @@ function matchStamps(
       if (vendorId !== null && cn.catalogVendorId !== vendorId) continue;
       const prefix = effectivePrefixFor(areaId, cn.catalogVendorId, nodes, issueId, issuePrefixes);
       const abbr = vendorAbbr.get(cn.catalogVendorId) ?? "";
-      if (!matchesForeignCatalogNumber(entry, stampCatalogKeys(abbr, prefix, cn.number))) continue;
+      if (!matchesForeignCatalogNumber(entry, stampCatalogKeys(abbr, prefix?.prefix ?? null, cn.number))) {
+        continue;
+      }
 
       hits.push(
         compact({
           stampId: stamp.id,
           stampNo: stamp.stampNo,
-          matchedNumber: formatCatalogNumber(abbr, prefix, cn.number),
+          matchedNumber: formatCatalogNumber(abbr, prefix?.prefix, cn.number, prefix?.joined ?? false),
           catalogNumbers: labelling
             .labelFor(areaId, issueId, stamp.catalogNumbers)
             .map((label) => label.label),

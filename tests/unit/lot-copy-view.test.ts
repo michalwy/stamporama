@@ -57,6 +57,7 @@ const entry = (over: Partial<AreaCatalogEntry> & { catalogVendorId: string }): A
   catalogName: "Catalog",
   vendorAbbreviation: "Mi",
   prefix: null,
+  prefixJoined: false,
   ...over,
 });
 
@@ -67,6 +68,7 @@ const area = (over: Partial<CollectionAreaData> & { id: string }): CollectionAre
   primaryCatalogNameId: null,
   primaryCatalogVendorId: null,
   catalogPrefix: null,
+  catalogPrefixJoined: false,
   anchorMarkets: [],
   titleName: null,
   titleNameByLanguage: {},

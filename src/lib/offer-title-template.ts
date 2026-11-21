@@ -54,6 +54,8 @@ export interface TitleCatalogNumber {
   vendorId: string;
   vendorAbbr: string;
   areaPrefix: string | null;
+  /** Whether the area prefix joins the number with no space (#2657): `Mi·DR D12`. */
+  areaPrefixJoined: boolean;
   number: string;
   isPrimary: boolean;
 }
@@ -807,12 +809,15 @@ export interface CatalogNumberGroupEntry {
   vendorId: string;
   vendorAbbr: string;
   areaPrefix: string | null;
+  /** Whether the area prefix joins the number with no space (#2657). */
+  areaPrefixJoined: boolean;
   number: string;
 }
 
 /**
  * Group catalog numbers by vendor (+ area prefix), compact each group into ranges and write the
- * prefix once around it — `Mi·DR 1-2,4,6-10 / Fi 3-5`. Groups keep first-seen order.
+ * prefix once around it — `Mi·DR 1-2,4,6-10 / Fi 3-5`, or `Mi·DR D12-15` under a joined prefix
+ * (#2657). Groups keep first-seen order.
  *
  * Exported for the derived **offer set** label (#379), which is the same question `{catalog}` asks:
  * a set of bare numbers joined by `+` names no catalogue at all, and two implementations of the
@@ -823,13 +828,21 @@ export function compactCatalogNumberGroups(
   entries: readonly CatalogNumberGroupEntry[],
   flags: ReadonlySet<string> = new Set(["vendor", "area"])
 ): string {
-  const groups = new Map<string, { vendorAbbr: string; areaPrefix: string | null; numbers: string[] }>();
+  const groups = new Map<
+    string,
+    { vendorAbbr: string; areaPrefix: string | null; areaPrefixJoined: boolean; numbers: string[] }
+  >();
   const order: string[] = [];
   for (const cn of entries) {
-    const key = `${cn.vendorId}\u0000${cn.areaPrefix ?? ""}`;
+    const key = `${cn.vendorId}\u0000${cn.areaPrefix ?? ""}\u0000${cn.areaPrefixJoined ? "joined" : ""}`;
     let g = groups.get(key);
     if (!g) {
-      g = { vendorAbbr: cn.vendorAbbr, areaPrefix: cn.areaPrefix, numbers: [] };
+      g = {
+        vendorAbbr: cn.vendorAbbr,
+        areaPrefix: cn.areaPrefix,
+        areaPrefixJoined: cn.areaPrefixJoined,
+        numbers: [],
+      };
       groups.set(key, g);
       order.push(key);
     }
@@ -842,7 +855,10 @@ export function compactCatalogNumberGroups(
     const nums = compactCatalogNumbers(g.numbers);
     if (!nums) continue;
     const head = catalogHead(g.vendorAbbr, g.areaPrefix, flags);
-    parts.push(head ? `${head} ${nums}` : nums);
+    // A joined prefix (#2657) meets the numbers with nothing between them — `Mi·DR D12-15` — but only
+    // when the prefix is in the head at all; the vendor alone is always followed by a space.
+    const joined = g.areaPrefixJoined && !!g.areaPrefix && flags.has("area");
+    parts.push(head ? (joined ? `${head}${nums}` : `${head} ${nums}`) : nums);
   }
   return parts.join(" / ");
 }

@@ -45,10 +45,8 @@ export function colnectSearchQueryFor(
   vendorMap: ReadonlyMap<string, AreaCatalogEntry>
 ): string | null {
   if (!catalogNumber) return null;
-  const query = catalogSearchValue(
-    vendorMap.get(catalogNumber.catalogVendorId)?.prefix,
-    catalogNumber.number
-  );
+  const vendor = vendorMap.get(catalogNumber.catalogVendorId);
+  const query = catalogSearchValue(vendor?.prefix, catalogNumber.number, vendor?.prefixJoined ?? false);
   return query || null;
 }
 

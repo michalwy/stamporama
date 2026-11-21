@@ -402,7 +402,8 @@ async function loadColnectContext(collectionId: string): Promise<ColnectContext>
         name: true,
         parentId: true,
         catalogPrefix: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+        catalogPrefixJoined: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
       },
     }),
     loadIssuePrefixMap(collectionId),
@@ -523,7 +524,7 @@ async function markBackfillDuplicates(
       row.stamp.issueMemberships[0]?.issueId ?? null,
       ctx.issuePrefixes
     );
-    const key = catalogIdentityKey(row.catalogVendorId, prefix, row.number);
+    const key = catalogIdentityKey(row.catalogVendorId, prefix?.prefix, row.number);
     const list = holdersByIdentity.get(key);
     if (list) list.push({ id: row.stamp.id, name: row.stamp.name });
     else holdersByIdentity.set(key, [{ id: row.stamp.id, name: row.stamp.name }]);
@@ -537,7 +538,7 @@ async function markBackfillDuplicates(
       stamp.issueId,
       ctx.issuePrefixes
     );
-    const key = catalogIdentityKey(proposal.catalogVendorId, prefix, proposal.number!);
+    const key = catalogIdentityKey(proposal.catalogVendorId, prefix?.prefix, proposal.number!);
     const holders = (holdersByIdentity.get(key) ?? []).filter((h) => h.id !== stamp.stampId);
     if (holders.length === 0) continue;
     proposal.duplicateStampNames = holders.map((h) => h.name ?? "(unnamed stamp)");
@@ -1097,10 +1098,10 @@ export async function matchColnectItems(
     for (const cn of s.catalogNumbers) {
       const abbr = vendorAbbrById.get(cn.catalogVendorId) ?? "";
       const prefix = effectivePrefixFor(areaId, cn.catalogVendorId, areaNodes, issueId, issuePrefixes);
-      const key = catalogMatchKey(abbr, prefix, cn.number);
+      const key = catalogMatchKey(abbr, prefix?.prefix, cn.number);
       refs.push({ catalogVendorId: cn.catalogVendorId, key });
       numbers.push({
-        label: formatCatalogNumber(abbr, prefix, cn.number),
+        label: formatCatalogNumber(abbr, prefix?.prefix, cn.number, prefix?.joined ?? false),
         catalogVendorId: cn.catalogVendorId,
         key,
       });
@@ -1344,7 +1345,7 @@ export async function overwriteColnectCatalogNumber(
   if (vendorAbbreviation === undefined) {
     throw new Error("Catalog vendor not found in this collection.");
   }
-  const label = formatCatalogNumber(vendorAbbreviation, prefix, number);
+  const label = formatCatalogNumber(vendorAbbreviation, prefix?.prefix, number, prefix?.joined ?? false);
 
   // The duplicate check is the fill's own, run over a proposal shaped like one, so an overwrite and
   // a fill can never disagree about what collides with what.

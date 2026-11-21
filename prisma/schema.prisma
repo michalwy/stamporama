@@ -3507,6 +3507,10 @@ model CollectionArea {
   // `catalogPrefix`), the vendor row winning inside that one area. ADR-0020's rule: *where* outranks
   // *for which*. Null means this area says nothing and the question passes to its parent.
   catalogPrefix        String?
+  // Whether `catalogPrefix` joins the number with nothing between them (#2657): `DR D` + `12` reads
+  // `DR D12`, where the ordinary prefix reads `PL 123`. It travels with the prefix — whoever
+  // inherits the prefix inherits its joining — and means nothing without one.
+  catalogPrefixJoined  Boolean  @default(false)
   // The markets whose results this area's valuations rest on (#1634; ADR-0064) — ISO 3166-1 alpha-2
   // codes. Results from any other market are shown as hints and never enter a figure. Empty means
   // this area says nothing and the question passes to its parent, the **whole list** inheriting as
@@ -7948,6 +7952,9 @@ model CollectionAreaVendor {
   collectionAreaId String
   catalogVendorId  String
   areaPrefix       String?
+  // Whether `areaPrefix` joins the number with no space (#2657) — see `CollectionArea.catalogPrefixJoined`.
+  // Meaningful only when `areaPrefix` states a prefix; an inheriting row inherits the joining too.
+  prefixJoined     Boolean @default(false)
 
   collectionArea CollectionArea @relation(fields: [collectionAreaId], references: [id], onDelete: Cascade)
   catalogVendor  CatalogVendor  @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)
@@ -7967,6 +7974,8 @@ model IssueCatalogPrefix {
   issueId         String
   catalogVendorId String
   areaPrefix      String
+  // Whether `areaPrefix` joins the number with no space (#2657) — see `CollectionArea.catalogPrefixJoined`.
+  prefixJoined    Boolean @default(false)
 
   issue         Issue         @relation(fields: [issueId], references: [id], onDelete: Cascade)
   catalogVendor CatalogVendor @relation(fields: [catalogVendorId], references: [id], onDelete: Cascade)

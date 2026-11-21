@@ -25,7 +25,12 @@ const target = (
   prefixes: Record<string, string | null>
 ): BackfillTarget => ({
   numbersByVendor: new Map(Object.entries(numbers)),
-  prefixByVendor: new Map(Object.entries(prefixes)),
+  prefixByVendor: new Map(
+    Object.entries(prefixes).map(([vendorId, prefix]) => [
+      vendorId,
+      prefix === null ? null : { prefix, joined: false },
+    ])
+  ),
 });
 
 describe("splitColnectNumber", () => {
@@ -38,6 +43,14 @@ describe("splitColnectNumber", () => {
     for (const value of ["BL132", "P169", "ATM2.2x", "3706-3711"]) {
       assert.deepEqual(splitColnectNumber(value), { areaPrefix: null, number: value });
     }
+  });
+
+  it("splits a joined prefix where it ends, spaced or not (#2657)", () => {
+    const joined = { prefix: "DR D", joined: true };
+    assert.deepEqual(splitColnectNumber("DR D12", joined), { areaPrefix: "DR D", number: "12" });
+    assert.deepEqual(splitColnectNumber("DR D 12", joined), { areaPrefix: "DR D", number: "12" });
+    // A value that does not start with it is split as ever.
+    assert.deepEqual(splitColnectNumber("PL 3690", joined), { areaPrefix: "PL", number: "3690" });
   });
 
   it("does not split a spaced range whose leading token carries digits", () => {
@@ -58,6 +71,24 @@ describe("proposeBackfill", () => {
     assert.equal(out[0].status, "would-fill");
     assert.equal(out[0].number, "3382");
     assert.equal(out[0].label, "Sn·PL 3382");
+  });
+
+  it("fills under a joined prefix and labels the number joined (#2657)", () => {
+    const out = proposeBackfill([ref("Mi", "DR D12", V_MI, "Mi")], {
+      numbersByVendor: new Map(),
+      prefixByVendor: new Map([[V_MI, { prefix: "DR D", joined: true }]]),
+    });
+    assert.equal(out[0].status, "would-fill");
+    assert.equal(out[0].number, "12");
+    assert.equal(out[0].label, "Mi·DR D12");
+  });
+
+  it("treats a joined prefix's number as the matching evidence (#2657)", () => {
+    const out = proposeBackfill([ref("Mi", "DR D12", V_MI, "Mi")], {
+      numbersByVendor: new Map([[V_MI, "12"]]),
+      prefixByVendor: new Map([[V_MI, { prefix: "DR D", joined: true }]]),
+    });
+    assert.deepEqual(out, []);
   });
 
   it("stores a prefixless number verbatim even under a prefixed area", () => {

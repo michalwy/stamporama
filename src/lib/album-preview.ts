@@ -155,7 +155,7 @@ function finishSamplePages(
     if (page.kind === "printed") return { range: "", layout: page, footer: null };
     const range = pageRange(
       page.boxes.map((b) => b.box),
-      ALBUM_PREVIEW_AREA_PREFIX,
+      { prefix: ALBUM_PREVIEW_AREA_PREFIX, joined: false },
     );
     if (!page.footer) return { range, layout: page, footer: null };
     const text = renderAlbumText(

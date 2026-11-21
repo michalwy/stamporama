@@ -25,6 +25,7 @@ import {
 } from "@/lib/catalog-import-rules";
 import type { CatalogImportPlanResult, CatalogImportRunResult } from "@/lib/catalog-import";
 import type { CollectionAreaData } from "@/lib/areas";
+import { formatCatalogNumber } from "@/lib/catalog-number";
 import { useInvalidateStampsAndIssues } from "@/app/c/[collectionSlug]/shared/use-invalidate-stamps-and-issues";
 import { TextArea } from "@/app/c/[collectionSlug]/shared/text-input";
 
@@ -422,7 +423,7 @@ function SourceStep({
   source: string;
   sourceName: string | null;
   onSourceChange: (text: string) => void;
-  targetVendor: { vendorAbbreviation: string; prefix: string | null } | null;
+  targetVendor: { vendorAbbreviation: string; prefix: string | null; prefixJoined: boolean } | null;
   fileInput: React.RefObject<HTMLInputElement | null>;
   onPickFile: (file: File) => void;
   disabled: boolean;
@@ -451,7 +452,12 @@ function SourceStep({
               <>
                 {" "}
                 with this area&rsquo;s prefix — <strong>
-                  {targetVendor.vendorAbbreviation}·{targetVendor.prefix} 200
+                  {formatCatalogNumber(
+                    targetVendor.vendorAbbreviation,
+                    targetVendor.prefix,
+                    "200",
+                    targetVendor.prefixJoined
+                  )}
                 </strong>{" "}
                 for a row numbered <code>200</code>.
               </>

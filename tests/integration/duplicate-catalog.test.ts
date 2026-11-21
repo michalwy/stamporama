@@ -257,7 +257,7 @@ describe("duplicate-catalog detection with an issue prefix override (#377)", () 
     const groups = await findCatalogDuplicatesForCandidates(
       userId,
       collectionId,
-      { areaId, prefixes: { [vendorId]: "SP" } },
+      { areaId, prefixes: { [vendorId]: { prefix: "SP", joined: false } } },
       [{ catalogVendorId: vendorId, number: "200" }],
       null
     );

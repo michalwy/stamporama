@@ -13,7 +13,7 @@ import {
 /** A copy named by one catalogue number under a vendor in the given area prefix. */
 function copy(number: string, areaPrefix: string | null = "RU-NW", vendorId = "mi"): SetLabelCopy {
   return {
-    catalog: { vendorId, vendorAbbr: vendorId === "mi" ? "Mi" : "Fi", areaPrefix, number },
+    catalog: { vendorId, vendorAbbr: vendorId === "mi" ? "Mi" : "Fi", areaPrefix, areaPrefixJoined: false, number },
     stampName: null,
   };
 }

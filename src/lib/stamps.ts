@@ -1450,7 +1450,8 @@ export async function searchStampsForPicker(
         name: true,
         parentId: true,
         catalogPrefix: true,
-        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true } },
+        catalogPrefixJoined: true,
+        collectionAreaVendors: { select: { catalogVendorId: true, areaPrefix: true, prefixJoined: true } },
       },
     }),
     // Per-issue prefix overrides (#377) — part of the picker's *match key*, not only its labels, so
@@ -1488,10 +1489,10 @@ export async function searchStampsForPicker(
         membershipIssueId,
         issuePrefixes
       );
-      labels.push(formatCatalogNumber(abbr, prefix, cn.number));
+      labels.push(formatCatalogNumber(abbr, prefix?.prefix, cn.number, prefix?.joined ?? false));
       // Every number is drawn; only one in a catalogue the search reads can match (#2529).
       if (catalogVendorSearched(cn.catalogVendorId, prefixVendorId, scope)) {
-        keys.push(catalogMatchKey(abbr, prefix, cn.number));
+        keys.push(catalogMatchKey(abbr, prefix?.prefix, cn.number));
       }
     }
 

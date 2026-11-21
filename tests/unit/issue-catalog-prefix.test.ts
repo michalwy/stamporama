@@ -19,6 +19,7 @@ const MICHEL: AreaCatalogEntry = {
   // Derived, never declared: `effectiveVendorsForArea` fills each entry's prefix from the area's
   // own levels (#675), so the `PL` these tests read comes from the area's `catalogPrefix` below.
   prefix: null,
+  prefixJoined: false,
 };
 
 const FISCHER: AreaCatalogEntry = {
@@ -28,6 +29,7 @@ const FISCHER: AreaCatalogEntry = {
   catalogName: "Fischer",
   vendorAbbreviation: "Fi",
   prefix: null,
+  prefixJoined: false,
 };
 
 function area(over: Partial<CollectionAreaData> & { id: string; name: string }): CollectionAreaData {
@@ -37,6 +39,7 @@ function area(over: Partial<CollectionAreaData> & { id: string; name: string }):
     primaryCatalogNameId: null,
     primaryCatalogVendorId: null,
     catalogPrefix: null,
+    catalogPrefixJoined: false,
     anchorMarkets: [],
     titleName: null,
     titleNameByLanguage: {},
@@ -58,8 +61,13 @@ const AREAS = [
   area({ id: "pl", name: "Poland", catalogPrefix: "PL", catalogEntries: [MICHEL, FISCHER] }),
 ];
 
-function overrides(entries: [string, [string, string][]][]): IssuePrefixMap {
-  return new Map(entries.map(([issueId, pairs]) => [issueId, new Map(pairs)]));
+function overrides(entries: [string, [string, string, boolean?][]][]): IssuePrefixMap {
+  return new Map(
+    entries.map(([issueId, pairs]) => [
+      issueId,
+      new Map(pairs.map(([vendorId, prefix, joined]) => [vendorId, { prefix, joined: joined ?? false }])),
+    ])
+  );
 }
 
 describe("buildAreaVendorMaps — issue prefix overrides (#377)", () => {
@@ -89,6 +97,22 @@ describe("buildAreaVendorMaps — issue prefix overrides (#377)", () => {
     const vendorMap = maps.vendorMapFor("pl", "special");
     assert.equal(formatStampCN("200", vendorMap.get("mi")), "Mi·SP 200");
     assert.equal(formatStampCN("3", vendorMap.get("fi")), "Fi·XX 3");
+  });
+
+  it("joins an override that says so to the number with no space (#2657)", () => {
+    const maps = buildAreaVendorMaps(AREAS, overrides([["dienst", [["mi", "DR D", true]]]]));
+    assert.equal(formatStampCN("12", maps.vendorMapFor("pl", "dienst").get("mi")), "Mi·DR D12");
+    // The area's own prefix keeps its space for every other issue.
+    assert.equal(formatStampCN("123", maps.vendorMapFor("pl", "ordinary").get("mi")), "Mi·PL 123");
+  });
+
+  it("carries a joined area prefix down to a child that says nothing (#2657)", () => {
+    const tree = [
+      area({ id: "dr", name: "Dienst", catalogPrefix: "DR D", catalogPrefixJoined: true, catalogEntries: [MICHEL] }),
+      area({ id: "drc", name: "Dienst, Länder", parentId: "dr" }),
+    ];
+    const maps = buildAreaVendorMaps(tree);
+    assert.equal(formatStampCN("12", maps.vendorMapFor("drc", null).get("mi")), "Mi·DR D12");
   });
 
   it("ignores an override for a vendor the area does not carry", () => {
