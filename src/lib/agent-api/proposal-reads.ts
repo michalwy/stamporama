@@ -23,9 +23,18 @@
 //    still be sold* — as *Convert to sale…* opens with them ticked. Nothing here ticks or unticks.
 //  - **A proposal made from a Facebook post names its post** (#2608): its lots are the post's own,
 //    numbered as the post numbers them (#2602), so `post` says which post and group they stay in.
+//  - **Deleting is weighed as *Delete proposal…* weighs it** (#2642): `proposalDeletionRecord` is the
+//    dialog's facts and its own sentences — `proposalDeleteRefusal`, `proposalDeletionText` — so the
+//    agent is told exactly what the collector would be.
 
 import { OPEN_OFFER_STATES } from "../offer-rules";
-import { PROPOSAL_LOT_PACKINGS, PROPOSAL_STATUSES } from "../proposal-rules";
+import {
+  PROPOSAL_LOT_PACKINGS,
+  PROPOSAL_STATUSES,
+  proposalDeleteRefusal,
+  proposalDeletionText,
+  type ProposalDeletion,
+} from "../proposal-rules";
 import { invalidRequest } from "./errors";
 
 /** The statuses, in lifecycle order — `list_proposals`' closed vocabulary. */
@@ -471,5 +480,47 @@ export function proposalSaleOptions(options: ProposalSaleOptionsFacts): AgentPro
     })),
     newSalePlatform: options.platformName,
     post: options.post && { postNo: options.post.postNo, group: options.post.groupName },
+  };
+}
+
+// ── preview_proposal_delete / delete_proposal (#2642) ────────────────────────
+
+/** What deleting a proposal would do, as *Delete proposal…* shows it before the collector confirms. */
+export interface AgentProposalDeletion {
+  readonly id: string;
+  readonly proposalNo: number;
+  readonly contactName: string;
+  readonly status: string;
+  /** Whether it can be deleted at all — any but a sold one. */
+  readonly deletable: boolean;
+  /** The app's sentence for why not, or null when it can be. */
+  readonly refusal: string | null;
+  /** The lots deleted with it, the copies staying in the inventory — none for a proposal made from a post. */
+  readonly lotsDeleted: number;
+  /** Lots with a sold set: they stay with their sale, no longer in a proposal. */
+  readonly soldLotsKept: number;
+  /** The post it was made from, whose lots stay in it as they are. Null for any other proposal. */
+  readonly post: { readonly postNo: number; readonly lotsKept: number } | null;
+  /** Whether the buyer's live link stops working — a sent proposal, or any with a link made. */
+  readonly linkStopsWorking: boolean;
+  /** The dialog's confirmation, a paragraph each; empty when the proposal cannot be deleted. */
+  readonly confirmation: readonly string[];
+}
+
+export function proposalDeletionRecord(id: string, deletion: ProposalDeletion): AgentProposalDeletion {
+  const refusal = proposalDeleteRefusal(deletion.status);
+  return {
+    id,
+    proposalNo: deletion.proposalNo,
+    contactName: deletion.contactName,
+    status: deletion.status,
+    deletable: refusal === null,
+    refusal,
+    lotsDeleted: deletion.lotCount,
+    soldLotsKept: deletion.soldLotCount,
+    post: deletion.post && { postNo: deletion.post.postNo, lotsKept: deletion.post.lotCount },
+    // `proposalDeletionText`'s own condition for saying so.
+    linkStopsWorking: deletion.status === "sent" || deletion.hasLink,
+    confirmation: refusal === null ? proposalDeletionText(deletion) : [],
   };
 }

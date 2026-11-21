@@ -149,7 +149,7 @@ describe("Deleting a proposal (#2641)", () => {
     assert.equal(deletion.post, null);
     assert.equal(deletion.hasLink, false);
 
-    assert.deepEqual(await deleteProposal(userId, proposalId), { proposalNo, deletedLots: 5 });
+    assert.deepEqual(await deleteProposal(userId, proposalId), { proposalNo, deletedLots: 5, soldLotsKept: 0, postLotsKept: 0 });
     assert.equal(await prisma.proposal.count({ where: { id: proposalId } }), 0);
     assert.equal(await prisma.offer.count({ where: { id: { in: lots.map((l) => l.offerId) } } }), 0);
     assert.equal(await prisma.item.count({ where: { id: { in: lots.map((l) => l.itemId) } } }), 5);
@@ -197,7 +197,7 @@ describe("Deleting a proposal (#2641)", () => {
     assert.equal(deletion.lotCount, 2);
     assert.equal(deletion.soldLotCount, 1);
 
-    assert.equal((await deleteProposal(userId, proposalId)).deletedLots, 2);
+    assert.deepEqual(await deleteProposal(userId, proposalId), { proposalNo: deletion.proposalNo, deletedLots: 2, soldLotsKept: 1, postLotsKept: 0 });
     const kept = await prisma.offer.findUniqueOrThrow({
       where: { id: lots[1].offerId },
       select: { state: true, proposalId: true, proposalLotNo: true, proposalPickedAt: true },
@@ -221,7 +221,7 @@ describe("Deleting a proposal (#2641)", () => {
     assert.equal(deletion.lotCount, 0);
     assert.equal(deletion.post?.lotCount, 3);
 
-    assert.equal((await deleteProposal(userId, proposalId)).deletedLots, 0);
+    assert.deepEqual(await deleteProposal(userId, proposalId), { proposalNo: deletion.proposalNo, deletedLots: 0, soldLotsKept: 0, postLotsKept: 3 });
     const after = await prisma.offer.findMany({
       where: { id: { in: lots } },
       orderBy: { facebookLotNo: "asc" },

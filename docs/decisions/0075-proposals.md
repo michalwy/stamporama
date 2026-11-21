@@ -256,7 +256,8 @@ proposal's screen and on its row in the list — deletes it outright:
 
 The confirmation names the proposal and its contact, counts the lots going, any sold lot staying and a
 post's lots staying, and — for a Sent proposal, or any with a link — says the buyer's link stops
-working (`proposalDeletionText`). The agent API deletes proposals too, in #2642.
+working (`proposalDeletionText`). The agent API deletes proposals too (#2642): `delete_proposal` is
+`deleteProposal`, refused where the app refuses, and `preview_proposal_delete` is the dialog's read.
 
 ## Consequences
 

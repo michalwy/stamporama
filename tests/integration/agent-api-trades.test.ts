@@ -386,6 +386,8 @@ describe("the want, checklist and trade operations (#712)", () => {
       //     in the app, and the import guard holds `moveProposal` and the link's writers out.
       //     `create_proposal_from_post` (#2608) is one more: a Facebook post not yet up made into such
       //     a Proposal for one contact, as the post's own *Make a proposal…* does.
+      //     `preview_proposal_delete` and `delete_proposal` (#2642) are two more: such a Proposal
+      //     deleted as the app's *Delete proposal…* does — nothing goes to the buyer.
       //   - `cancel_sale` (#2500) cancels one of the collector's own sales the buyer never paid for:
       //     it is kept as a record in this collection and nothing goes to the buyer — `cancel` is
       //     forbidden here for a trade, which is a partner's too.
@@ -403,6 +405,8 @@ describe("the want, checklist and trade operations (#712)", () => {
         "get_proposal_sale_options",
         "convert_proposal_to_sale",
         "create_proposal_from_post",
+        "preview_proposal_delete",
+        "delete_proposal",
       ]);
       const offenders = OPERATIONS.filter((operation) => {
         if (exempt.has(operation.name)) return false;

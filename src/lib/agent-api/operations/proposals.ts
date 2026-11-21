@@ -9,14 +9,21 @@ import {
   countProposals,
   createProposal,
   createProposalFromPost,
+  deleteProposal,
   getProposalSaleOptions,
   getProposalScreen,
   listProposalsPaginated,
   makeProposalLots,
+  readProposalDeletion,
   removeProposalLot,
 } from "../../proposals";
 import { ProposalMessageLanguageError, readProposalMessage } from "../../proposal-handout";
-import { proposalLotsRefusal, type ProposalLotPacking, type ProposalStatus } from "../../proposal-rules";
+import {
+  deletedProposalMessage,
+  proposalLotsRefusal,
+  type ProposalLotPacking,
+  type ProposalStatus,
+} from "../../proposal-rules";
 import { invalidRequest, notFound } from "../errors";
 import { listResponse, parseListWindow } from "../list";
 import { optionalBoolean, optionalString, requiredString, stringList } from "../params";
@@ -31,6 +38,7 @@ import {
   parseLotPrice,
   parseOfferRef,
   parseProposalRef,
+  proposalDeletionRecord,
   proposalRecord,
   proposalRow,
   proposalSaleLotsWithPicks,
@@ -39,7 +47,13 @@ import {
 import { readSaleById } from "./sales";
 import { FACEBOOK_POST_PARAMETER, resolveFacebookPost } from "./facebook-posts";
 import { collectionPath, loadCollectionHeader } from "./reads-shared";
-import type { AgentProposal, AgentProposalRow, AgentProposalSaleOptions, ProposalLotFacts } from "../proposal-reads";
+import type {
+  AgentProposal,
+  AgentProposalDeletion,
+  AgentProposalRow,
+  AgentProposalSaleOptions,
+  ProposalLotFacts,
+} from "../proposal-reads";
 import type { AgentSale } from "../sale-reads";
 import type { ListResponse } from "../list";
 import type { Operation, OperationContext, ParameterSpec, ParsedParams } from "../types";
@@ -73,6 +87,12 @@ import type { Operation, OperationContext, ParameterSpec, ParsedParams } from ".
 // out lots is refused by the domain (*add or take them out on the post*), and converting it sells the
 // lots taken in the post and leaves the rest there — nothing is withdrawn. Publishing the post stays
 // with the collector.
+//
+// **A proposal is deleted as *Delete proposal…* deletes it** (#2642): `delete_proposal` is
+// `deleteProposal` (#2641), refused where the app refuses — a sold proposal — with its sentence, and
+// `preview_proposal_delete` is the dialog's read, `readProposalDeletion`, with the dialog's own
+// confirmation. Its lots go with it, a sold lot stays with its sale and a post's lots stay in the post;
+// none of it can be undone, as in the app.
 //
 // **No send, no decline, no link.** Marking a proposal sent, declining it, and the buyer's link and
 // document stay in the app — the collector decided on 2026-11-01 that what reaches the buyer is
@@ -665,4 +685,74 @@ export const convertProposalToSaleOperation: Operation = {
       "`proposal`, now `sold` and naming its sale, in `get_proposal`'s shape, and `sale`, the sale the lots went into, in `get_sale`'s shape — marked `toReview` with what was recorded.",
   },
   handler: async (context, params) => convertToSale(context, params),
+};
+
+// ── preview_proposal_delete / delete_proposal (#2642) ────────────────────────
+
+export async function previewProposalDelete(context: OperationContext, params: ParsedParams): Promise<AgentProposalDeletion> {
+  const proposal = await resolveProposal(context, requiredString(params, "proposal"));
+  return proposalDeletionRecord(proposal.id, await readProposalDeletion(context.ownerId, proposal.id));
+}
+
+export const previewProposalDeleteOperation: Operation = {
+  name: "preview_proposal_delete",
+  method: "GET",
+  path: "/proposals/{proposal}/deletion",
+  description:
+    "What deleting a proposal would do, as the app's Delete proposal… shows it before the collector confirms — without changing anything: the proposal and its contact, how many lots would be deleted with it, any sold lot that stays with its sale, a post's lots that stay in the post, and whether the buyer's live link stops working. A sold proposal cannot be deleted: `deletable` is false and `refusal` says why, in the app's words.",
+  writes: false,
+  parameters: [PROPOSAL_PARAMETER],
+  result: {
+    kind: "object",
+    description:
+      "`proposalNo`, `contactName`, `status`; `deletable` and `refusal`; `lotsDeleted` — the offers deleted with it, their copies staying in the inventory; `soldLotsKept`; `post` — `{ postNo, lotsKept }` for a proposal made from a Facebook post, whose lots all stay in it, else null; `linkStopsWorking`; and `confirmation`, the dialog's own paragraphs.",
+  },
+  handler: async (context, params) => previewProposalDelete(context, params),
+};
+
+/** What went and what stayed, once a proposal is deleted. */
+export interface AgentProposalDeleted {
+  readonly deleted: {
+    readonly id: string;
+    readonly proposalNo: number;
+    readonly contactName: string;
+    readonly lotsDeleted: number;
+    readonly soldLotsKept: number;
+    readonly post: { readonly postNo: number; readonly lotsKept: number } | null;
+  };
+  readonly message: string;
+}
+
+export async function deleteProposalFromParams(context: OperationContext, params: ParsedParams): Promise<AgentProposalDeleted> {
+  const proposal = await resolveProposal(context, requiredString(params, "proposal"));
+  // Read for the names the answer carries; the refusal and the counts are the write's own.
+  const before = await readProposalDeletion(context.ownerId, proposal.id);
+  const done = await refusingDomainGuards(() => deleteProposal(context.ownerId, proposal.id));
+  return {
+    deleted: {
+      id: proposal.id,
+      proposalNo: done.proposalNo,
+      contactName: before.contactName,
+      lotsDeleted: done.deletedLots,
+      soldLotsKept: done.soldLotsKept,
+      post: before.post && { postNo: before.post.postNo, lotsKept: done.postLotsKept },
+    },
+    message: deletedProposalMessage(done),
+  };
+}
+
+export const deleteProposalOperation: Operation = {
+  name: "delete_proposal",
+  method: "DELETE",
+  path: "/proposals/{proposal}",
+  description:
+    "Delete a proposal that is not sold — preparing, sent or declined — as the app's Delete proposal… does. Its lots are deleted with it, the offers and their sets, and their copies stay in the inventory, free for a new offer; a lot with a sold set stays with its sale. A proposal made from a Facebook post deletes no lot: they stay in the post as they are, and the post can have a new proposal made from it. The buyer's live link stops working and says the offer is no longer available. A sold proposal is refused with the app's sentence. This cannot be undone. Read `preview_proposal_delete` first.",
+  writes: true,
+  parameters: [PROPOSAL_PARAMETER],
+  result: {
+    kind: "object",
+    description:
+      "`deleted`: the proposal as it was — `id`, `proposalNo`, `contactName` — with `lotsDeleted`, `soldLotsKept` and `post` (`{ postNo, lotsKept }` or null); `message`, the app's own toast.",
+  },
+  handler: async (context, params) => deleteProposalFromParams(context, params),
 };

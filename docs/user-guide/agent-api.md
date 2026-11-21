@@ -259,7 +259,14 @@ buyer who asked for more. It can:
   [**Convert to sale…**](offers.md#selling-it) does. The other lots are withdrawn and the proposal is
   *Sold* — except on a proposal made from a Facebook post, whose lots not taken stay in the post and
   whose new sale is on Facebook; the sale is marked [*To review · API*](sales.md#what-the-assistant-recorded--to-review--api)
-  until you confirm it.
+  until you confirm it;
+- **delete a proposal** — one made by mistake, or one you ask it to clear away — exactly as
+  [**Delete proposal…**](offers.md#deleting-a-proposal) does, with a **read and write** token. Before
+  deleting it can show you what the app's confirmation shows: the proposal and its contact, how many
+  lots go with it, any sold lot that stays with its sale, and whether the buyer's live link stops
+  working. The lots go with the proposal and their copies stay in your inventory; a proposal made from
+  a Facebook post leaves its lots in the post. A *Sold* proposal is refused, with the app's reason. As
+  in the app, it cannot be undone.
 
 **It does not mark a proposal sent, decline it, or make its link or document for the buyer** — what
 reaches the buyer stays on the proposal's screen — **nor does it publish the post** a proposal was
