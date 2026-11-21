@@ -4,8 +4,10 @@
 //
 // A branch is the **checklist filter's own narrowing** (#772) with that one checklist selected: the
 // checklist's stamps, with an ancestor kept as dimmed context where a listed variant hangs under a
-// stamp the checklist does not list. So a branch and the flat tree narrowed by the same chip can
-// never disagree about which stamps belong to it. A stamp on two checklists is under both branches.
+// stamp the checklist does not list, and every variant below a listed stamp kept as dimmed context
+// where the checklist does not list it (#2655). So a branch and the flat tree narrowed by the same
+// chip can never disagree about which stamps belong to it. A stamp on two checklists is under both
+// branches.
 
 import {
   filterStampTree,
@@ -22,6 +24,8 @@ export interface ChecklistBranch<T> extends FilteredStampTree<T> {
 /**
  * One branch per checklist, in the issue's order, then the stamps on none of them — that last only
  * when there are any, since an issue whose every stamp is on a checklist has nothing to put there.
+ * A stamp on none that hangs below a listed stamp is not one of those: it is already drawn, dimmed,
+ * under that stamp in the listed stamp's branch (#2655), and is not repeated.
  *
  * `matchedStampIds` is the list filter's stamp narrowing (#631), applied inside each branch exactly
  * as it is to the flat tree. A branch it empties is still returned; whether to draw an empty branch
@@ -39,33 +43,38 @@ export function checklistBranches<T extends ChecklistTreeNode<T>>(
     checklistId: c.id,
     ...filterStampTreeBy(tree, [c.id], matchedStampIds),
   }));
-  if (someNode(tree, (n) => n.node.checklistIds.length === 0)) {
+  const off = offChecklistIds(tree);
+  if (off.size > 0) {
     branches.push({
       checklistId: null,
       ...filterStampTree(
         tree,
         (n) =>
-          n.node.checklistIds.length === 0 &&
-          (!matchedStampIds || matchedStampIds.has(n.node.stampId))
+          off.has(n.node.stampId) && (!matchedStampIds || matchedStampIds.has(n.node.stampId))
       ),
     });
   }
   return branches;
 }
 
-/** How many of the tree's stamps are on no checklist — the *Not on a checklist* branch's count. */
+/** How many stamps the *Not on a checklist* branch holds — its heading's count. */
 export function countOffChecklist<T extends ChecklistTreeNode<T>>(tree: T[]): number {
-  let n = 0;
+  return offChecklistIds(tree).size;
+}
+
+/**
+ * The stamps that belong under *Not on a checklist*: on no checklist themselves, and with no
+ * ancestor on one either — a variant below a listed stamp is drawn under that stamp's branch.
+ */
+function offChecklistIds<T extends ChecklistTreeNode<T>>(tree: T[]): Set<string> {
+  const out = new Set<string>();
   const visit = (node: T) => {
-    if (node.node.checklistIds.length === 0) n++;
+    if (node.node.checklistIds.length > 0) return;
+    out.add(node.node.stampId);
     node.children.forEach(visit);
   };
   tree.forEach(visit);
-  return n;
-}
-
-function someNode<T extends ChecklistTreeNode<T>>(tree: T[], test: (node: T) => boolean): boolean {
-  return tree.some((n) => test(n) || someNode(n.children, test));
+  return out;
 }
 
 /**

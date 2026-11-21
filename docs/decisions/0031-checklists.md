@@ -137,6 +137,15 @@ with nothing to choose.
 
 ### 9. A filtered tree keeps the ancestors of its matches
 
+> **Amended by #2655: it keeps a listed stamp's variants too.** Below a stamp on a picked checklist,
+> every variant in the issue is kept at any depth, those the picked checklists do not list returned
+> in `contextIds` beside the ancestors and dimmed the same way. Identifying a stamp starts from the
+> stamp and its checklist, and the question asked there is whether it has variants at all — which a
+> narrowing that dropped them could not answer. A checklist's branch (#1520) is this narrowing, so
+> its *Not on a checklist* branch holds only the stamps with no ancestor on a checklist; a variant
+> under a listed stamp is not repeated there. Counts and completeness still count the listed stamps
+> only. The list filter's stamp matches (#631) hide a variant as they hide anything else.
+
 `filterStampTreeByChecklists` (`src/lib/stamp-tree-filter.ts`, pure) drops stamps that are on none
 of the picked checklists — **except** a node with a surviving descendant, which is kept and returned
 in `contextIds` for the renderers to dim.
