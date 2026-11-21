@@ -6,6 +6,7 @@ import { Tooltip } from "@/app/c/[collectionSlug]/shared/tooltip";
 import {
   NO_TWIN_SENTENCE,
   listedElsewhereMarker,
+  listedElsewherePickSummary,
   listedElsewhereSentence,
   listedElsewhereSummary,
   listedOnSentence,
@@ -136,6 +137,85 @@ export function ListedElsewhereSummary({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * The copy pickers' form of the note (#2635) — *Compose a set*, *New lot of post*, *Add to offer*: one
+ * line saying how many of the picked copies are already in an open offer, on which platforms, and how
+ * many can be swapped, with **Swap all** when more than one can. Fifty copies picked from Colnect would
+ * otherwise be a fifty-line list over the dialog; each copy is named on its own row instead — its open
+ * offer on the row's own chip (#2337), its twin and **Swap** in {@link ListedElsewhereTwinChip}.
+ */
+export function ListedElsewherePickSummary({
+  copies,
+  onSwap,
+  disabled = false,
+}: {
+  copies: readonly ListedElsewhereCopy[];
+  onSwap: (pairs: { from: string; to: string }[]) => void;
+  disabled?: boolean;
+}) {
+  if (copies.length === 0) return null;
+  const all = swapAllPairs(copies);
+  return (
+    <div role="note" aria-label="Copies listed elsewhere" style={{ ...NOTE_BOX, alignItems: "center" }}>
+      <Icon name="warning" size="sm" />
+      <span style={{ flex: 1, minWidth: 0 }}>{listedElsewherePickSummary(copies)}</span>
+      {all.length > 1 && (
+        <button type="button" style={SMALL_BTN} disabled={disabled} onClick={() => onSwap(all)}>
+          Swap all ({all.length})
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * On a picked copy's row (#2635), beside the chip naming its open offer: the copy of the same stamp
+ * listed nowhere, and **Swap**. Nothing for a copy with no twin — the chip already names the offer,
+ * and *no other copy to swap in* is said once, on the summary line, not on every row. A click never
+ * reaches the row, which in a picker would choose the copy.
+ */
+export function ListedElsewhereTwinChip({
+  copy,
+  onSwap,
+  disabled = false,
+}: {
+  copy: ListedElsewhereCopy;
+  onSwap: (pairs: { from: string; to: string }[]) => void;
+  disabled?: boolean;
+}) {
+  const twin = copy.twin;
+  if (!twin) return null;
+  return (
+    <span
+      onClick={(event) => event.stopPropagation()}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.375rem",
+        fontSize: "0.75rem",
+        fontWeight: 500,
+        padding: "0.0625rem 0.0625rem 0.0625rem 0.375rem",
+        borderRadius: "0.375rem",
+        border: "1px solid var(--color-warning-border)",
+        background: "var(--color-warning-soft)",
+        color: "var(--color-warning)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Icon name="warning" size="sm" />
+      {twinSentence(twin)}
+      <button
+        type="button"
+        style={SMALL_BTN}
+        disabled={disabled}
+        onClick={() => onSwap([{ from: copy.itemId, to: twin.itemId }])}
+      >
+        Swap
+      </button>
+    </span>
   );
 }
 

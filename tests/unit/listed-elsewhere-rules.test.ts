@@ -6,6 +6,7 @@ import {
   listedElsewhereMarker,
   listedElsewhereSentence,
   listedElsewhereSummary,
+  listedElsewherePickSummary,
   listedOnSentence,
   NO_TWIN_SENTENCE,
   swapAllPairs,
@@ -172,6 +173,34 @@ describe("the generator's summary and markers (#2479)", () => {
     assert.equal(
       listedElsewhereSummary([copies[1]!], 1),
       `A copy in one of the offers is already in an open offer — ${NO_TWIN_SENTENCE}`
+    );
+  });
+
+  it("says in a picker how many copies, on which platforms, and how many can be swapped (#2635)", () => {
+    const copies = [on("a", ["Colnect"], true), on("b", ["Allegro"], false), on("c", ["Colnect"], true)];
+    assert.equal(
+      listedElsewherePickSummary(copies),
+      "3 copies are already in an open offer, on Colnect, Allegro — 2 can be swapped for a copy listed nowhere"
+    );
+    assert.equal(
+      listedElsewherePickSummary([copies[0]!, copies[2]!]),
+      "2 copies are already in an open offer, on Colnect — both can be swapped for a copy listed nowhere"
+    );
+    assert.equal(
+      listedElsewherePickSummary([copies[0]!, copies[2]!, on("d", ["Colnect"], true)]),
+      "3 copies are already in an open offer, on Colnect — all 3 can be swapped for a copy listed nowhere"
+    );
+    assert.equal(
+      listedElsewherePickSummary([copies[1]!, on("d", ["Allegro"], false)]),
+      "2 copies are already in an open offer, on Allegro — none can be swapped for a copy listed nowhere"
+    );
+    assert.equal(
+      listedElsewherePickSummary([copies[0]!]),
+      "A copy is already in an open offer, on Colnect — it can be swapped for a copy listed nowhere"
+    );
+    assert.equal(
+      listedElsewherePickSummary([copies[1]!]),
+      `A copy is already in an open offer, on Allegro — ${NO_TWIN_SENTENCE}`
     );
   });
 

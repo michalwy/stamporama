@@ -34,7 +34,7 @@ import {
 } from "@/lib/new-offer-price";
 import { InventoryItemRow } from "./inventory-item-row";
 import { NewOfferCopiesPanel } from "./new-offer-copies-panel";
-import { ListedElsewhereNote } from "../offers/listed-elsewhere-note";
+import { ListedElsewherePickSummary, ListedElsewhereTwinChip } from "../offers/listed-elsewhere-note";
 import { useAreaVendorMaps, type AreaVendorMaps } from "@/app/c/[collectionSlug]/shared/use-area-vendor-maps";
 import { OfferStateChip } from "@/app/c/[collectionSlug]/offers/offer-badges";
 import {
@@ -240,12 +240,19 @@ export function AddToOfferDialog({
     creating
   );
   // The copies already in an open offer elsewhere, each with a twin listed nowhere (#2339).
-  const { data: listedElsewhere = [] } = useListedElsewhere(
+  const { data: listedEntries = [] } = useListedElsewhere(
     collectionId,
     offerItemIds,
     createPlatformId || null,
     creating
   );
+  // Only the copies still going in (#2635): the read keeps its last answer while a new one is asked, so
+  // a copy just swapped or taken out leaves the summary and its row at once.
+  const listedElsewhere = useMemo(() => {
+    const going = new Set(offerItemIds);
+    return listedEntries.filter((entry) => going.has(entry.itemId));
+  }, [listedEntries, offerItemIds]);
+  const listedById = useMemo(() => new Map(listedElsewhere.map((entry) => [entry.itemId, entry])), [listedElsewhere]);
   function swapCopies(pairs: { from: string; to: string }[]) {
     setSwapped((prev) => {
       const next = new Map(prev);
@@ -765,6 +772,13 @@ export function AddToOfferDialog({
             onRemove={(id) => setRemovedIds((prev) => new Set(prev).add(id))}
             disabled={isPending}
             onMenuOpenChange={setCopiesMenuOpen}
+            // A copy already in an open offer (#2635): its twin and Swap on its own row.
+            rowChips={(copy) => {
+              const listed = listedById.get(copy.id);
+              return listed ? (
+                <ListedElsewhereTwinChip copy={listed} onSwap={swapCopies} disabled={isPending} />
+              ) : null;
+            }}
           />
         }
         dismissable={!copiesMenuOpen && !makingProposal}
@@ -778,7 +792,7 @@ export function AddToOfferDialog({
           createCollisions.length > 0 || listedElsewhere.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {createCollisions.length > 0 && <CollisionNotice collisions={createCollisions} />}
-              <ListedElsewhereNote copies={listedElsewhere} onSwap={swapCopies} disabled={isPending} />
+              <ListedElsewherePickSummary copies={listedElsewhere} onSwap={swapCopies} disabled={isPending} />
             </div>
           ) : undefined
         }

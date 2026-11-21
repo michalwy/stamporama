@@ -103,6 +103,9 @@ export interface NewOfferCopiesPanelProps {
   /** Raised as a filter menu opens and closes: the menu owns its Escape, so the dialog holding this
    *  panel stops taking the key meanwhile. */
   onMenuOpenChange?: (open: boolean) => void;
+  /** What the dialog adds to a copy's row, after the panel's own chips — a copy's twin listed nowhere
+   *  and **Swap** (#2635). */
+  rowChips?: (copy: ItemListItem) => React.ReactNode;
 }
 
 export function NewOfferCopiesPanel({
@@ -115,6 +118,7 @@ export function NewOfferCopiesPanel({
   onRemove,
   disabled = false,
   onMenuOpenChange,
+  rowChips,
 }: NewOfferCopiesPanelProps) {
   const [order, setOrder] = useState<NewOfferCopyOrder>("picked");
   const [filters, setFilters] = useState<NewOfferCopyFilters>(NO_NEW_OFFER_COPY_FILTERS);
@@ -374,7 +378,12 @@ export function NewOfferCopiesPanel({
         isLast={isLast}
         highlight={sameStamp !== undefined}
         highlightTone="warning"
-        trailingChips={sameStamp !== undefined ? <SameStampChip count={sameStamp} /> : undefined}
+        trailingChips={
+          <>
+            {sameStamp !== undefined && <SameStampChip count={sameStamp} />}
+            {rowChips?.(copy)}
+          </>
+        }
         valueAside={<CopyCostAside copy={copy} baseCurrency={baseCurrency} whole="offer" />}
         actionsOverride={actions}
         promote={["remove"]}

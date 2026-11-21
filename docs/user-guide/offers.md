@@ -2833,6 +2833,15 @@ stamp there.
 every copy that has a suggestion. In New offer and the copy pickers, the twin replaces the copy in the
 list; in Generate offers the plan is made again with the twin in the copy's place.
 
+**Where copies are picked** — New offer's copies (a post's **New lot…** included) and the copy picker
+of a proposal's **New lots…** and of a post's **New lot…** — the copies are not listed either: picking
+fifty copies off Colnect would fill the dialog. One line says how many of the ticked copies are already
+in an open offer, on which platforms, and how many can be swapped — *50 copies are already in an open
+offer, on Colnect — 12 can be swapped for a copy listed nowhere* — with **Swap all** once more than one
+can. On each such copy's own row, its chip already names the open offer (*Colnect #2273*); where a copy
+listed nowhere can take its place, the row also names it — *#7401 is listed nowhere* — with **Swap**. A
+copy with no such twin has only its chip. The line and the rows follow a swap at once.
+
 **Generate offers** does not list the copies: a pass of hundreds of offers could name hundreds. It
 says on one line how many copies, in how many of the offers, are already in an open offer and how
 many can be swapped, with **Swap all**; each offer holding such copies carries a marker — *2 on
