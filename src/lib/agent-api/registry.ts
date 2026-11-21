@@ -128,7 +128,12 @@ import {
   removeProposalLotOperation,
   setProposalLotPriceOperation,
 } from "./operations/proposals";
-import { findContactsOperation, getContactOperation } from "./operations/contacts";
+import {
+  createContactOperation,
+  findContactsOperation,
+  getContactOperation,
+  updateContactOperation,
+} from "./operations/contacts";
 import {
   addConversationEntriesOperation,
   attachConversationFilesOperation,
@@ -318,6 +323,8 @@ export const OPERATIONS: readonly Operation[] = [
   convertProposalToSaleOperation,
   findContactsOperation,
   getContactOperation,
+  createContactOperation,
+  updateContactOperation,
   listConversationEntriesOperation,
   addConversationEntriesOperation,
   updateConversationEntryOperation,

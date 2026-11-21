@@ -210,7 +210,9 @@ entry** records one by hand, and an entry's **⋮** menu edits or deletes it, or
 — see [the conversation with the buyer](sales.md#the-conversation-with-the-buyer). An entry from
 the contact has a blue left bar and a blue *← From the buyer* chip, one to them a green bar and a
 green *→ To the buyer* chip; a *Note* stays grey. Entries an AI assistant wrote are marked
-*Assistant*.
+*Assistant*. When an assistant adds or changes a contact through the
+[Assistant API](agent-api.md), it leaves a *Note* here naming the details it changed, with each
+one's old and new value — so a wrong change can be found and put back in **Edit**.
 
 ## Finding a contact
 
