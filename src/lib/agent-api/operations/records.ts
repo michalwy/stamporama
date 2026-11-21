@@ -116,7 +116,10 @@ export async function readIssue(
       areaTree,
       issue.collectionAreaId,
       { catalogues: labelling.abbrOf, books: new Map() },
-      labelling.issuePrefixes.get(issue.id) ?? new Map()
+      // The prefix text only: how a prefix meets its number (#2657) is not part of this read yet (#2658).
+      new Map<string, string>(
+        [...(labelling.issuePrefixes.get(issue.id) ?? [])].map(([vendorId, own]) => [vendorId, own.prefix])
+      )
     ),
     area: labelling.areaName(issue.collectionAreaId),
     path: collectionPath(header, `/issues/${issue.id}`),

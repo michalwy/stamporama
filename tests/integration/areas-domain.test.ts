@@ -485,6 +485,7 @@ describe("syncAreaCatalogBooks / syncAreaVendors (#675)", () => {
         vendorName: "Scott",
         vendorAbbreviation: "Sc",
         areaPrefix: "new",
+        prefixJoined: false,
       },
     ]);
   });
