@@ -6,12 +6,14 @@ import {
   parseOfferRef,
   parseProposalRef,
   parseProposalSaleLots,
+  proposalDeletionRecord,
   proposalRecord,
   proposalRow,
   proposalSaleLotsWithPicks,
   proposalSaleOptions,
 } from "../../src/lib/agent-api/proposal-reads";
 import { ApiError } from "../../src/lib/agent-api/errors";
+import { proposalDeletionText, type ProposalDeletion } from "../../src/lib/proposal-rules";
 
 // The proposal operations' projections and grammar (#2303), held without a database.
 
@@ -324,5 +326,63 @@ describe("a proposal made from a Facebook post (#2608)", () => {
     });
     assert.equal(options.newSalePlatform, "Facebook");
     assert.deepEqual(options.post, { postNo: 12, group: "Stamps PL" });
+  });
+});
+
+describe("what deleting a proposal would do (#2642)", () => {
+  const preparing: ProposalDeletion = {
+    proposalNo: 7,
+    contactName: "Jan Kowalski",
+    status: "preparing",
+    lotCount: 5,
+    soldLotCount: 0,
+    post: null,
+    hasLink: false,
+  };
+
+  it("counts the lots going and says it in the dialog's own words", () => {
+    const record = proposalDeletionRecord("p-7", preparing);
+    assert.deepEqual(record, {
+      id: "p-7",
+      proposalNo: 7,
+      contactName: "Jan Kowalski",
+      status: "preparing",
+      deletable: true,
+      refusal: null,
+      lotsDeleted: 5,
+      soldLotsKept: 0,
+      post: null,
+      linkStopsWorking: false,
+      confirmation: proposalDeletionText(preparing),
+    });
+    assert.match(record.confirmation[0], /all 5 of its lots/);
+    assert.equal(record.confirmation.at(-1), "This cannot be undone.");
+  });
+
+  it("refuses a sold proposal with the app's sentence and no confirmation", () => {
+    const record = proposalDeletionRecord("p-7", { ...preparing, status: "sold" });
+    assert.equal(record.deletable, false);
+    assert.equal(record.refusal, "A sold proposal cannot be deleted — it is the record of how its sale came about.");
+    assert.deepEqual(record.confirmation, []);
+  });
+
+  it("says the buyer's link stops working for a sent proposal, or any with a link", () => {
+    assert.equal(proposalDeletionRecord("p", { ...preparing, status: "sent" }).linkStopsWorking, true);
+    assert.equal(proposalDeletionRecord("p", { ...preparing, hasLink: true }).linkStopsWorking, true);
+    assert.equal(proposalDeletionRecord("p", { ...preparing, status: "declined" }).linkStopsWorking, false);
+  });
+
+  it("keeps a post's lots in the post, deleting none", () => {
+    const record = proposalDeletionRecord("p", { ...preparing, lotCount: 0, post: { postNo: 12, lotCount: 3 } });
+    assert.deepEqual(record.post, { postNo: 12, lotsKept: 3 });
+    assert.equal(record.lotsDeleted, 0);
+    assert.match(record.confirmation[0], /Its 3 lots stay in post #12/);
+  });
+
+  it("keeps a sold lot with its sale", () => {
+    const record = proposalDeletionRecord("p", { ...preparing, status: "declined", lotCount: 2, soldLotCount: 1 });
+    assert.equal(record.lotsDeleted, 2);
+    assert.equal(record.soldLotsKept, 1);
+    assert.equal(record.confirmation[1], "Its sold lot is kept with its sale, no longer in a proposal.");
   });
 });

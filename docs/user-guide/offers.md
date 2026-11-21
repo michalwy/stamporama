@@ -3750,7 +3750,7 @@ says *from proposal #4*. A proposal's lots can join a sale on another platform â
 **Add sold sets** on a sale's screen lists sets from offers on every platform (see
 [Sales](sales.md#step-2--add-the-sold-sets)).
 
-Your assistant can put a proposal together, price it and convert it for you through the
+Your assistant can put a proposal together, price it, convert it and delete it for you through the
 [Assistant API](agent-api.md#what-it-can-do-and-what-it-will-not); a sale it records waits for your
 review. Sending and declining stay here.
 

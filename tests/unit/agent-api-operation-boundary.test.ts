@@ -1443,7 +1443,8 @@ describe("the agent API's operation modules (#2198)", () => {
  * so one added later has to be placed. A post made into a proposal (#2608) is the post's own *Make a
  * proposal…*, `createProposalFromPost`. A lot's price is `patchOffer`, the offers' own write. The
  * buyer's picks (#2601) are read and sold from (#2607) but never written: `saveProposalBuyerPick` is
- * the buyer's own route's.
+ * the buyer's own route's. A proposal is deleted (#2642) as *Delete proposal…* deletes it (#2641),
+ * `deleteProposal`, which refuses a sold one inside its own transaction.
  */
 const PROPOSAL_API_WRITES = [
   "createProposal",
@@ -1453,6 +1454,8 @@ const PROPOSAL_API_WRITES = [
   "makeProposalLots",
   "removeProposalLot",
   "convertProposalToSaleThroughApi",
+  // A proposal that is not sold deleted (#2642): the app's *Delete proposal…* (#2641).
+  "deleteProposal",
 ];
 
 describe("the agent API's operation modules (#2303)", () => {

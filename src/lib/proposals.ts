@@ -978,12 +978,13 @@ export async function readProposalDeletion(ownerId: string, proposalId: string):
  * post's and stay in it as they are. Every lot that stays stops naming the proposal — its lot number
  * and the buyer's pick go too (#2601's rule) — so the post can have a new proposal made from it. The
  * buyer's live link is kept, pointing at nothing, and says the offer is no longer available. The
- * proposal's number is never given again (`allocateEntityNumber`).
+ * proposal's number is never given again (`allocateEntityNumber`). The answer counts what went and
+ * what stayed, as the write found it (the agent API's `delete_proposal`, #2642, reports both).
  */
 export async function deleteProposal(
   ownerId: string,
   proposalId: string
-): Promise<{ proposalNo: number; deletedLots: number }> {
+): Promise<{ proposalNo: number; deletedLots: number; soldLotsKept: number; postLotsKept: number }> {
   await assertProposalOwner(ownerId, proposalId);
   const done = await prisma.$transaction(async (tx) => {
     // Asked again here, inside the write, so a sale made since the dialog opened still refuses.
@@ -1006,10 +1007,21 @@ export async function deleteProposal(
     });
     await tx.offer.deleteMany({ where: { id: { in: deleted } } });
     await tx.proposal.delete({ where: { id: proposalId } });
-    return { proposalNo: proposal.proposalNo, deletedLots: deleted.length, photos };
+    return {
+      proposalNo: proposal.proposalNo,
+      deletedLots: deleted.length,
+      soldLotsKept: soldKept.length,
+      postLotsKept: postKept.length,
+      photos,
+    };
   });
   await Promise.all(done.photos.map((p) => deleteVariants(p.storageBackend, p.storageKey, p.mime)));
-  return { proposalNo: done.proposalNo, deletedLots: done.deletedLots };
+  return {
+    proposalNo: done.proposalNo,
+    deletedLots: done.deletedLots,
+    soldLotsKept: done.soldLotsKept,
+    postLotsKept: done.postLotsKept,
+  };
 }
 
 // ── Becoming a sale (#2289) ──────────────────────────────────────────────────────────────────────
