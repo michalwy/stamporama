@@ -237,8 +237,11 @@ buyer who asked for more. It can:
   offer, copies and price, which lots the buyer picked and when they last changed their picks (a
   picked lot since sold elsewhere or withdrawn is marked no longer available, as on the proposal's
   screen), the total, the sale it became, and the message for the buyer as your Direct platform's
-  template writes it. A **read only** token can do this much. Reading the message
-  does not mark the proposal sent — sending it is still yours;
+  template writes it — in the buyer's [language](contacts.md), or in another of your languages when
+  asked (*Jan's message in Polish*), refused with the reason where your Direct platform has no message
+  template in that language. A **read only** token can do this much. Reading the message
+  does not mark the proposal sent — sending it is still yours — and asking for it in another language
+  does not change the buyer's language;
 - **start a proposal** for a contact, **add** offers already on Direct as its lots, **make new lots**
   from copies — an offer each, or one offer of them all, as [**New lots…**](offers.md#giving-it-lots)
   does — **price** a lot, and **take one out**. Each is refused wherever the proposal's screen would

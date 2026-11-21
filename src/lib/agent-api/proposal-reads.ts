@@ -322,13 +322,25 @@ export interface AgentProposal {
   readonly currency: string;
   /** The message for the buyer from the Direct platform's template, or null with no template. */
   readonly message: string | null;
+  /** The language `message` is in (#2609): the buyer's, else Direct's listing language, else the
+   *  collection's — or the one asked for. */
+  readonly language: string | null;
+  /** The languages the message can be asked for in: the ones the collection uses (#2603). */
+  readonly languages: readonly string[];
   readonly path: string;
+}
+
+/** The message as the handout reads it, typed structurally. */
+export interface ProposalMessageFacts {
+  readonly text: string | null;
+  readonly language: string | null;
+  readonly languages: readonly string[];
 }
 
 export function proposalRecord(
   screen: ProposalScreenFacts,
   copiesByOffer: ReadonlyMap<string, readonly string[]>,
-  message: string | null,
+  message: ProposalMessageFacts,
   path: string
 ): AgentProposal {
   return {
@@ -367,7 +379,9 @@ export function proposalRecord(
     total: screen.total,
     unpriced: screen.unpriced,
     currency: screen.currency,
-    message,
+    message: message.text,
+    language: message.language,
+    languages: [...message.languages],
     path,
   };
 }

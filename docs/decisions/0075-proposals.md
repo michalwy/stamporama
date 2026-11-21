@@ -226,6 +226,12 @@ it: **the contact's language, else Direct's listing language, else the collectio
 - The page's own words are the eighteen languages of §8's labels, English otherwise, said beside the
   selector. The photos keep the labels they were made with.
 
+*Amended by #2609 (2026-11-21):* the agent API reads the language — `get_contact` carries the
+contact's, and `get_proposal` the one its message is in with the collection's choices. The message can
+be asked for in another of those languages; **that saves nothing on the contact**, unlike the card's
+selector, as reading the message does not mark the proposal sent. A language asked for with no
+template in it is refused with the reason rather than read as no message.
+
 ## Consequences
 
 - The Proposals list is under Offers in the sidebar's Selling section (`/offers/proposals`), each

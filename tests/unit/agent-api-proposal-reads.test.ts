@@ -131,7 +131,7 @@ describe("what a proposal is told as (#2303)", () => {
         buyerPicks: null,
       },
       new Map([["o1", ["#12", "#15"]]]),
-      "Lot 1 …",
+      { text: "Lot 1 …", language: "de", languages: ["pl", "de"] },
       "/c/x/offers/proposals/4"
     );
     assert.deepEqual(record.lots[0], {
@@ -149,6 +149,8 @@ describe("what a proposal is told as (#2303)", () => {
     });
     assert.equal(record.buyerPicks, null);
     assert.equal(record.message, "Lot 1 …");
+    assert.equal(record.language, "de");
+    assert.deepEqual(record.languages, ["pl", "de"]);
     assert.equal(record.sale, null);
     assert.equal(record.post, null);
     assert.ok(!JSON.stringify(record).includes("example.com"));
@@ -226,7 +228,7 @@ describe("the buyer's picks (#2607)", () => {
         buyerPicks: { count: 3, changedAt: "2026-11-21T10:00:00.000Z" },
       },
       new Map(),
-      null,
+      { text: null, language: null, languages: [] },
       "/c/x/offers/proposals/4"
     );
     assert.deepEqual(record.buyerPicks, { lots: [2, 5, 7], changedAt: "2026-11-21T10:00:00.000Z" });
@@ -307,7 +309,7 @@ describe("a proposal made from a Facebook post (#2608)", () => {
         buyerPicks: null,
       },
       new Map(),
-      null,
+      { text: null, language: null, languages: [] },
       "/c/x/offers/proposals/9"
     );
     assert.deepEqual(record.post, { id: "fp1", postNo: 12, title: "Poland 1950s", group: "Stamps PL" });

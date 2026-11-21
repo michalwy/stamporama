@@ -10,6 +10,7 @@ import { createProposalShareToken, saveProposalBuyerPick, verifyProposalShareTok
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
 import { DELETE, GET, PATCH, POST } from "../../src/app/api/v1/[...path]/route";
 import type { AgentProposal, AgentProposalRow, AgentProposalSaleOptions } from "../../src/lib/agent-api/proposal-reads";
+import type { AgentContact } from "../../src/lib/agent-api/contact-reads";
 import type { AgentProposalConversion, AgentProposalNewLots } from "../../src/lib/agent-api/operations/proposals";
 import type { ListResponse } from "../../src/lib/agent-api/list";
 
@@ -277,6 +278,53 @@ describe("the proposal operations (#2303)", () => {
     assert.match(read.message ?? "", /^Dzień dobry Jan Kowalski!/);
     assert.equal(read.status, "preparing");
     assert.equal((await getProposalScreen(userId, proposal.id))!.status, "preparing");
+  });
+
+  it("reads the contact's language, and the message in it or in another one asked for, saving nothing (#2609)", async () => {
+    // Polish is a language the collection uses (a platform lists in it); Hans reads German.
+    await prisma.platform.update({ where: { id: colnectId }, data: { titleLanguage: "pl" } });
+    const hans = await prisma.contact.create({ data: { collectionId, name: "Hans Müller", language: "de" } });
+    const contact = await ok<AgentContact>(readOnlyToken, "GET", `/contacts/${hans.id}`);
+    assert.equal(contact.language, "de");
+
+    const proposal = await ok<AgentProposal>(token, "POST", "/proposals", { contact: "Hans Müller" });
+    const lot = await offer(directId, "8.00");
+    await ok<AgentProposal>(token, "POST", `/proposals/${proposal.id}/lots`, { offers: [lot.id] });
+    const p = `/proposals/${proposal.proposalNo}`;
+
+    // No German template yet: the buyer's message is null, and asking for German by name is refused.
+    let read = await ok<AgentProposal>(readOnlyToken, "GET", p);
+    assert.equal(read.language, "de");
+    assert.equal(read.message, null);
+    assert.ok(read.languages.includes("de") && read.languages.includes("pl"), read.languages.join());
+    let refusal = await refused(readOnlyToken, "GET", `${p}?language=de`);
+    assert.equal(refusal.status, 400);
+    assert.match(refusal.message, /no proposal message template in German \(de\)/);
+
+    await prisma.platformProposalMessage.createMany({
+      data: [
+        { platformId: directId, language: "de", template: "Guten Tag {buyer}!\n{lots}" },
+        { platformId: directId, language: "pl", template: "Dzień dobry {buyer}!\n{lots}" },
+      ],
+    });
+    read = await ok<AgentProposal>(readOnlyToken, "GET", p);
+    assert.equal(read.language, "de");
+    assert.match(read.message ?? "", /^Guten Tag Hans Müller!/);
+
+    read = await ok<AgentProposal>(readOnlyToken, "GET", `${p}?language=pl-PL`);
+    assert.equal(read.language, "pl");
+    assert.match(read.message ?? "", /^Dzień dobry Hans Müller!/);
+
+    // A language the collection does not use is refused, naming the ones it does.
+    refusal = await refused(readOnlyToken, "GET", `${p}?language=fr`);
+    assert.equal(refusal.status, 400);
+    assert.match(refusal.message, /French \(fr\) is not a language this collection uses — it uses .*German \(de\)/);
+
+    // Asking saved nothing: the contact still reads German, and the proposal is still being prepared.
+    assert.equal((await prisma.contact.findUniqueOrThrow({ where: { id: hans.id } })).language, "de");
+    assert.equal((await ok<AgentProposal>(readOnlyToken, "GET", p)).language, "de");
+    assert.equal((await getProposalScreen(userId, proposal.id))!.status, "preparing");
+    await prisma.platform.update({ where: { id: colnectId }, data: { titleLanguage: null } });
   });
 
   it("reads the lots the buyer picked, narrows the list to them, and sells them as picked (#2607)", async () => {
