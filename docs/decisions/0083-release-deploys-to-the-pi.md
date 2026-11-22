@@ -5,7 +5,8 @@
 Accepted. Decided by the owner on 2026-11-22 and recorded in #2689 (triggers, runner, environment,
 the public-repository caution, the order of the steps, configuration staying on the Pi); built there.
 Follows #2687, which made a published release a deploy. Replaces Watchtower **on the owner's
-instance only** — other self-hosters keep it until the follow-up issue (#2690) deals with them.
+instance only**. Extended on 2026-11-22 by #2690, which removes Watchtower for every other
+self-hoster too — see [*Other self-hosters*](#other-self-hosters-2026-11-22-2690) below.
 
 ## Context
 
@@ -106,3 +107,59 @@ exactly this reason, because a fork's pull request can run a workflow.
 - **A YAML parser for the workflow check.** One more dependency for a check that only needs to read
   `runs-on` lines; reading lines and failing closed on anything unusual is enough, and a new shape is
   a visible edit to the script.
+
+## Other self-hosters (2026-11-22, #2690)
+
+The deploy above is the owner's alone: it runs on his self-hosted runner, which no other workflow
+may reach, and the owner ruled out using it for anyone else. Everyone else who self-hosts was still
+offered Watchtower — the `autoupdate` profile in `docker-compose.prod.yml`, a menu in
+`scripts/install.sh`, a line in `README.md`. The owner left the choice between removing that option
+and replacing it to the thread, as an infrastructure decision rather than a product one.
+
+### Decision
+
+**Watchtower is removed, and `scripts/update.sh` is the documented update path** — run by hand, or
+from the host's cron or a systemd timer, which `README.md` (*Updating*) shows. Nothing new is
+shipped to run it.
+
+1. **`docker-compose.prod.yml` has no `watchtower` service and no
+   `com.centurylinklabs.watchtower.enable` label.** The label goes too: it only ever meant "a
+   Watchtower may update me", and without it a Watchtower left running — this installation's or one
+   kept for other applications in label mode — no longer touches the app.
+2. **An `.env` that still says `COMPOSE_PROFILES=autoupdate` keeps starting.** Compose accepts a
+   profile no service uses, so `docker compose up -d` brings the app up as before. The one thing it
+   cannot do is stop the old Watchtower container, which compose then reports as an orphan; it can no
+   longer update the app (point 1), but it keeps polling. So **`scripts/update.sh` and
+   `scripts/install.sh` retire it**: they drop `autoupdate` from `COMPOSE_PROFILES`, keeping any other
+   profile, and remove the installation's own Watchtower container — found by its compose project and
+   service labels, so nobody else's is touched. Not `--remove-orphans`, which would also remove any
+   container an operator added to the project by hand.
+3. **`scripts/install.sh` asks no update question** and points at `update.sh` in its summary;
+   `.env.prod.example` no longer carries `STAMPORAMA_UPDATE_INTERVAL` or
+   `STAMPORAMA_DOCKER_API_VERSION`, and an existing `.env` that has them is unaffected.
+4. **`update.sh` keeps following `.env`'s `TAG`**: `latest` moves with each release, a pinned version
+   stays put. That is the self-hoster's switch between "update me" and "leave me alone".
+
+### Why not replace it with something automatic
+
+- **A maintained Watchtower fork** carries the same weaknesses that made the owner leave it: it polls,
+  holds the Docker socket, takes no backup before the migrations run and has no health gate — and it
+  is one more third party with root-equivalent access to every self-hoster's host.
+- **An installer-made cron job or systemd timer** would have `install.sh` write outside its
+  directory, as root, in a way that differs between distributions — and make an unattended update,
+  with its migrations and no backup, the default rather than a choice. The documented recipe is one
+  step for those who want it, and the warning to back up first sits beside it.
+- **Porting `scripts/deploy.sh`** (backup, health gate, rollback) to other self-hosters would be the
+  real improvement, but it is built around the owner's runner and his external database, and making
+  it general is its own piece of work — a backlog idea, not this issue.
+
+### Consequences
+
+- **Self-hosters who had automatic updates no longer get them** until they schedule `update.sh`.
+  The installer and the first `update.sh` run say so.
+- **Nothing cleans old images any more** (Watchtower's `WATCHTOWER_CLEANUP` did); `docker image
+  prune` is the self-hoster's, as for any other Compose application.
+- **The app container is recreated once** by the first `up -d` with the new compose file, because
+  its labels changed.
+- `scripts/deploy.sh` keeps refusing while `autoupdate` is set or a Watchtower container runs; both
+  checks still describe a real conflict and cost nothing.

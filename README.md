@@ -28,14 +28,8 @@ To manage the running stack:
 ```sh
 cd ~/stamporama
 docker compose ps
-curl -fsSL https://raw.githubusercontent.com/michalwy/stamporama/latest/scripts/update.sh | bash   # update to latest release
+curl -fsSL https://raw.githubusercontent.com/michalwy/stamporama/latest/scripts/update.sh | bash   # update (see Updating below)
 docker compose down                                                                                   # stop
-```
-
-Optional auto-update via [Watchtower](https://containrrr.dev/watchtower/):
-
-```sh
-docker compose --profile autoupdate up -d
 ```
 
 Uploaded photos — and the listing images generated for offers — are stored in the `stamporama-data` Docker volume (mounted at `/data`) by default. Back it up alongside your database — losing the volume loses the images.
@@ -96,6 +90,60 @@ first bid. It needs one extra environment variable, `STAMPORAMA_SECRET_KEY`, whi
 stored credentials at rest. The same key seals the partner link on a trade, so a link you generated
 can be read back later instead of only once; without it links still work, they just cannot be shown
 again.
+
+### Updating
+
+`scripts/update.sh` is how an installation is updated: it fetches the release's compose files, pulls
+the image `.env`'s `TAG` names — `latest`, unless you pinned a version — and restarts the stack. Run
+it from the installation directory whenever a release comes out, or let the host run it on a
+schedule. Keep a copy of the script in the installation directory for that:
+
+```sh
+cd ~/stamporama
+curl -fsSL https://raw.githubusercontent.com/michalwy/stamporama/latest/scripts/update.sh -o update.sh
+```
+
+then either a **cron** line (`crontab -e`, as a user who may run `docker`) — every night at 04:00:
+
+```cron
+0 4 * * * cd "$HOME/stamporama" && bash update.sh >> update.log 2>&1
+```
+
+or a **systemd timer** — two files under `/etc/systemd/system/`, then
+`sudo systemctl enable --now stamporama-update.timer`:
+
+```ini
+# stamporama-update.service
+[Unit]
+Description=Update Stamporama
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/pi/stamporama
+ExecStart=/bin/bash update.sh
+```
+
+```ini
+# stamporama-update.timer
+[Timer]
+OnCalendar=*-*-* 04:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+An update runs the release's database migrations as the app starts, and nothing takes a backup
+first — **back up your database before an update**, or schedule the update after your nightly
+backup. A scheduled update with a pinned `TAG` changes nothing but the compose files.
+
+There is no built-in auto-updater any more: Watchtower, which the `autoupdate` profile used to
+start, is unmaintained (its repository was archived in December 2025), and it was removed in #2690 —
+[ADR-0083](docs/decisions/0083-release-deploys-to-the-pi.md) records why. An `.env` that still says
+`COMPOSE_PROFILES=autoupdate` keeps working; the next `update.sh` or installer run switches the
+profile off and removes the leftover Watchtower container.
 
 ## Development
 

@@ -42,17 +42,15 @@ Production does not run a database container. The operator provides an external 
                │ DATABASE_URL (external)
                ▼
          [operator's PostgreSQL]
-
-Optional (autoupdate profile):
-┌─────────────────────────────────┐
-│  watchtower                     │
-│  polls GHCR, restarts on update │
-└─────────────────────────────────┘
 ```
+
+There is no updater service: a self-hoster updates with `scripts/update.sh`, by hand or from the
+host's cron or a systemd timer (README, *Updating*). The `autoupdate` profile's Watchtower was
+removed in #2690 because Watchtower is unmaintained (ADR-0083).
 
 ### The owner's instance: deployed by a published release (ADR-0083)
 
-The owner's instance on a Raspberry Pi does **not** use Watchtower. Publishing a GitHub Release
+The owner's instance on a Raspberry Pi is not updated by `scripts/update.sh`. Publishing a GitHub Release
 starts `.github/workflows/deploy.yml` on a self-hosted runner on the Pi (labels
 `self-hosted, pi, stamporama`, environment `prod`), which runs `scripts/deploy.sh` in the existing
 installation directory, with its own `.env` and compose project name:

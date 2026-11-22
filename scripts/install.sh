@@ -257,6 +257,35 @@ remove_compose_overlay() {
   set_env COMPOSE_FILE "$out"
 }
 
+# Watchtower was the `autoupdate` profile until #2690. Drop the profile from COMPOSE_PROFILES
+# (any other profile stays) and remove this installation's Watchtower container, which would
+# otherwise outlive the service's removal from docker-compose.prod.yml. scripts/update.sh does the same.
+retire_watchtower() {
+  local profiles kept="" p project ids
+  profiles="$(get_env COMPOSE_PROFILES || true)"
+  case ",${profiles}," in
+  *,autoupdate,*)
+    local IFS=","
+    for p in $profiles; do
+      [ "$p" = "autoupdate" ] || kept="${kept:+$kept,}$p"
+    done
+    unset IFS
+    set_env COMPOSE_PROFILES "$kept"
+    warn "Watchtower auto-update is no longer offered (it is unmaintained) and has been switched off."
+    warn "Update with scripts/update.sh, by hand or on a schedule - see 'Updating' in README.md."
+    ;;
+  esac
+  project="$(compose config 2>/dev/null | sed -n 's/^name: *//p' | head -n1)" || project=""
+  [ -n "$project" ] || return 0
+  ids="$(docker ps -aq --filter "label=com.docker.compose.project=${project}" \
+    --filter label=com.docker.compose.service=watchtower)"
+  if [ -n "$ids" ]; then
+    info "Removing this installation's Watchtower container"
+    # shellcheck disable=SC2086 # one id per word
+    docker rm -f $ids >/dev/null
+  fi
+}
+
 # Generate the GCS overlay (#138): bind-mounts the host service-account key into the app
 # container read-only. The GCS settings themselves live in .env; only the mount is templated
 # here because its source is a host path chosen during the interview.
@@ -319,14 +348,12 @@ main() {
   }
 
   # --- Interview -----------------------------------------------------------
-  local database_url auth_url http_port secret secret_mode update_mode interval
-  local db_mode db_default update_default existing_secret net_name db_hint
+  local database_url auth_url http_port secret secret_mode
+  local db_mode db_default existing_secret net_name db_hint
 
   db_default="port"
-  update_default="off"
   if [ "$is_reconfigure" -eq 1 ]; then
     case "$(get_env COMPOSE_FILE)" in *"docker-compose.network.yml"*) db_default="network" ;; esac
-    case "$(get_env COMPOSE_PROFILES)" in *autoupdate*) update_default="on" ;; esac
   fi
 
   ui_menu db_mode "$db_default" "How does the app reach your PostgreSQL database?" \
@@ -414,19 +441,12 @@ $db_hint" "$(dflt DATABASE_URL "")"
     info "Generated a credential encryption key (STAMPORAMA_SECRET_KEY)."
   fi
 
-  ui_menu update_mode "$update_default" "Automatic updates" \
-    off "Disabled — update manually" \
-    on  "Enabled — Watchtower watches for new release images"
-  if [ "$update_mode" = "on" ]; then
-    set_env COMPOSE_PROFILES "autoupdate"
-    ui_prompt interval "Update check interval in seconds" "$(dflt STAMPORAMA_UPDATE_INTERVAL 3600)"
-    [ -n "$interval" ] || interval="3600"
-    set_env STAMPORAMA_UPDATE_INTERVAL "$interval"
-    info "Auto-update enabled."
-  else
-    set_env COMPOSE_PROFILES ""
-    info "Auto-update disabled. Update manually with: docker compose pull && docker compose up -d"
-  fi
+  # --- Updates (#2690, ADR-0083) -------------------------------------------
+  # No question any more: the Watchtower option is gone, because Watchtower is unmaintained.
+  # Updating is scripts/update.sh, by hand or from the host's cron or a systemd timer (README.md,
+  # "Updating"). An installation that had it switched on is switched off here, and its container is
+  # removed before the stack starts.
+  retire_watchtower
 
   # --- Photo storage backend (#138) ---------------------------------------
   # Runs after the DB-mode step so it appends to the COMPOSE_FILE list that step just set
@@ -554,7 +574,8 @@ print_summary() {
   echo >/dev/tty
   echo "Useful commands (run from $(pwd)):" >/dev/tty
   echo "  View logs:   docker compose logs -f" >/dev/tty
-  echo "  Update:      docker compose pull && docker compose up -d" >/dev/tty
+  echo "  Update:      curl -fsSL ${RAW_BASE}/scripts/update.sh | bash" >/dev/tty
+  echo "               (or on a schedule - see 'Updating' in README.md)" >/dev/tty
   echo "  Stop:        docker compose down" >/dev/tty
   echo >/dev/tty
   if [ "$(get_env STAMPORAMA_STORAGE_BACKEND)" = "gcs" ]; then

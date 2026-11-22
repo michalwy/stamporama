@@ -27,8 +27,6 @@ services:
       # volume above can be dropped once all photos are migrated (pnpm photos:migrate:gcs).
       # - /secrets/gcs-key.json:/secrets/gcs-key.json:ro
     restart: unless-stopped
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
     healthcheck:
       test:
         [
@@ -40,21 +38,11 @@ services:
       retries: 5
       start_period: 40s
 
-  # Optional auto-update watcher. Enabled only when COMPOSE_PROFILES=autoupdate
-  # (the install script sets this on request). Watchtower polls GHCR and restarts
-  # the app container when a newer image is published.
-  watchtower:
-    image: containrrr/watchtower
-    profiles:
-      - autoupdate
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      WATCHTOWER_LABEL_ENABLE: "true"
-      WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_POLL_INTERVAL: ${STAMPORAMA_UPDATE_INTERVAL:-3600}
-      DOCKER_API_VERSION: ${STAMPORAMA_DOCKER_API_VERSION:-1.44}
-    restart: unless-stopped
+  # There is no auto-update service any more (#2690, ADR-0083): Watchtower is unmaintained, and
+  # updating is scripts/update.sh, run by hand or from the host's cron or a systemd timer. An .env
+  # that still says COMPOSE_PROFILES=autoupdate keeps working — no service uses that profile, so
+  # compose starts the app as usual; scripts/update.sh and scripts/install.sh clear it and remove a
+  # leftover Watchtower container.
 
 volumes:
   # Uploaded photo bytes (#112). Persists across restarts and image updates.
