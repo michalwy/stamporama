@@ -3,11 +3,12 @@
 A release thread has no issue, no branch and no commit, and **it changes nothing in the
 repository**. What it produces is a tag, a GitHub Release and a published image — and so a deploy.
 
-**A release is a deploy** (the owner, 2026-11-22): a published release is deployed to the owner's
-live instance on the Raspberry Pi automatically (#2689). Until #2689 lands, that instance follows
-the image's `latest` through Watchtower, and the tag's own run publishes `latest`
-(`flavor: latest=true` in `ci.yml`) — so today it is **step 4, the tag**, that deploys; afterwards
-it is step 6, the Release.
+**A release is a deploy** (the owner, 2026-11-22): publishing the GitHub Release — **step 6** — starts
+`.github/workflows/deploy.yml`, which deploys it to the owner's live instance on the Raspberry Pi
+through a self-hosted runner (#2689, ADR-0083; the owner's runbook is
+[`docs/deployment/pi-deploy.md`](../deployment/pi-deploy.md)). The tag's own run still publishes the
+image and `latest` (`flavor: latest=true` in `ci.yml`), but the Pi no longer follows `latest` —
+Watchtower is off there — so nothing is deployed before the Release is published.
 
 **A release is therefore cut only on the owner's explicit word in the project conversation**, which
 then starts a release thread for it.
@@ -141,8 +142,10 @@ and every one of them comes back clean.
    3 used to answer in seconds and this waits out the full suite — but the image a release publishes
    has always come out of this run, so a release was never actually finished before it. What changes
    is that somebody reads it before the Release and `latest` assert that it passed.
-6. **Create the GitHub Release.** Once #2689 has landed, **this is the step that deploys** —
-   publishing it is what the Pi's deploy workflow runs on. Always write a proper, human-readable description instead of
+6. **Create the GitHub Release.** **This is the step that deploys**: publishing it is what the Pi's
+   deploy workflow runs on (`release: published`). A release older than what the Pi runs is skipped
+   by the deploy's no-downgrade guard; a rollback is the owner's manual run of that workflow, never
+   a release thread's. Always write a proper, human-readable description instead of
    relying on bare generated notes: group the changes into sections (Highlights / Fixes / Other),
    summarize each change in plain English with its issue reference, and keep the generated "Full
    Changelog" compare link at the end. The generated notes are a read — they create nothing — so
@@ -256,4 +259,10 @@ session the owner opens for a release is the same word. Backlog review may only 
 — it does not prepare, tag, push or create one ([`backlog-review.md`](backlog-review.md)).
 
 **A release thread never deploys by hand** and cannot reach the Pi; the deploy is the published
-Release's consequence and nobody else's step.
+Release's consequence and nobody else's step. A release thread does not start, re-run or approve the **Deploy**
+workflow either; reading its run, to report how the deploy went, is fine:
+
+```bash
+gh api "$R/actions/workflows/deploy.yml/runs?per_page=5" \
+  --jq '.workflow_runs[] | "\(.id) \(.status) \(.conclusion) \(.head_branch) \(.event)"'
+```
