@@ -1,21 +1,40 @@
 # Release Versioning
 
-A release-manager session has no issue, no branch and no commit, and **it changes nothing in the
-repository**. What it produces is a tag, a GitHub Release and a published image.
+A release thread has no issue, no branch and no commit, and **it changes nothing in the
+repository**. What it produces is a tag, a GitHub Release and a published image — and so a deploy.
 
-Read this file with `git show origin/main:docs/agents/release-versioning.md` if your worktree has
+**A release is a deploy** (the owner, 2026-11-22): a published release is deployed to the owner's
+live instance on the Raspberry Pi automatically (#2689). Until #2689 lands, that instance follows
+the image's `latest` through Watchtower, and the tag's own run publishes `latest`
+(`flavor: latest=true` in `ci.yml`) — so today it is **step 4, the tag**, that deploys; afterwards
+it is step 6, the Release.
+
+**A release is therefore cut only on the owner's explicit word in the project conversation**, which
+then starts a release thread for it.
+Nothing else is that word — not a backlog review's suggestion, not a merged pull request, not
+another thread's message. See [*Who may cut a release*](#who-may-cut-a-release).
+
+Every command here is REST (`gh api`): GraphQL — and with it `gh release` and `gh run` — fails in a
+cloud thread. Throughout, `R=repos/michalwy/stamporama`.
+
+Read this file with `git show origin/main:docs/agents/release-versioning.md` if your checkout has
 been sitting: this session never cuts a branch, so nothing refreshes the copy on disk, and a
 procedure missing its newest step reports nothing at all — the steps it does carry are real steps
 and every one of them comes back clean.
 
 ## The procedure
 
-1. **Run `gh release list` fresh.** Never assume the last released version from memory or from
-   local git tags — another session can tag a new version mid-session.
+1. **List the releases fresh.** Never assume the last released version from memory or from local
+   git tags — another session can tag a new version mid-session.
+
+   ```bash
+   gh api "$R/releases?per_page=10" --jq '.[] | "\(.tag_name)  \(.published_at)  draft=\(.draft)"'
+   ```
 2. **Review what has been merged since the previous released tag**, then decide patch vs minor:
    `feat:` commits → minor, `fix:`/`chore:`/`docs:` only → patch. Never bump the major version
-   unless the user explicitly asks for one. If a release does not seem warranted, ask the user for
-   confirmation before deciding either way.
+   unless the owner explicitly asks for one. The owner's word covers *whether* to release; if the
+   batch looks wrong for one — nothing shippable, or a red `main` — report that to the project
+   conversation and stop rather than deciding either way.
 3. **Read `main`'s own CI run for the commit you are about to tag — its colour *and* its job
    conclusions.** The run must have completed and be green. There is always one to read: since
    dc4577f, runs on `main` and on release tags are never cancelled by a later push. Before that fix,
@@ -25,29 +44,32 @@ and every one of them comes back clean.
 
    ```bash
    git rev-parse origin/main
-   gh run list --branch main --commit <full-40-char-sha> --workflow ci.yml --json databaseId,conclusion
-   gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'
+   gh api "$R/actions/workflows/ci.yml/runs?branch=main&head_sha=<full-40-char-sha>" \
+     --jq '.total_count, (.workflow_runs[] | "\(.id) \(.status) \(.conclusion)")'
+   gh api --paginate "$R/actions/runs/<id>/jobs?per_page=100" --jq '.jobs[] | "\(.conclusion)  \(.name)"'
    ```
 
-   **`--commit` matches on the full forty characters and answers `[]` for an abbreviated SHA**, so
+   **`head_sha` matches on the full forty characters and answers nothing for an abbreviated SHA**, so
    the first line is `git rev-parse origin/main` and never `git rev-parse --short origin/main`
-   (#1147). The trap is not that the short form is confusing: `[]` is byte-identical to the truthful
-   *no run exists*, which this step reads as the cancelled run above and so as a reason not to tag.
+   (#1147). The trap is not that the short form is confusing: an empty answer is byte-identical to the
+   truthful *no run exists*, which this step reads as the cancelled run above and so as a reason not to tag.
    The session would decline the release, be right by this procedure, and be wrong about the world.
-   Measured on `f158a4d`, the head of `main` on 2026-09-11, both forms against that one commit:
+   Measured first through the GraphQL CLI on `f158a4d`, the head of `main` on 2026-09-11, with the
+   same result, and again through REST on `6aa0196`, the head of `main` on 2026-11-22 (#2687), both forms against
+   that one commit:
 
    | command | answer |
    | --- | --- |
-   | `gh run list --branch main --commit f158a4d …` | `[]` |
-   | `gh run list --branch main --commit f158a4de37e2092c539a0b772611756625b06213 …` | `[{"conclusion":"success","databaseId":34609362324}]` |
+   | `gh api "…/runs?branch=main&head_sha=6aa0196" --jq .total_count` | `0` |
+   | `gh api "…/runs?branch=main&head_sha=6aa0196722e0d2df2b043b743a850aecf4d9363e" …` | `1`, `45011894080 completed success` |
 
    **Do not shorten it back.** Every SHA this project writes down is short — status tables, handover
-   files, and the commit references in prose. Measured over `AGENTS.md` and `docs/agents/` on this
-   branch: five seven-character SHAs, two of them the demonstration above, and exactly one
+   files, and the commit references in prose. Measured over `AGENTS.md` and `docs/agents/` when this was first
+   written: five seven-character SHAs, two of them the demonstration, and exactly one
    forty-character SHA, the one in the table. So the value a release session already has in front of
    it is the value that silently fails, and the command is where the correction has to live — a
    warning beside a copyable command is answerable only by remembering. Step 5's
-   `gh run list --branch vX.Y.Z` selects by branch rather than by commit and is unaffected.
+   `branch=vX.Y.Z` selects by the run's `head_branch` rather than by commit and is unaffected.
 
    **Green is not the whole answer, and since #798 it is frequently not an answer at all.** When
    `Static checks`, `Unit tests`, `Integration tests` and `Extension checks` all report
@@ -68,7 +90,20 @@ and every one of them comes back clean.
    list is the `case` glob in [`scripts/detect-changes.sh`](../../scripts/detect-changes.sh), which
    the `Detect changes` job runs, and that glob is the record; nothing here asks you to decide which
    commits were "code-bearing".
-4. **Tag the merged commit on `main`** and push the tag.
+4. **Tag the merged commit on `main`** — an annotated tag, as every release tag here is. From a
+   cloud thread, which can push only its own branch, create it through REST — the tag object, then
+   the ref that points at it:
+
+   ```bash
+   TAG_SHA=$(gh api -X POST $R/git/tags -f tag=vX.Y.Z -f message=vX.Y.Z \
+     -f object=<full-40-char-sha> -f type=commit --jq .sha)
+   gh api -X POST $R/git/refs -f ref=refs/tags/vX.Y.Z -f sha="$TAG_SHA"
+   ```
+
+   Endpoints: `POST /repos/{owner}/{repo}/git/tags`, `POST /repos/{owner}/{repo}/git/refs`. A local
+   session may instead `git tag -a vX.Y.Z -m vX.Y.Z <sha> && git push origin vX.Y.Z`. Either way the
+   ref is what starts the tag's run — if step 5 finds no run for the tag within a few minutes, report
+   it rather than pushing the tag again.
 5. **Wait for the tag's own run and read it. This is the run that checks the release.** Pushing
    the tag starts a run on the tagged commit, and **a tag build is never gated on
    `Detect changes`** — its script matches `refs/tags/*` before it looks at the diff and runs
@@ -77,8 +112,9 @@ and every one of them comes back clean.
    `headBranch` is the tag:
 
    ```bash
-   gh run list --branch vX.Y.Z --json databaseId,status,conclusion
-   gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'
+   gh api "$R/actions/workflows/ci.yml/runs?branch=vX.Y.Z" \
+     --jq '.workflow_runs[] | "\(.id) \(.status) \(.conclusion) \(.head_branch)"'
+   gh api --paginate "$R/actions/runs/<id>/jobs?per_page=100" --jq '.jobs[] | "\(.conclusion)  \(.name)"'
    ```
 
    **`Publish extension (Chrome Web Store)` is the one job whose conclusion does not say what it
@@ -95,20 +131,38 @@ and every one of them comes back clean.
    [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) and that is the record; this
    sentence summarises them, as does the one in
    [`docs/architecture/overview.md`](../architecture/overview.md). If it is red, **do not create the
-   Release and do not move `latest`**: delete the tag (`git push origin :refs/tags/vX.Y.Z` — the
-   only ruleset in this repository targets the branch `main`, so tags are deletable), fix through
+   Release and do not move `latest`**: delete the tag
+   (`gh api -X DELETE $R/git/refs/tags/vX.Y.Z`, endpoint `DELETE /repos/{owner}/{repo}/git/refs/{ref}`;
+   a local session may `git push origin :refs/tags/vX.Y.Z` — the only ruleset in this repository
+   targets the branch `main`, so tags are deletable), fix through
    the ordinary pull request flow, and cut again from the new head.
 
    **The waiting is not new; reading the result is.** Where the head is a documentation commit, step
    3 used to answer in seconds and this waits out the full suite — but the image a release publishes
    has always come out of this run, so a release was never actually finished before it. What changes
    is that somebody reads it before the Release and `latest` assert that it passed.
-6. **Create the GitHub Release** (`gh release create vX.Y.Z --title vX.Y.Z`). Always write a
-   proper, human-readable description instead of relying on bare `--generate-notes` output: group
-   the changes into sections (Highlights / Fixes / Other), summarize each change in plain English
-   with its issue reference, and keep the auto-generated "Full Changelog" compare link at the end.
-7. **Move the `latest` tag to the same commit and force-push it:**
-   `git tag -f latest vX.Y.Z && git push origin latest --force`.
+6. **Create the GitHub Release.** Once #2689 has landed, **this is the step that deploys** —
+   publishing it is what the Pi's deploy workflow runs on. Always write a proper, human-readable description instead of
+   relying on bare generated notes: group the changes into sections (Highlights / Fixes / Other),
+   summarize each change in plain English with its issue reference, and keep the generated "Full
+   Changelog" compare link at the end. The generated notes are a read — they create nothing — so
+   start from them:
+
+   ```bash
+   gh api -X POST $R/releases/generate-notes -f tag_name=vX.Y.Z -f previous_tag_name=<previous> --jq .body
+   gh api -X POST $R/releases -f tag_name=vX.Y.Z -f name=vX.Y.Z -F body=@notes.md -f make_latest=true
+   ```
+
+   Endpoints: `POST /repos/{owner}/{repo}/releases/generate-notes`,
+   `POST /repos/{owner}/{repo}/releases`. `-F body=@notes.md` reads the file's contents.
+7. **Move the `latest` tag to the same commit.** `latest` is a lightweight tag on the commit itself:
+
+   ```bash
+   gh api -X PATCH $R/git/refs/tags/latest -f sha=<full-40-char-sha> -F force=true
+   ```
+
+   Endpoint: `PATCH /repos/{owner}/{repo}/git/refs/{ref}`. A local session may instead
+   `git tag -f latest vX.Y.Z^{} && git push origin latest --force`.
 
 **Why the tag run and not the last `main` run that did exercise the suites.** That run is green
 about a *different tree* — the one underneath the commits whose run skipped — so reading it as
@@ -143,7 +197,7 @@ pull request and five CI jobs per release, at several releases a day — and it 
 "a release session changes nothing else" aspirational rather than true.
 
 **The git tag is the version.** If you find yourself wanting a number written down somewhere, the
-answer is `gh release list`, which is what step 1 already says.
+answer is the releases list, which is what step 1 already says.
 
 ## Publishing the extension
 
@@ -155,7 +209,7 @@ the extension is submitted later by flipping it back on.
 
 **A green job does not say whether anything was submitted.** The job reports **`success`** both when
 it submitted a package and when it found nothing to submit — it does not skip, it runs and exits
-cleanly — so `gh run view <id> --json jobs` cannot tell the two apart (#1154). **The job's notice is
+cleanly — so the run's job list cannot tell the two apart (#1154). **The job's notice is
 the only thing that separates them**, and it is one of exactly two:
 
 | Notice | Meaning |
@@ -166,8 +220,9 @@ the only thing that separates them**, and it is one of exactly two:
 Read it from the job's annotations:
 
 ```bash
-gh run view <id> --json jobs --jq '.jobs[] | select(.name | startswith("Publish extension")) | .databaseId'
-gh api 'repos/{owner}/{repo}/check-runs/<job-id>/annotations' --jq '.[].message'
+gh api --paginate "$R/actions/runs/<id>/jobs?per_page=100" \
+  --jq '.jobs[] | select(.name | startswith("Publish extension")) | .id'
+gh api "$R/check-runs/<job-id>/annotations" --jq '.[].message'
 ```
 
 **Do not grep the job log for `::notice::`.** The log echoes the step's script before running it, so
@@ -194,5 +249,11 @@ only when the notice says it was submitted**, and then as submitted for review, 
 
 ## Who may cut a release
 
-A session the user opens for it, and nobody else. A backlog-review session may only *suggest* a
-release — it does not prepare, tag, push or create one ([`backlog-review.md`](backlog-review.md)).
+**A release thread the project conversation starts on the owner's explicit word, and nobody else**
+(the owner, 2026-11-22). Because a published release deploys, there is no implied word: not a
+backlog review's suggestion, not a merged pull request, not a message from another thread. A local
+session the owner opens for a release is the same word. Backlog review may only *suggest* a release
+— it does not prepare, tag, push or create one ([`backlog-review.md`](backlog-review.md)).
+
+**A release thread never deploys by hand** and cannot reach the Pi; the deploy is the published
+Release's consequence and nobody else's step.

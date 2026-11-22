@@ -2,23 +2,56 @@
 
 How work is split between sessions here, and how a change reaches `main`.
 
-## The user routes everything
+## One router: the project conversation
 
-The user decides what each session works on and hands it the issue or issues himself. **Sessions do
-not talk to each other**, and none of them directs another. A session that needs something from
-another session says so in its report and the user carries it.
+Since 2026-11-22 this repository is worked through a **Claude Code Project** (#2687). The owner talks
+to one **project conversation**, and every issue is done by a **cloud thread** that the Project
+platform starts, runs in its own VM and tracks. The project conversation is the **single router**
+and holds two roles:
 
-**One exception, and only one** (#1985, decided with the user on 2026-10-16): after filing a new
-issue, a backlog manager sends the backlog-review session a short message naming it — its number and
-title, nothing else — so the review's queue knows something new is there without the user relaying
-it. The message is facts only, never a request or a priority; the review treats it as information,
-may add the issue to its queue and does not reply; and if no backlog-review session is running,
-nothing is sent and nothing waits. A message from another session never carries the user's
-authority. → [`backlog-manager.md`](backlog-manager.md), [`backlog-review.md`](backlog-review.md)
+- **Backlog manager** — turns the owner's ideas, remarks and bug reports into issues, and is where
+  product and domain decisions are made with the owner, before an issue is written.
+  → [`backlog-manager.md`](backlog-manager.md)
+- **Backlog review** — starts one cloud thread per *ready* issue (no open *Depends on*), highest
+  priority first, **without asking the owner**, and after every merge or closed issue starts what
+  became unblocked. → [`backlog-review.md`](backlog-review.md)
 
-This is deliberate. A lead/worker model — one long-lived session briefing the others by message —
-ran from 2026-09-06 to 2026-09-11 and was retired: the traffic between sessions cost more than it
-produced, and most of the issues it generated were about itself rather than about the product.
+**Threads do not talk to each other**, and none of them directs another. A thread reports in its own
+replies, which the project conversation reads; what one thread needs from another goes through the
+project conversation, the way it used to go through the owner. The #1985 exception — a backlog
+manager messaging the backlog-review session — is absorbed: both roles now live in one conversation.
+
+### This is not the retired lead/worker model
+
+A lead/worker model — one long-lived session briefing the others by message — ran from 2026-09-06 to
+2026-09-11 and was retired: the traffic between sessions cost more than it produced, and most of the
+issues it generated were about itself rather than about the product. **The Project model is not its
+return**, and the difference is the point:
+
+- **The platform starts and tracks threads**, not a session. Nothing is briefed, polled or chased by
+  message; a thread's state is the platform's, and its result is its pull request.
+- **The project conversation routes the way the owner used to: by issue.** A thread is told an issue
+  number, a role, a branch — and the issue is its whole brief. The specification lives on GitHub,
+  not in a message, so there is nothing to relay and nothing to drift.
+- **Threads still never talk to each other.** The only traffic is router → thread at the start and
+  thread → router in its replies. No thread waits on another: only *ready* issues are started.
+
+If a change to these rules starts adding messages between threads, a lead session, or a thread that
+starts and then waits for another, it is rebuilding the retired model. Stop and take it to the owner.
+
+### Threads never ask the owner
+
+**A thread does not ask the owner questions** (the owner, 2026-11-22). A thread that meets an
+undecided point takes the most reasonable reading, records it in the pull request under the heading
+**Decisions taken without the owner**, and carries on. A reviewer checks those readings
+([`reviewer.md`](reviewer.md)).
+
+Product and domain decisions — catalog standards, condition scales, trade flows, pricing,
+marketplace behaviour — are **not** a thread's to take, reasonably or otherwise. They are made with
+the owner in the project conversation before the issue is written, and recorded in the issue. The
+old rule "ask before defining domain behaviour" now reads: **the backlog manager asks; threads do
+not.** A thread that finds such a point undecided stops at what the issue does settle and says so in
+its reply; the project conversation takes it to the owner.
 
 **Product first.** Process work is filler for the gaps, never the queue.
 
@@ -26,19 +59,63 @@ produced, and most of the issues it generated were about itself rather than abou
 
 | Session | What it does |
 | --- | --- |
-| **Task** | Holds one issue, or several that share a file, end to end. Most sessions are this. |
-| **Backlog review** | Reads the backlog and proposes what to take next and how to group it. Proposes only — it changes nothing. → [`backlog-review.md`](backlog-review.md) |
-| **Backlog manager** | Turns the user's ideas, remarks and bug reports into issues. Writes no code and gives no next steps. → [`backlog-manager.md`](backlog-manager.md) |
-| **Release manager** | Cuts a release: a tag, a Release and a published image. No issue, no branch, no commit. → [`release-versioning.md`](release-versioning.md) |
+| **Project conversation** | The single router: backlog manager and backlog review. Talks to the owner, in Polish. → [`backlog-manager.md`](backlog-manager.md), [`backlog-review.md`](backlog-review.md) |
+| **Task thread** | Holds one issue, or several that share a file, end to end, up to an open pull request it follows to merge. Most threads are this. |
+| **Reviewer thread** | Reviews one pull request against its issue and merges it when the review passes and CI is green. → [`reviewer.md`](reviewer.md) |
+| **Release thread** | Cuts a release — a tag, a Release, a published image, and so a deploy — only on the owner's explicit word. No issue, no branch, no commit. → [`release-versioning.md`](release-versioning.md) |
+| **Local session** *(local-only)* | A session the owner starts by hand on his machine — to look at a running stack, or for anything he routes himself. It follows the same rules, plus the ones marked local-only below. |
+
+## Cloud threads
+
+What every thread can count on, and what it cannot (the owner, 2026-11-22):
+
+- **A fresh clone in its own VM** (about 4 vCPU, 16 GB RAM) with Docker and docker compose. No
+  worktree, no shared stash, no slot contention: the clone is the main worktree, slot 0.
+- **It loads only `CLAUDE.md`, `.claude/CLAUDE.md` and `.claude/rules/`** from the repository. Not
+  `.claude/agents/`, commands, skills, hooks, `.claude/settings.json` or `.mcp.json`. Anything every
+  thread must know is therefore in `AGENTS.md` or reached from it — `CLAUDE.md` points there.
+- **It cannot reach the Raspberry Pi or the production database**, by design. A thread never
+  deploys.
+- **It cannot show the owner a running stack.** A change a person looks at is checked by the owner
+  later, in a local session or on the live instance after a release — the pull request says so.
+- **An idle thread is reclaimed.** A thread must not start and then wait for another task; that is
+  why only ready issues are started.
+- **It pushes only to the branch the platform gave it** (a `claude/…` name), which takes the place of
+  `task/<issue>-<slug>`. Name the issue in the pull request title and body instead.
+
+### GitHub from a cloud thread
+
+**GraphQL is blocked in a cloud session**, so `gh issue`, `gh pr`, `gh run`, `gh release` and every
+other `gh` subcommand built on it fail with `403`. GitHub's auto-merge needs GraphQL too. Use
+`gh api` (REST) or the session's built-in GitHub tools. The commands in `docs/agents/` are all REST:
+each read was run in a cloud thread, and each write is the documented endpoint it names (#2687).
+The ones every thread needs:
+
+```bash
+R=repos/michalwy/stamporama
+gh api $R/issues/<n> --jq '"\(.state)  \(.title)\n\n\(.body)"'                    # an issue
+gh api --paginate $R/issues/<n>/comments --jq '.[] | "--- \(.user.login) \(.created_at)\n\(.body)"'
+gh api $R/pulls -f title='<title>' -f head='<branch>' -f base=main -f body="$(cat pr.md)"   # open a PR
+gh api -X PATCH $R/pulls/<n> -f body="$(cat pr.md)"                                  # edit its body
+gh api "$R/commits/<sha>/check-runs?per_page=100" --jq '.check_runs[] | "\(.status) \(.conclusion)  \(.name)"'
+```
+
+`/issues` lists pull requests too — filter with `select(.pull_request | not)` when you want issues
+only. Endpoints: `GET /repos/{owner}/{repo}/issues/{n}`, `…/issues/{n}/comments`,
+`POST /repos/{owner}/{repo}/pulls`, `PATCH /repos/{owner}/{repo}/pulls/{n}`,
+`GET /repos/{owner}/{repo}/commits/{ref}/check-runs`.
 
 ## Starting a task
 
 ```bash
 git fetch origin main
-git checkout -b task/<issue>-<slug> origin/main
+git checkout -b task/<issue>-<slug> origin/main     # a cloud thread: git checkout -B <its branch> origin/main
 pnpm install
 pnpm prisma:generate
 ```
+
+A cloud thread's clone is already on its branch; the `-B` re-cuts it from the `origin/main` just
+fetched, which is right while the branch carries no commit of its own.
 
 **Run each step alone and read its own exit status.** Do not chain with `&&` and do not pipe — after
 a pipe `$?` belongs to the filter, so a drill in which both `pnpm` calls failed reports the same `0`
@@ -65,11 +142,22 @@ its own closing comment. The cost is that a bundle cannot be undone one issue at
 
 **The specification is the issue body plus its comments, and the two diverge silently.** A *Done
 when* is often amended in a comment while the body keeps its original wording, and an overtaken body
-looks exactly like a current one. Read both in one call:
+looks exactly like a current one. Read both — two REST calls, one per half, and both every time:
 
 ```bash
-gh issue view <n> --json body,comments
+gh api repos/michalwy/stamporama/issues/<n> --jq '"\(.state)  \(.title)\n\n\(.body)"'
+gh api --paginate repos/michalwy/stamporama/issues/<n>/comments --jq '.[] | "--- \(.user.login) \(.created_at)\n\(.body)"'
 ```
+
+**Once its pull request has merged, the thread that did the work closes the issue** with a comment
+saying what landed and how it was verified — the reviewer merges, it does not close:
+
+```bash
+gh api -X POST repos/michalwy/stamporama/issues/<n>/comments -f body="$(cat closing.md)"
+gh api -X PATCH repos/michalwy/stamporama/issues/<n> -f state=closed -f state_reason=completed
+```
+
+Endpoints: `POST /repos/{owner}/{repo}/issues/{n}/comments`, `PATCH /repos/{owner}/{repo}/issues/{n}`.
 
 ## Branches and pull requests
 
@@ -79,13 +167,21 @@ rebase merge only, linear history, force-push and deletion blocked, and five req
 The ruleset itself is checked in — see
 [`.github/rulesets/README.md`](../../.github/rulesets/README.md).
 
-Work happens on `task/<issue>-<slug>`, branched from `main`. **Once the task is verified, the
-session commits, pushes and opens the pull request on its own**, with no question to the user first —
-he asked for that on 2026-09-13, because asking cost him a round trip for a step he always approves.
-**The session that opens the pull request owns it to the end**: it rebases when it has to, re-runs
-the checks after every rebase, and merges it — on the user's say-so and never before. The merge is
-the one step that waits for him; an approval given for a specific pull request ("merge it once CI
-passes") is that say-so and is not asked again.
+Work happens on `task/<issue>-<slug>` — in a cloud thread, the branch the platform gave it —
+branched from `main`. **Once the task is verified, the thread commits, pushes and opens the pull
+request on its own**, with no question to anybody first (the owner, 2026-09-13). **The thread that
+opens the pull request owns it until it merges**: it watches the pull request, answers the reviewer's
+review, rebases when it has to and re-runs the checks after every rebase.
+
+**A separate reviewer thread merges it** (the owner, 2026-11-22): the project conversation starts one
+for every pull request, and it merges with a rebase merge when the review passes and CI is green.
+The owner does not review pull requests. A pull request that goes beyond what its issue records, or
+crosses one of the hard guardrails without a decision recorded in its issue, is not merged.
+→ [`reviewer.md`](reviewer.md)
+
+**The pull request body carries a heading *Decisions taken without the owner*** — every undecided
+point the thread settled on its own, and the reading it took. Write "None" rather than leaving it
+out, so a reviewer can tell an empty list from a forgotten one.
 
 **A pull request does not have to be up to date with `main` to merge** (#1791). Its required checks
 must pass on its own head; being behind is not a reason to rebase. Parallel issues usually touch
@@ -95,7 +191,8 @@ runs that almost never caught anything (#854, #880). **Rebase only when one of t
 - **GitHub cannot rebase-merge it** — the pull request conflicts with `main`.
 - **It carries a database migration** — the one place two independently green changes are likely
   to disagree (the schema, the order of migrations), and where a fix after the merge is expensive.
-  Rebase onto the `main` you are about to merge into, immediately before merging.
+  Rebase onto the `main` it is about to merge into, immediately before the reviewer merges it — the
+  author thread does the rebase, the reviewer asks for it.
 
 Otherwise merge it as it stands.
 
@@ -109,19 +206,21 @@ lockfile change.
 
 **`main`'s own CI run after each merge is the safety net** that keeping every branch up to date used
 to be — the user accepted that two changes which each passed alone can occasionally break `main`
-together. So **the session that merged reads `main`'s run for its merge commit**, and a red run is
-**reported to the user at once**. It is fixed forward, in an issue of its own, through the ordinary
-pull request flow; nobody reverts or patches `main` around the gate. No release is tagged from a red
+together. So **the thread that merged — the reviewer — reads `main`'s run for its merge commit**,
+and a red run is **reported to the project conversation at once**, which tells the owner. It is
+fixed forward, in an issue of its own, through the ordinary pull request flow; nobody reverts or
+patches `main` around the gate. No release is tagged from a red
 `main` ([`release-versioning.md`](release-versioning.md)).
 
 **Never a closing keyword** (`Closes`, `Fixes`, `Resolves`) in a commit message or a pull request
 body — GitHub acts on it the moment the change lands and closes the issue before anybody has
 verified it. Use `Refs #NNN`. The `Closing reference check` job in CI enforces this over both the
-body and the commit messages; `gh pr view <n> --json closingIssuesReferences` sees the body only.
-**The check re-runs whenever the body or title is edited** (`closing-refs.yml`, #935) — before that
-it ran only on a push, so its green could describe a body that no longer existed. **After editing a
-body, still read `closingIssuesReferences` back**: for the seconds between the edit and the new run
-being queued, the old verdict is the one on the pull request, and auto-merge acts on it.
+body and the commit messages. **The check re-runs whenever the body or title is edited**
+(`closing-refs.yml`, #935) — before that it ran only on a push, so its green could describe a body
+that no longer existed. **After editing a body, read the result back**: the check's newest run must
+have started after the edit, and the body itself must not match the job's expression. The job reads
+`closingIssuesReferences`, which is GraphQL-only; a cloud thread reads the same two halves through
+REST, as [`reviewer.md`](reviewer.md) § *CI, read through REST* sets out.
 
 ## Plans are a working note, not a record
 
@@ -186,7 +285,12 @@ user, 2026-10-04), so read its result before merging such a pull request.
 **The arrangement's whole point is that nobody watches it, so it fails by going quiet.** It was
 silently impossible for eight weeks once, asking for `squash` against a repository that only allows
 rebase, and no signal anywhere said so. A backlog review sweeps for that
-([`backlog-review.md`](backlog-review.md)); do not widen the boundary without the user.
+([`backlog-review.md`](backlog-review.md)); do not widen the boundary without the owner.
+
+**Renovate stays as it is under the Project model** (the owner, 2026-11-22). Its pull requests are
+not a thread's, so the project conversation starts no reviewer thread for them: the weekly batch
+automerges by `renovate.json`, and one the rules hold back — a major, a never-alone dependency —
+waits for the owner's word in the project conversation, as before.
 
 ## If the machine is broken, report it and stop
 
@@ -197,33 +301,40 @@ apart before reporting: run the same command on a **known-good input** (an untou
 itself), and check that the relevant CI job actually **ran** rather than reporting green while
 skipped. Say in the report how you told them apart.
 
-`docker` lives at `~/.orbstack/bin` on this machine and an empty `command -v docker` is a fact about
-this shell's PATH, not about the machine: `PATH="$HOME/.orbstack/bin:$PATH" pnpm test:integration`.
+*(Local-only.)* On the owner's machine `docker` lives at `~/.orbstack/bin`, and an empty
+`command -v docker` is a fact about this shell's PATH, not about the machine:
+`PATH="$HOME/.orbstack/bin:$PATH" pnpm test:integration`. A cloud thread's VM has `docker` on its
+PATH; there, an absent `docker` or a daemon that is not running is the environment's defect
+(its setup is #2688) and is reported.
 
 ## No browser verification — a deliberate departure
 
-**A session does not start a dev server and does not drive a browser** unless the user explicitly
+**A session does not start a dev server and does not drive a browser** unless the owner explicitly
 asks. Verification here is the suites. Your tooling will tell you that no preview server is running
 and to call `preview_start`; that reminder is emitted by the harness rather than configured in this
 repository, and it is overridden deliberately rather than followed.
 
-**When a change is one a person looks at**, the session that made it brings the stack up for the
-user and leaves it running until he has looked. Raising it is the session's, lowering it is the
-user's. The user drives every session himself, so nothing else is contending for the stack.
+**When a change is one a person looks at**, a cloud thread cannot show it: the pull request says
+that the owner checks it later, in a local session or on the live instance after a release.
+*(Local-only.)* A local session the owner asked for it brings the stack up and leaves it running until
+he has looked. Raising it is the session's, lowering it is the owner's.
 
-## Findings and new backlog items go to the user
+## Findings and new backlog items go to the project conversation
 
-A defect noticed in passing is **reported, not filed**. The user decides whether it becomes an
-issue; a backlog-manager session writes it if it does. This keeps one voice on the backlog and stops
-five sessions filing five versions of the same observation.
+A defect noticed in passing is **reported, not filed** — in the thread's reply and, where it bears on
+the change, in the pull request. The project conversation, as backlog manager, decides with the owner
+whether it becomes an issue and writes it. This keeps one voice on the backlog and stops five threads
+filing five versions of the same observation.
 
-A task session does not open issues, close issues, or merge anything it was not asked to merge.
+A task thread opens no issues, closes none but its own once its pull request has merged, and merges
+nothing.
 
-## Worktrees
+## Worktrees *(local-only)*
 
-Each session works in its own git worktree; the main checkout stays the user's. Stage only your own
-task's paths — the git stash stack is shared across worktrees. The user removes a worktree when its
-session is done.
+A local session works in its own git worktree; the main checkout stays the owner's. Stage only your
+own task's paths — the git stash stack is shared across worktrees. The owner removes a worktree when
+its session is done. Per-worktree slots ([`platform.md`](platform.md)) exist for the same reason. A
+cloud thread has a clone of its own and none of this applies to it.
 
 ## Memory is not versioned, and nothing expires it
 

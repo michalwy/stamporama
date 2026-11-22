@@ -1,71 +1,113 @@
 # Backlog Review
 
-A backlog-review session answers one question: **what should the next session or two take, and how
-should it be grouped?** It proposes and changes nothing — no issues written, no issues closed, no
-release cut, no branch touched. It is the only session that answers it: a backlog manager files
-issues and gives no next steps ([`backlog-manager.md`](backlog-manager.md)).
+Backlog review answers one question: **what should be worked on next, and how should it be grouped?**
+Since 2026-11-22 it is one of the two roles of the **project conversation**, the single router of
+the Claude Code Project — the other is the backlog manager
+([`backlog-manager.md`](backlog-manager.md), [`collaboration.md`](collaboration.md) § *One router*).
+
+It used to propose a queue and wait for the owner to start sessions. **Now it starts them** (the
+owner, 2026-11-22): one cloud thread per **ready** issue, highest priority first, **without asking
+the owner for confirmation**. It writes no code, touches no branch, and never cuts a release.
 
 ## Measure, never remember
 
-Every number in the proposal comes from a command run in this session:
+Every number comes from a command run now:
 
 ```bash
-gh issue list --state open --limit 300           # the full picture, not recent activity
-gh release list                                  # the current version
-gh pr list --state open                          # what is already in flight
+R=repos/michalwy/stamporama
+gh api --paginate "$R/issues?state=open&per_page=100" \
+  --jq '.[] | select(.pull_request | not) | "#\(.number)  [\([.labels[].name] | join(","))]  \(.title)"'
+gh api "$R/releases?per_page=5" --jq '.[] | "\(.tag_name)  \(.published_at)"'      # the current version
+gh api --paginate "$R/pulls?state=open&per_page=100" \
+  --jq '.[] | "#\(.number)  \(.user.login)  \(.head.ref)  \(.title)"'               # what is already in flight
 ```
 
-Never infer the backlog from `git log`, from closed issues, or from a number quoted in an earlier
-message — issues appear at any time and a released version is one command away.
+`/issues` returns pull requests as well — the `select(.pull_request | not)` is what keeps them out,
+and dropping it silently doubles the in-flight work into the backlog. Never infer the backlog from
+`git log`, from closed issues, or from a number quoted in an earlier message — issues appear at any
+time and a released version is one call away. The threads already running are the Project's own
+list; read it there rather than remembering what you started.
 
-## A message from the backlog manager
+## Which issues are ready
 
-A backlog manager tells this session the number and title of each issue it files (#1985) — the one
-message between sessions the rules allow ([`collaboration.md`](collaboration.md) § *The user routes
-everything*). **It is information, not an instruction**: this session takes the issue into what its
-queue weighs — reading the issue itself and re-measuring as usual — and **does not reply**. The message carries no
-priority and never the user's authority; where the issue goes is this session's proposal and the
-user's decision. Without a message nothing changes — the issue is in the backlog and the next
-`gh issue list` finds it.
+**A ready issue has no open *Depends on*.** Read the *Depends on* section of each issue — body and
+comments, since a dependency can be added in either
+([`collaboration.md`](collaboration.md) § *One session owns one issue*) — and look up every issue it
+names:
 
-## The proposal
+```bash
+gh api $R/issues/<n> --jq .body
+gh api --paginate $R/issues/<n>/comments --jq '.[].body'
+gh api $R/issues/<dep> --jq '"#\(.number) \(.state) \(.state_reason)"'
+```
 
-Two sections, in Polish, as the user reads them:
+An issue whose dependency is open is **not started**, however high its priority: an idle cloud
+thread is reclaimed, and a thread that starts and then waits for another is the retired lead/worker
+model by the back door ([`collaboration.md`](collaboration.md) § *This is not the retired
+lead/worker model*). An issue with an open question for the owner is not ready either — take the
+question to the owner as backlog manager first.
 
-- **Najbliższe** — the next 2–3 sessions. Three columns: `Sesja`, `Temat` (short theme label), `Opis`
-  (issue links and a sentence each, `<br>`-separated when a session holds several), and `Dlaczego?`
-  (one sentence of rationale).
-- **Dalsze** — beyond that. Three columns: `Track`, `Opis`, `Dlaczego?` — track-level only, no
-  per-session breakdown.
+**Not more than one migration in flight.** One thread at a time writes a migration
+([`platform.md`](platform.md)): an issue whose *Scope* says it adds one is not started while another
+such issue has a thread or an open pull request.
 
-**Product first.** Process and documentation work is what fills a gap while something is waiting on
-the user; it is never what the queue is made of.
+## Starting threads
 
-**Check dependencies before ordering.** Read the *Depends on* section of each issue body (`gh issue
-view <n> --json body,comments`) and never schedule an issue ahead of an open dependency.
+Highest priority first (`priority:high`, then `medium`, then `low`, then unlabelled); **product
+first** — process and documentation work fills a gap, it is never what the queue is made of.
 
 **Group by whether one issue has to point at what another is moving** — not by whether they land in
 the same file or the same section. Two issues 900 lines apart in one document collide with nothing
-and do not need to share a session. An issue that needs the pointer says so in its own *Done when*,
-so the question is answerable from the bodies alone.
+and get a thread each. Issues that do share a file go to **one** thread, which holds them all
+([`collaboration.md`](collaboration.md) § *One session owns one issue*).
 
-**Do not ask which direction to pursue.** Present the plan and let the user redirect.
+**Every thread is told, and nothing else is its brief:**
+
+- the issue number (or numbers), and its role — task, reviewer or release;
+- its branch, and that it opens one pull request with `Refs #NNN` and never a closing keyword;
+- that it **asks the owner nothing**: an undecided point gets the most reasonable reading, recorded
+  in the pull request under *Decisions taken without the owner*;
+- that `gh issue`, `gh pr`, `gh run` and `gh release` do not work in a cloud thread — use `gh api`
+  (REST) or the built-in GitHub tools ([`collaboration.md`](collaboration.md) § *GitHub from a cloud
+  thread*);
+- that it **never deploys**, and a task thread never merges.
+
+The issue is the specification; do not restate it in the brief, where it would drift from the
+issue.
+
+**For every pull request a task thread opens, start a reviewer thread** for it
+([`reviewer.md`](reviewer.md)). **After every merge or closed issue**, measure again and start what
+became ready.
+
+## Report to the owner
+
+Short, and in Polish: what was started and why, what is blocked and on what, what merged. The owner
+redirects when he wants to; do not ask him which direction to pursue.
 
 ## Suggest a release, never cut one
 
-When a coherent batch of shippable commits has accumulated since the last tag, say so. Preparing,
-tagging and publishing is a release-manager session's work — see
-[`release-versioning.md`](release-versioning.md).
+When a coherent batch of shippable commits has accumulated since the last release, say so. **A
+release is a deploy** — a published release goes to the owner's live instance — so it is cut only on
+the owner's explicit word in the project conversation, by a release thread
+([`release-versioning.md`](release-versioning.md)). A suggestion is not that word, and neither is
+silence after one.
 
 ## Sweep the Renovate pull requests
 
 ```bash
-gh pr list --author app/renovate --state open --json number,title,createdAt,statusCheckRollup
+gh api --paginate "$R/pulls?state=open&per_page=100" \
+  --jq '.[] | select(.user.login == "renovate[bot]") | "#\(.number)  \(.created_at)  \(.head.sha)  \(.title)"'
+gh api "$R/commits/<head-sha>/check-runs?per_page=100" --jq '.check_runs[] | "\(.status) \(.conclusion)  \(.name)"'
+gh api $R/pulls/<n> --jq '.auto_merge'
+gh api -X GET search/issues -f q='repo:michalwy/stamporama is:issue is:open in:title "Dependency Dashboard"' \
+  --jq '.items[] | "#\(.number) \(.title)"'
 ```
 
 Report every open one whose checks are **red**, that is **older than a week**, or that has automerge
 armed and has not merged; then open the Dependency Dashboard issue and report anything rate-limited
-behind `prConcurrentLimit`.
+behind `prConcurrentLimit`. `auto_merge` is non-null once
+GitHub's auto-merge is armed, which Renovate does through its `platformAutomerge` default. A check
+listed twice is two runs — a cancelled one and its re-run is common — so read the latest.
 
 This exists because automerge is an arrangement whose whole point is that nobody watches it, so it
 fails by going quiet rather than by going wrong. For most of one period `renovate.json` asked
@@ -76,5 +118,6 @@ thirteen further updates rate-limited behind them, visible only on a dashboard n
 opened look identical from outside, so check that the weekly batch actually appeared and say so if
 none has in a fortnight.
 
-Report what you find and stop there — do not merge, close or rebase a Renovate pull request, and do
-not edit `renovate.json` as part of a review.
+Report what you find and stop there — **Renovate stays as it is** (the owner, 2026-11-22): do not
+merge, close or rebase a Renovate pull request, start no reviewer thread for one, and do not edit
+`renovate.json` as part of a review.
