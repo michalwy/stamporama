@@ -79,18 +79,15 @@ issue.
 ([`reviewer.md`](reviewer.md)). **After every merge or closed issue**, measure again and start what
 became ready.
 
-**After a merge, check that its issue was closed.** The author thread closes it
-([`collaboration.md`](collaboration.md) § *One session owns one issue*), and readiness waits on that
-close — so an author thread that was reclaimed, or never woken by the merge, would leave every
-dependent issue blocked with nothing reporting it. If the issue the pull request refers to is still
-open once `main`'s run for the merge is green, tell the author thread to close it; if that thread is
-gone, close it yourself with a short comment linking the pull request and its `main` run:
+**Route the reviewer's verdict.** A reviewer reports to you, never to the author thread
+(the owner, 2026-11-22):
 
-```bash
-gh api $R/issues/<n> --jq '"#\(.number) \(.state)"'
-gh api -X POST $R/issues/<n>/comments -f body="$(cat closing.md)"
-gh api -X PATCH $R/issues/<n> -f state=closed -f state_reason=completed
-```
+- **changes needed**, or a **request to rebase** a pull request carrying a migration: send it to the
+  author thread — the pull request number and the review's link, nothing more. **If that thread is
+  gone, start a new thread on the same pull request** (same issue, same branch) to take it over.
+  When a new head is pushed, start the review again.
+- **merged**: the reviewer has already closed the issue; measure again and start what became ready.
+- **a question for the owner**: take it to him, one at a time.
 
 ## Report to the owner
 

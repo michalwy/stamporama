@@ -60,7 +60,8 @@ not restate that reasoning here; add it to the topic file instead.
 - **`main` takes no direct pushes**: pull request only, rebase merge, linear history, five required
   checks, no bypass for anyone. Work on `task/<issue>-<slug>` cut from `main` — in a cloud thread,
   the branch the platform gave it; **the thread that opens the pull request owns it until it
-  merges**: it answers the review, rebases when it has to, and closes its issue after the merge.
+  merges**: a *changes needed* or a rebase request reaches it through the project conversation (or a
+  new thread takes the pull request over if it is gone). The reviewer closes the issue after the merge.
   → [`collaboration.md`](docs/agents/collaboration.md)
 - **A pull request merges without being up to date with `main`** (#1791). It is **rebased only on a
   conflict or when it carries a migration**, and a rebase is followed by a re-verify, in that order —
