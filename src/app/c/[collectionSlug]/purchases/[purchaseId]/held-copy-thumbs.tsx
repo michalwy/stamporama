@@ -36,12 +36,15 @@ const THUMB_SIZE = "3.5rem";
  *
  * **In-collection copies, then copies being sorted**: copies for sale, for trade, with no disposition,
  * in the post or on their way are not what the piece competes with, and the line and the comparison
- * still name them. A copy being sorted has no disposition yet (#562's rule), but working a large
- * intake it is often the very copy the piece in hand has to be compared with — the other one from the
- * same stockbook — so it is drawn too, after the in-collection ones and marked *being sorted* in the
- * line's own hue for that clause. The set is the comparison's own query (same key, so opening it
- * reads nothing again), narrowed to those two kinds. The piece itself is never among them: before it
- * is saved it is no copy at all, and a re-identified tile's own copy is `excludeItemId`.
+ * still name them. A copy being sorted is not filed yet (#562), but working a large intake it is
+ * often the very copy the piece in hand has to be compared with — the other one from the same
+ * stockbook — so it is drawn too, after the in-collection ones and marked *sorting* in the line's
+ * own hue for that clause, with the disposition it was given at identification beside it (#2685):
+ * *sorting · collection*. One going to the collection is framed in the collection's colour, since
+ * that is the copy the piece in hand most likely duplicates. The set is the comparison's own query
+ * (same key, so opening it reads nothing again), narrowed to those two kinds. The piece itself is
+ * never among them: before it is saved it is no copy at all, and a re-identified tile's own copy is
+ * `excludeItemId`.
  *
  * Ordered as the comparison orders them — in-collection before being sorted, and inside each the
  * collection's own condition order and then copy number:
@@ -106,8 +109,14 @@ export function HeldCopyThumbs({
         const photo = copy.photos[0];
         const itemNo = formatItemNo(copy.itemNo);
         const place = heldCopyPlace(copy);
-        const sorting = place.kind === "inFlight" ? place.label : null;
-        const label = `${itemNo} · ${condition?.name ?? "?"}${sorting ? ` · ${sorting}` : ""}`;
+        // A copy being sorted says the disposition it was given at identification (#2685) beside
+        // *sorting* — *sorting · collection* — so the strip tells which of them is already going to
+        // the collection without opening each.
+        const sorting = place.kind === "inFlight" ? (place.markers ?? []) : null;
+        const toCollection = sorting?.some((m) => m.key === "inCollection") ?? false;
+        const label = `${itemNo} · ${condition?.name ?? "?"}${
+          sorting ? ` · ${["sorting", ...sorting.map((m) => m.short)].join(" · ")}` : ""
+        }`;
         return (
           <div
             key={copy.id}
@@ -134,7 +143,13 @@ export function HeldCopyThumbs({
                   width: THUMB_SIZE,
                   height: THUMB_SIZE,
                   padding: 0,
-                  border: photo ? "1px solid var(--color-border)" : "none",
+                  // Going to the collection, a copy being sorted wears the collection's colour, so
+                  // it stands out in the strip (#2685).
+                  border: toCollection
+                    ? "2px solid var(--color-disposition-collection)"
+                    : photo
+                      ? "1px solid var(--color-border)"
+                      : "none",
                   borderRadius: "0.375rem",
                   overflow: "hidden",
                   background: "var(--color-bg-page)",
@@ -196,7 +211,21 @@ export function HeldCopyThumbs({
                   color: COPY_BUCKET_COLOR.to_sort,
                 }}
               >
-                {sorting}
+                sorting
+                {sorting.map((m) => (
+                  <span key={m.key}>
+                    {" · "}
+                    <span
+                      style={{
+                        color: m.token
+                          ? `var(--color-disposition-${m.token})`
+                          : "var(--color-text-muted)",
+                      }}
+                    >
+                      {m.short}
+                    </span>
+                  </span>
+                ))}
               </span>
             )}
           </div>

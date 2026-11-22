@@ -40,7 +40,13 @@ function line(rows: HeldCopyRow[]): string {
   // Each in-flight clause carries its own leading separator, as the component draws it: it may
   // follow the headline directly when nothing is held.
   const inFlight = summary.inFlight
-    .map((b) => ` · ${b.count} ${b.label} (${heldConditionsText(b, nameFor)})`)
+    .map((b) =>
+      b.dispositions
+        ? ` · ${b.count} ${b.label}: ${b.dispositions
+            .map((m) => `${m.count} ${m.label} (${heldConditionsText(m, nameFor)})`)
+            .join(" · ")}`
+        : ` · ${b.count} ${b.label} (${heldConditionsText(b, nameFor)})`
+    )
     .join("");
   return `${head}${markers ? ` ${markers}` : ""}${inFlight}`;
 }
@@ -84,7 +90,79 @@ describe("summarizeHeldCopies", () => {
         row({ conditionId: "mnh", count: 1, inCollection: true }),
         row({ conditionId: "u", count: 1, deliveryState: "to_sort", forSale: true }),
       ]),
-      "You hold 1: 1 in collection (MNH) · 1 being sorted (U)"
+      "You hold 1: 1 in collection (MNH) · 1 being sorted: 1 to sale (U)"
+    );
+  });
+
+  it("breaks the copies being sorted down by the disposition each was given (#2685)", () => {
+    // The issue's own example: the copy marked *In collection* earlier in the run is named as such,
+    // so the next piece of the stamp is decided against it.
+    assert.equal(
+      line([
+        row({ conditionId: "u", count: 1, forSale: true }),
+        row({ conditionId: "mh", count: 1, deliveryState: "to_sort", inCollection: true }),
+        row({ conditionId: "mnh", count: 1, deliveryState: "to_sort", forSale: true }),
+        row({ conditionId: "u", count: 6, deliveryState: "to_sort", forSale: true }),
+        row({ conditionId: "u", count: 1, deliveryState: "to_sort" }),
+      ]),
+      "You hold 1: 1 for sale (U) · 9 being sorted: 1 to collection (MH) · 7 to sale (1 MNH, 6 U) · 1 not decided (U)"
+    );
+  });
+
+  it("never counts a copy being sorted as held, whatever it is going to", () => {
+    const summary = summarizeHeldCopies(
+      [row({ conditionId: "mh", count: 1, deliveryState: "to_sort", inCollection: true })],
+      ORDER
+    );
+    assert.equal(summary.total, 0);
+    assert.deepEqual(summary.markers, []);
+    assert.equal(
+      line([row({ conditionId: "mh", count: 1, deliveryState: "to_sort", inCollection: true })]),
+      "You hold none · 1 being sorted: 1 to collection (MH)"
+    );
+  });
+
+  it("counts a copy being sorted with two dispositions under each", () => {
+    const [sorting] = summarizeHeldCopies(
+      [
+        row({
+          conditionId: "mnh",
+          count: 1,
+          deliveryState: "to_sort",
+          inCollection: true,
+          forTrade: true,
+        }),
+      ],
+      ORDER
+    ).inFlight;
+    assert.equal(sorting.count, 1);
+    assert.deepEqual(
+      sorting.dispositions?.map((m) => [m.label, m.count]),
+      [
+        ["to collection", 1],
+        ["to trade", 1],
+      ]
+    );
+  });
+
+  it("gives copies in the post or on their way no disposition, whatever their flags say", () => {
+    const summary = summarizeHeldCopies(
+      [
+        row({ conditionId: "mnh", count: 1, deliveryState: "in_transit", inCollection: true }),
+        row({ conditionId: "u", count: 1, deliveryState: "ordered", forSale: true }),
+      ],
+      ORDER
+    );
+    assert.deepEqual(
+      summary.inFlight.map((b) => [b.key, b.dispositions]),
+      [
+        ["inTransit", null],
+        ["ordered", null],
+      ]
+    );
+    assert.equal(
+      line([row({ conditionId: "mnh", count: 1, deliveryState: "in_transit", inCollection: true })]),
+      "You hold none · 1 in the post (MNH)"
     );
   });
 
@@ -96,7 +174,7 @@ describe("summarizeHeldCopies", () => {
         row({ conditionId: "mh", count: 1, deliveryState: "in_transit" }),
         row({ conditionId: "mnh", count: 1, inCollection: true }),
       ]),
-      "You hold 1: 1 in collection (MNH) · 2 being sorted (MNH) · 1 in the post (MH) · 1 on its way (U)"
+      "You hold 1: 1 in collection (MNH) · 2 being sorted: 2 not decided (MNH) · 1 in the post (MH) · 1 on its way (U)"
     );
   });
 
@@ -337,16 +415,24 @@ describe("heldCopyPlace", () => {
     );
   });
 
-  it("gives a copy not yet filed its clause and no disposition, whatever its flags say", () => {
+  it("gives a copy in the post or on its way its clause and no disposition, whatever its flags", () => {
     assert.deepEqual(
       heldCopyPlace(
-        copy({ id: "x", itemNo: 1, conditionId: "mnh", deliveryState: "to_sort", forSale: true })
+        copy({ id: "x", itemNo: 1, conditionId: "mnh", deliveryState: "ordered", forSale: true })
       ),
-      { kind: "inFlight", label: "being sorted", state: "to_sort" }
+      { kind: "inFlight", label: "on its way", state: "ordered", markers: null }
     );
-    assert.deepEqual(
-      heldCopyPlace(copy({ id: "x", itemNo: 1, conditionId: "mnh", deliveryState: "ordered" })),
-      { kind: "inFlight", label: "on its way", state: "ordered" }
-    );
+  });
+
+  it("gives a copy being sorted the disposition it was given at identification (#2685)", () => {
+    const sorted = (flags: Partial<HeldCopyPicture>) => {
+      const place = heldCopyPlace(
+        copy({ id: "x", itemNo: 1, conditionId: "mnh", deliveryState: "to_sort", ...flags })
+      );
+      return place.kind === "inFlight" ? place.markers?.map((m) => m.short) : undefined;
+    };
+    assert.deepEqual(sorted({ inCollection: true }), ["collection"]);
+    assert.deepEqual(sorted({ forSale: true, forTrade: true }), ["sale", "trade"]);
+    assert.deepEqual(sorted({}), ["not decided"]);
   });
 });

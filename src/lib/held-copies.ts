@@ -63,6 +63,39 @@ export const HELD_MARKERS = [
 
 export type HeldMarkerKey = (typeof HELD_MARKERS)[number]["key"];
 
+/** The same four markers as the copies **being sorted** were given them at identification (#2685),
+ *  worded as an intent — *to collection* — since the copy is not filed under it yet. `short` is the
+ *  word a thumbnail sets beside *sorting*. Only the `to_sort` bucket is broken down this way: a copy
+ *  in the post or on its way has its disposition unset by auction settlement, and listing markers
+ *  there would present a blank as a decision, while a copy being sorted was identified here and its
+ *  disposition *was* chosen — the very thing the next piece of the same stamp is decided against. */
+export const SORTING_MARKERS = [
+  { key: "inCollection", token: "collection", label: "to collection", short: "collection" },
+  { key: "forSale", token: "sale", label: "to sale", short: "sale" },
+  { key: "forTrade", token: "trade", label: "to trade", short: "trade" },
+  { key: "unmarked", token: null, label: "not decided", short: "not decided" },
+] as const satisfies readonly {
+  key: HeldMarkerKey;
+  token: "collection" | "sale" | "trade" | null;
+  label: string;
+  short: string;
+}[];
+
+export type SortingMarker = (typeof SORTING_MARKERS)[number];
+
+/** The markers a copy carries, in the given vocabulary's order — `unmarked` when it carries none.
+ *  A copy with two dispositions is under both: the markers overlap, they do not partition. */
+function carriedMarkers<M extends { key: HeldMarkerKey }>(
+  vocabulary: readonly M[],
+  flags: { inCollection: boolean; forSale: boolean; forTrade: boolean }
+): M[] {
+  return vocabulary.filter((m) =>
+    m.key === "unmarked"
+      ? !flags.inCollection && !flags.forSale && !flags.forTrade
+      : flags[m.key as "inCollection" | "forSale" | "forTrade"]
+  );
+}
+
 /** One marker's figure and the conditions behind it. */
 export interface HeldMarker {
   key: HeldMarkerKey;
@@ -75,10 +108,11 @@ export interface HeldMarker {
   conditions: HeldConditionCount[];
 }
 
-/** One clause about copies that are bought but not yet filed — count and conditions, and
- *  deliberately no disposition markers. An in-flight copy's disposition is unset (auction
- *  settlement writes all three flags false) or provisional, so listing markers there would dress a
- *  blank up as a decision. */
+/** One clause about copies that are bought but not yet filed — count and conditions. Copies in the
+ *  post or on their way carry deliberately no disposition markers: an in-flight copy's disposition
+ *  is unset (auction settlement writes all three flags false) or provisional, so listing markers
+ *  there would dress a blank up as a decision. Copies **being sorted** are the exception (#2685) —
+ *  identified here, their disposition chosen then — and are broken down in `dispositions`. */
 export interface InFlightCopies {
   key: Exclude<CopyDeliveryBucket, "held">;
   state: DeliveryState;
@@ -86,6 +120,10 @@ export interface InFlightCopies {
   label: string;
   count: number;
   conditions: HeldConditionCount[];
+  /** For copies **being sorted** only (#2685): the same copies by the disposition each was given at
+   *  identification, in {@link SORTING_MARKERS} order and only where something sits. They overlap
+   *  as the delivered markers do. Null for the other buckets, whose disposition says nothing yet. */
+  dispositions: HeldMarker[] | null;
 }
 
 export interface HeldCopiesSummary {
@@ -127,53 +165,61 @@ export function summarizeHeldCopies(
           (rank.get(b.conditionId) ?? Number.MAX_SAFE_INTEGER)
       );
 
+  /** Add a row's copies to a condition tally, keyed by whatever the caller groups by. */
+  const add = <K>(tallies: Map<K, Map<string, number>>, key: K, row: HeldCopyRow) => {
+    let byCondition = tallies.get(key);
+    if (!byCondition) {
+      byCondition = new Map();
+      tallies.set(key, byCondition);
+    }
+    byCondition.set(row.conditionId, (byCondition.get(row.conditionId) ?? 0) + row.count);
+  };
+  /** The markers something sits under, in the vocabulary's order, each with its conditions. */
+  const markersOf = (
+    vocabulary: readonly { key: HeldMarkerKey; token: HeldMarker["token"]; label: string }[],
+    tallies: Map<HeldMarkerKey, Map<string, number>>
+  ): HeldMarker[] =>
+    vocabulary.flatMap((marker) => {
+      const byCondition = tallies.get(marker.key);
+      if (!byCondition) return [];
+      const conditions = ordered(byCondition);
+      return [
+        {
+          key: marker.key,
+          token: marker.token,
+          label: marker.label,
+          count: conditions.reduce((sum, c) => sum + c.count, 0),
+          conditions,
+        },
+      ];
+    });
+
   const perMarker = new Map<HeldMarkerKey, Map<string, number>>();
   const perBucket = new Map<CopyDeliveryBucket, Map<string, number>>();
+  const perSortingMarker = new Map<HeldMarkerKey, Map<string, number>>();
   let total = 0;
 
   for (const row of rows) {
     const bucket = copyDeliveryBucket(row.deliveryState);
     if (bucket !== "held") {
-      // Count and conditions only. The disposition of a copy that has not arrived is unset or
-      // provisional, so a marker on it would be a blank dressed up as a decision.
-      let byCondition = perBucket.get(bucket);
-      if (!byCondition) {
-        byCondition = new Map();
-        perBucket.set(bucket, byCondition);
+      add(perBucket, bucket, row);
+      // A copy being sorted was identified here, and its disposition chosen then (#2685). The
+      // other buckets stay count and conditions only: a copy that has not arrived has its
+      // disposition unset or provisional, and a marker on it would be a blank dressed up as a
+      // decision.
+      if (bucket === "toSort") {
+        for (const marker of carriedMarkers(SORTING_MARKERS, row)) {
+          add(perSortingMarker, marker.key, row);
+        }
       }
-      byCondition.set(row.conditionId, (byCondition.get(row.conditionId) ?? 0) + row.count);
       continue;
     }
 
     total += row.count;
-    const carried = HELD_MARKERS.filter((m) =>
-      m.key === "unmarked"
-        ? !row.inCollection && !row.forSale && !row.forTrade
-        : row[m.key as "inCollection" | "forSale" | "forTrade"]
-    );
-    for (const marker of carried) {
-      let byCondition = perMarker.get(marker.key);
-      if (!byCondition) {
-        byCondition = new Map();
-        perMarker.set(marker.key, byCondition);
-      }
-      byCondition.set(row.conditionId, (byCondition.get(row.conditionId) ?? 0) + row.count);
-    }
+    for (const marker of carriedMarkers(HELD_MARKERS, row)) add(perMarker, marker.key, row);
   }
 
-  const markers: HeldMarker[] = [];
-  for (const marker of HELD_MARKERS) {
-    const byCondition = perMarker.get(marker.key);
-    if (!byCondition) continue;
-    const conditions = ordered(byCondition);
-    markers.push({
-      key: marker.key,
-      token: marker.token,
-      label: marker.label,
-      count: conditions.reduce((sum, c) => sum + c.count, 0),
-      conditions,
-    });
-  }
+  const markers = markersOf(HELD_MARKERS, perMarker);
 
   const inFlight: InFlightCopies[] = [];
   for (const bucket of IN_FLIGHT_COPY_BUCKETS) {
@@ -186,6 +232,7 @@ export function summarizeHeldCopies(
       label: bucket.clause,
       count: conditions.reduce((sum, c) => sum + c.count, 0),
       conditions,
+      dispositions: bucket.key === "toSort" ? markersOf(SORTING_MARKERS, perSortingMarker) : null,
     });
   }
 
@@ -288,26 +335,30 @@ export function tracePhotoScan(
  * Where a held copy is and what it is held for, worded as #562's line words it — the markers for a
  * copy that has arrived and been filed, the bucket's clause for one that has not.
  *
- * An in-flight copy gets **no disposition**, for the line's own reason: its flags are unset
- * (auction settlement writes all three false) or provisional, and a marker there would be a blank
- * dressed up as a decision.
+ * A copy in the post or on its way gets **no disposition**, for the line's own reason: its flags
+ * are unset (auction settlement writes all three false) or provisional, and a marker there would be
+ * a blank dressed up as a decision. A copy **being sorted** gets the disposition it was given at
+ * identification (#2685), worded as an intent — `markers` — and null on the other two.
  */
 export function heldCopyPlace(copy: HeldCopyPicture):
   | { kind: "held"; markers: (typeof HELD_MARKERS)[number][] }
-  | { kind: "inFlight"; label: string; state: DeliveryState } {
+  | {
+      kind: "inFlight";
+      label: string;
+      state: DeliveryState;
+      markers: SortingMarker[] | null;
+    } {
   const bucket = copyDeliveryBucket(copy.deliveryState);
   if (bucket !== "held") {
     const flight = IN_FLIGHT_COPY_BUCKETS.find((b) => b.key === bucket)!;
-    return { kind: "inFlight", label: flight.clause, state: flight.state };
+    return {
+      kind: "inFlight",
+      label: flight.clause,
+      state: flight.state,
+      markers: bucket === "toSort" ? carriedMarkers(SORTING_MARKERS, copy) : null,
+    };
   }
-  return {
-    kind: "held",
-    markers: HELD_MARKERS.filter((m) =>
-      m.key === "unmarked"
-        ? !copy.inCollection && !copy.forSale && !copy.forTrade
-        : copy[m.key]
-    ),
-  };
+  return { kind: "held", markers: carriedMarkers(HELD_MARKERS, copy) };
 }
 
 /**

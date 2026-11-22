@@ -1891,7 +1891,9 @@ stamps first, then the other stamps of its issue — and **its own details**.
   *no condition*.
 - **Every row with a stamp shows what you already hold of it**, on a second line, worded as the
   single tile's line is — *You hold 2: 1 in collection (MNH) · 1 for sale (MH)*, with copies on their
-  way or being sorted in clauses of their own, and *You hold none of this yet* when there is none.
+  way or being sorted in clauses of their own — the ones being sorted split by the disposition each
+  was given, *to collection*, *to sale*, *to trade* or *not decided* — and *You hold none of this
+  yet* when there is none.
   *Compare with it…* opens the same comparison as for a single tile, with that row's tile on the
   left — and from there, the copy number above the right-hand viewer opens a held copy's own page in
   a new tab. The line follows the row's stamp: a correction reads the new stamp at once, and a row cleared
@@ -2511,12 +2513,22 @@ received are counted too — they are bought, and forgetting them is how you buy
 - *You hold none · 1 on its way (MNH)* — a stamp won at auction and still in the post. This is the
   case worth spelling out: the copy is recorded, so a plain count would say *you hold 1* while you
   stand there with the only physical copy of it in your tweezers.
-- *You hold 1: 1 in collection (MNH) · 1 being sorted (U)* — *being sorted* is a copy that has
-  arrived and is not filed yet, which is both the other parcel on your desk and the piece you
-  entered from this very stockbook ten minutes ago. Neither *held* nor *coming*, so it is neither.
+- *You hold 1: 1 in collection (MNH) · 9 being sorted: 1 to collection (MH) · 7 to sale (1 MNG,
+  6 U) · 1 not decided (U)* — *being sorted* is a copy that has arrived and is not filed yet, which
+  is both the other parcel on your desk and the piece you entered from this very stockbook ten
+  minutes ago. Neither *held* nor *coming*, so it is neither.
 
-Those clauses carry no disposition, because a copy that has not arrived has not been filed anywhere
-yet, and they do not say which order a copy belongs to — the useful fact is where it is. The line
+Copies **being sorted** are split by the disposition you gave each of them when you identified it —
+*to collection*, *to sale*, *to trade*, or *not decided* for one you gave none — each with its count
+and conditions. So when the same stamp comes up again later in a large set of scans, the line tells
+you that one of them is already going to the collection, without going back through the run. A copy
+you gave two dispositions is counted under each. They still do not count towards *You hold*: a copy
+going to the collection is not in it yet. Change a copy's disposition and the next piece or row
+reads the new one.
+
+Copies **in the post** or **on their way** carry no disposition, because a copy that has not arrived
+has not been decided on yet — a copy won at auction has none at all until you sort it. No clause
+says which order a copy belongs to — the useful fact is where it is. The line
 counts the **same copies** as the copies-held badge on the catalogue lists (sold copies, copies you
 no longer hold and copies that never arrived are left out of both); what differs is that the badge
 gives one number and this line splits it, because *hold* is a claim and the badge is a count.
@@ -2556,7 +2568,10 @@ large as your browser window, split into two equal halves:
 **Your collection's copies, at a glance.** Under the line, the step also shows **thumbnails of the
 copies you hold in your collection**, followed by **the copies still being sorted** — often the other
 copy from the same stockbook, the one the piece in hand most needs comparing with. Those are marked
-*being sorted* under their chips, in the line's colour for them. Copies for sale, for trade, with no
+*sorting* under their chips, in the line's colour for them, with the disposition each was given
+beside it — *sorting · collection*, *sorting · sale*, *sorting · not decided*. A copy being sorted
+that is going to your collection is **framed in the collection's colour**, so it stands out in the
+strip. Copies for sale, for trade, with no
 disposition, in the post or on their way are left to the line and the comparison, and the piece you
 are identifying is never one of the thumbnails. Each carries its condition chip, and its
 certificate chip when it has one; hover one to enlarge it, click it to open the comparison above
