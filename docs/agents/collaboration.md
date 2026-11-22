@@ -310,8 +310,10 @@ skipped. Say in the report how you told them apart.
 *(Local-only.)* On the owner's machine `docker` lives at `~/.orbstack/bin`, and an empty
 `command -v docker` is a fact about this shell's PATH, not about the machine:
 `PATH="$HOME/.orbstack/bin:$PATH" pnpm test:integration`. A cloud thread's VM has `docker` on its
-PATH; there, an absent `docker` or a daemon that is not running is the environment's defect
-(its setup is #2688) and is reported.
+PATH, but its daemon is started by the environment's setup script, and a resumed session can find it
+gone: start it as [`cloud-environment.md`](cloud-environment.md) § *Running the suites in a thread*
+says (#2688). An absent `docker`, or a daemon that will not start that way, is the environment's
+defect and is reported.
 
 ## No browser verification — a deliberate departure
 
