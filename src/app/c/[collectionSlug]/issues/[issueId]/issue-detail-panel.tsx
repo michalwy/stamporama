@@ -527,6 +527,7 @@ function ChecklistsCard({
   onManage: () => void;
 }) {
   const checklists = issue.checklists;
+  const hasMarkColumn = checklists.some((c) => c.kind === "specialised");
   return (
     <DetailCard
       title="Checklists"
@@ -550,7 +551,7 @@ function ChecklistsCard({
           create one.
         </EmptyNote>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div style={checklistsCardGrid(hasMarkColumn)}>
           {checklists.map((c) => {
             const grid = completeness.checklists.find((g) => g.checklistId === c.id);
             const active = selected.length === 1 && selected[0] === c.id;
@@ -561,6 +562,7 @@ function ChecklistsCard({
                 grid={grid}
                 active={active}
                 disabled={filterDisabled}
+                hasMarkColumn={hasMarkColumn}
                 onClick={() => onSelect(active ? [] : [c.id])}
               />
             );
@@ -571,17 +573,41 @@ function ChecklistsCard({
   );
 }
 
+/**
+ * The card's rows line their figures up in columns (#2683): every row is a subgrid on one grid, so
+ * the stamp count, the progress and the value sit on the same tracks from row to row instead of
+ * each row laying them out from its right edge. A column is as wide as its widest entry in the card;
+ * a row with nothing in a cell leaves it empty and the rest stay put. The name keeps what is left.
+ *
+ * The columns: name · specialised mark (only when some checklist is specialised) · count · progress ·
+ * value · *N/M priced*. Spacing is each cell's left padding rather than a column gap, so the value
+ * and its *priced* stay as close together as they were in one span, and a mark column that would be
+ * empty is not there at all to leave a gap.
+ */
+function checklistsCardGrid(hasMarkColumn: boolean): React.CSSProperties {
+  return {
+    display: "grid",
+    gridTemplateColumns: `minmax(0, 1fr)${hasMarkColumn ? " auto" : ""} auto auto auto auto`,
+  };
+}
+
+/** Left padding of a figure cell: the gap the flex row used to put between its items. */
+const CELL_GAP = "0.625rem";
+
 function ChecklistsCardRow({
   checklist,
   grid,
   active,
   disabled,
+  hasMarkColumn,
   onClick,
 }: {
   checklist: IssueChecklistTotals;
   grid: ChecklistCompleteness | undefined;
   active: boolean;
   disabled: boolean;
+  /** Whether the card has a specialised-mark column; the row then fills it, empty or not. */
+  hasMarkColumn: boolean;
   onClick: () => void;
 }) {
   const headline = grid ? headlineCompleteness(grid) : null;
@@ -589,9 +615,10 @@ function ChecklistsCardRow({
   return (
     <div
       style={{
-        display: "flex",
+        display: "grid",
+        gridColumn: "1 / -1",
+        gridTemplateColumns: "subgrid",
         alignItems: "center",
-        gap: "0.625rem",
         padding: "0.375rem 0.5rem",
         borderTop: "1px solid var(--color-border)",
         background: active ? "var(--color-accent-soft)" : undefined,
@@ -605,7 +632,7 @@ function ChecklistsCardRow({
               ? "Show every stamp in the tree again."
               : `Show only the stamps on ${checklist.name} in the tree below.`
         }
-        style={{ flex: 1, minWidth: 0 }}
+        style={{ minWidth: 0 }}
       >
         <button
           type="button"
@@ -631,9 +658,15 @@ function ChecklistsCardRow({
           {checklist.name}
         </button>
       </Tooltip>
-      <SpecialisedMark kind={checklist.kind} />
+      {hasMarkColumn && (
+        <span style={{ paddingLeft: CELL_GAP, display: "inline-flex" }}>
+          <SpecialisedMark kind={checklist.kind} />
+        </span>
+      )}
       <span
         style={{
+          paddingLeft: CELL_GAP,
+          justifySelf: "end",
           fontSize: "0.75rem",
           color: "var(--color-text-muted)",
           fontVariantNumeric: "tabular-nums",
@@ -642,26 +675,31 @@ function ChecklistsCardRow({
       >
         {checklist.stampCount} stamp{checklist.stampCount !== 1 ? "s" : ""}
       </span>
-      {headline && (
-        <Tooltip
-          content={`${headline.owned} of ${checklist.stampCount} stamps held, in any disposition and condition · ${
-            headline.completeSets
-          } complete ${headline.completeSets === 1 ? "set" : "sets"}. The Completeness card breaks it down.`}
-        >
-          <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
-            {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
-            {headline.owned}/{checklist.stampCount}
-            {headline.completeSets > 0 && ` ×${headline.completeSets}`}
-          </span>
-        </Tooltip>
-      )}
-      {checklist.priceTotal && (
-        <ChecklistValue
-          total={checklist.priceTotal}
-          stale={checklist.priceStale}
-          scope="on this checklist"
-        />
-      )}
+      <span style={{ paddingLeft: CELL_GAP, justifySelf: "center", display: "inline-flex" }}>
+        {headline && (
+          <Tooltip
+            content={`${headline.owned} of ${checklist.stampCount} stamps held, in any disposition and condition · ${
+              headline.completeSets
+            } complete ${headline.completeSets === 1 ? "set" : "sets"}. The Completeness card breaks it down.`}
+          >
+            <span style={complete ? SET_COMPLETENESS_CHIP_COMPLETE : SET_COMPLETENESS_CHIP}>
+              {complete && <Icon name="check" size="sm" style={{ marginRight: "0.2rem" }} />}
+              {headline.owned}/{checklist.stampCount}
+              {headline.completeSets > 0 && ` ×${headline.completeSets}`}
+            </span>
+          </Tooltip>
+        )}
+      </span>
+      <span style={{ paddingLeft: CELL_GAP, justifySelf: "end", display: "inline-flex" }}>
+        {checklist.priceTotal && (
+          <ChecklistValueAmount total={checklist.priceTotal} stale={checklist.priceStale} />
+        )}
+      </span>
+      <span style={{ paddingLeft: "0.25rem", justifySelf: "end", display: "inline-flex" }}>
+        {checklist.priceTotal && (
+          <ChecklistValuePriced total={checklist.priceTotal} scope="on this checklist" />
+        )}
+      </span>
     </div>
   );
 }
@@ -680,27 +718,44 @@ function ChecklistValue({
 }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+      <ChecklistValueAmount total={total} stale={stale} />
+      <ChecklistValuePriced total={total} scope={scope} />
+    </span>
+  );
+}
+
+/** The value itself — the figure, its converted twin and the older-edition mark. The Checklists
+ *  card draws it in a column of its own (#2683). */
+function ChecklistValueAmount({ total, stale }: { total: IssuePriceTotal; stale: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", whiteSpace: "nowrap" }}>
       <span style={PRICE_MAIN}>{moneyPrimaryText(total)}</span>
       {moneySecondaryText(total) && (
         <span style={PRICE_CONVERTED}>{moneySecondaryText(total)}</span>
       )}
       {stale && <StalePriceIcon />}
-      <Tooltip
-        content={`${total.pricedCount} of ${total.requiredCount} stamps ${scope} are priced${
-          total.estimatedCount
-            ? `; ${total.estimatedCount} rolled up from a variant child (estimate)`
-            : ""
-        }${
-          total.derivedCount
-            ? `; ${total.derivedCount} derived from the single by a format multiplier`
-            : ""
-        }.`}
-      >
-        <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-          {total.pricedCount}/{total.requiredCount} priced
-        </span>
-      </Tooltip>
     </span>
+  );
+}
+
+/** *N/M priced*, with what the count leaves out in its tooltip. */
+function ChecklistValuePriced({ total, scope }: { total: IssuePriceTotal; scope: string }) {
+  return (
+    <Tooltip
+      content={`${total.pricedCount} of ${total.requiredCount} stamps ${scope} are priced${
+        total.estimatedCount
+          ? `; ${total.estimatedCount} rolled up from a variant child (estimate)`
+          : ""
+      }${
+        total.derivedCount
+          ? `; ${total.derivedCount} derived from the single by a format multiplier`
+          : ""
+      }.`}
+    >
+      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+        {total.pricedCount}/{total.requiredCount} priced
+      </span>
+    </Tooltip>
   );
 }
 
