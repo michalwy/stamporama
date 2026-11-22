@@ -32,7 +32,7 @@ list; read it there rather than remembering what you started.
 
 **A ready issue has no open *Depends on*.** Read the *Depends on* section of each issue — body and
 comments, since a dependency can be added in either
-([`collaboration.md`](collaboration.md) § *One session owns one issue*) — and look up every issue it
+([`collaboration.md`](collaboration.md) § *One session owns its issues*) — and look up every issue it
 names:
 
 ```bash
@@ -43,15 +43,19 @@ gh api $R/issues/<dep> --jq '"#\(.number) \(.state) \(.state_reason)"'
 
 An issue whose dependency is open is **not started**, however high its priority: an idle cloud
 thread is reclaimed, and a thread that starts and then waits for another is the retired lead/worker
-model by the back door ([`collaboration.md`](collaboration.md) § *This is not the retired
+model by the back door ([`collaboration-rationale.md`](collaboration-rationale.md) § *This is not the retired
 lead/worker model*). An issue with an open question for the owner is not ready either — take the
 question to the owner as backlog manager first.
 
 **Not more than one migration in flight.** One thread at a time writes a migration
-([`platform.md`](platform.md)): an issue whose *Scope* says it adds one is not started while another
+([`platform-prisma.md`](platform-prisma.md)): an issue whose *Scope* says it adds one is not started while another
 such issue has a thread or an open pull request.
 
 ## Starting threads
+
+**At most 3 threads at once** (the owner, 2026-11-22, #2700). Count the threads still working in the
+Project's own list before starting another; when three are running, the next ready issue waits for
+one to finish.
 
 Highest priority first (`priority:high`, then `medium`, then `low`, then unlabelled); **product
 first** — process and documentation work fills a gap, it is never what the queue is made of.
@@ -59,34 +63,42 @@ first** — process and documentation work fills a gap, it is never what the que
 **Group by whether one issue has to point at what another is moving** — not by whether they land in
 the same file or the same section. Two issues 900 lines apart in one document collide with nothing
 and get a thread each. Issues that do share a file go to **one** thread, which holds them all
-([`collaboration.md`](collaboration.md) § *One session owns one issue*).
+([`collaboration.md`](collaboration.md) § *One session owns its issues*). **Small, related issues from
+the same area are bundled into one thread as well** (the owner, 2026-11-22, #2700) — a thread's
+context costs the same whether it carries one small issue or three, so three small `ui-patterns`
+fixes are one thread, not three. Each keeps its own `Refs #NNN` and closing comment.
 
 **Every thread is told, and nothing else is its brief:**
 
-- the issue number (or numbers), and its role — task, reviewer or release;
+- the issue number (or numbers), and its role — task or release;
 - its branch, and that it opens one pull request with `Refs #NNN` and never a closing keyword;
 - that it **asks the owner nothing**: an undecided point gets the most reasonable reading, recorded
   in the pull request under *Decisions taken without the owner*;
 - that `gh issue`, `gh pr`, `gh run` and `gh release` do not work in a cloud thread — use `gh api`
   (REST) or the built-in GitHub tools ([`collaboration.md`](collaboration.md) § *GitHub from a cloud
   thread*);
-- that it **never deploys**, and a task thread never merges.
+- that it **never deploys**;
+- that a task thread **waits for CI with one call** (`scripts/ci/wait-for-checks.sh <PR>`), runs the
+  guardrail checklist, records it in the pull request, **merges its own pull request**, reads
+  `main`'s run and closes the issue — or, when a guardrail is crossed without the owner's recorded
+  decision, does not merge and reports ([`merge-checklist.md`](merge-checklist.md));
+- that its **final reply is at most 5 lines**: the result, the link, a question if there is one.
 
 The issue is the specification; do not restate it in the brief, where it would drift from the
 issue.
 
-**For every pull request a task thread opens, start a reviewer thread** for it
-([`reviewer.md`](reviewer.md)). **After every merge or closed issue**, measure again and start what
-became ready.
+**There are no reviewer threads** (the owner, 2026-11-22, #2700): the author merges. **After every
+merge or closed issue**, measure again and start what became ready.
 
-**Route the reviewer's verdict.** A reviewer reports to you, never to the author thread
-(the owner, 2026-11-22):
+**Route what a thread reports** (the owner, 2026-11-22):
 
-- **changes needed**, or a **request to rebase** a pull request carrying a migration: send it to the
-  author thread — the pull request number and the review's link, nothing more. **If that thread is
-  gone, start a new thread on the same pull request** (same issue, same branch) to take it over.
-  When a new head is pushed, start the review again.
-- **merged**: the reviewer has already closed the issue; measure again and start what became ready.
+- **merged**: the author has already closed the issue; measure again and start what became ready.
+- **blocked on a guardrail** — the pull request crosses one and its issue records no decision: take
+  it to the owner; once he decides, record the decision in the issue and send the thread (or a new
+  thread on the same pull request, if it is gone) the pull request number.
+- **a red `main`**: tell the owner at once; the fix goes forward in its own issue.
+- **an open pull request whose thread is gone**: start a new thread on the same pull request (same
+  issue, same branch) to take it over.
 - **a question for the owner**: take it to him, one at a time.
 
 ## Report to the owner
@@ -129,5 +141,5 @@ opened look identical from outside, so check that the weekly batch actually appe
 none has in a fortnight.
 
 Report what you find and stop there — **Renovate stays as it is** (the owner, 2026-11-22): do not
-merge, close or rebase a Renovate pull request, start no reviewer thread for one, and do not edit
+merge, close or rebase a Renovate pull request, start no thread for one, and do not edit
 `renovate.json` as part of a review.

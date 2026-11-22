@@ -45,15 +45,14 @@ This is now the only place those questions are asked (the owner, 2026-11-22). A 
 undecided point takes the most reasonable reading and records it under *Decisions taken without the
 owner* in its pull request — fine for a naming or a layout, wrong for a domain rule. So **settle every
 domain decision before the issue is written, and record it in the issue's *Decisions*, dated and
-attributed to the owner.** A reviewer reads the issue for exactly that: a domain choice a thread made
-alone is a pull request beyond its issue, and it does not merge.
+attributed to the owner.** The author thread reads the issue for exactly that before it merges: a
+domain choice a thread made alone is a pull request beyond its issue, and it does not merge.
 
-**Record the guardrail decisions too.** A reviewer never merges a pull request that crosses a hard
+**Record the guardrail decisions too.** No thread merges a pull request that crosses a hard
 guardrail — removes or weakens tests, thresholds, strictness, required checks or rulesets; changes
 secrets handling, deployment credentials or the deploy workflow's triggers; adds a destructive Prisma
 migration; changes what is sent to or published on an external marketplace or service — **unless its
-issue records the owner's decision to do it** ([`reviewer.md`](reviewer.md) § *The hard
-guardrails*). When the owner wants one of those, the issue says so in those words.
+issue records the owner's decision to do it** ([`merge-checklist.md`](merge-checklist.md) § 2). When the owner wants one of those, the issue says so in those words.
 
 ## The shape of an issue
 
@@ -70,8 +69,8 @@ guardrails*). When the owner wants one of those, the issue says so in those word
 ### Done when      the criterion the thread verifies against, naming the suites
 ```
 
-**`Done when` is the specification.** It is what the thread verifies against and what the reviewer
-reads before merging, so it must be checkable rather than aspirational, and it names the suites that
+**`Done when` is the specification.** It is what the thread verifies against and what the author
+checks before merging, so it must be checkable rather than aspirational, and it names the suites that
 have to pass.
 
 **All GitHub content is in English** — issue titles, bodies, comments and commits — even when the
@@ -97,8 +96,8 @@ comment to say what changed and why.
 
 ## What the backlog manager does not do
 
-It does not close issues that were implemented — the reviewer that merged the pull request writes
-the closing comment ([`reviewer.md`](reviewer.md)). It does not merge, tag or release. If an issue cannot be created, report that and stop.
+It does not close issues that were implemented — the thread that merged the pull request writes
+the closing comment ([`merge-checklist.md`](merge-checklist.md) § 6). It does not merge, tag or release. If an issue cannot be created, report that and stop.
 Creating one is REST:
 
 ```bash

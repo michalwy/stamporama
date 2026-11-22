@@ -16,7 +16,7 @@ the owner pastes into it, where each version comes from, and how a thread runs e
 - **What the image brings and what it does not.** The image ships Node 22 on the PATH
   (`/opt/node22/bin`, first in `/etc/profile.d/nodejs.sh`) with a global pnpm, nvm in `/opt/nvm`,
   and Docker 29 with the compose plugin — **installed, not running**. Node 22 is the wrong version
-  for this repository and its corepack cannot launch pnpm 12 ([`platform.md`](platform.md), #1050);
+  for this repository and its corepack cannot launch pnpm 12 ([`platform-toolchain.md`](platform-toolchain.md), #1050);
   the Docker daemon has to be started; `service docker start` dies on `ulimit: error setting limit
   (Operation not permitted)` in the VM, while `dockerd` started directly works. The setup script
   below fixes all three.
@@ -90,7 +90,7 @@ the setting never needs re-pasting for it.
 | corepack | ships with that Node; Node 24.22.0 carries 0.36.0, past the 0.35 that pnpm 12 needs | 0.36.0 |
 | Docker images | `docker compose -f docker-compose.e2e.yml config --images` | `postgres:18-alpine` |
 
-So this adds **no pin**: [`platform.md`](platform.md)'s count of Node pins (Dockerfile, the
+So this adds **no pin**: [`platform-toolchain.md`](platform-toolchain.md)'s count of Node pins (Dockerfile, the
 `setup-node` steps, the `renovate.json` rule) and its single pnpm pin still hold. The clone the
 script reads is the default branch as the session started, which is the `main` a task branches from.
 
