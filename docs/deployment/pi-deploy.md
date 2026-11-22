@@ -42,13 +42,37 @@ says where on the Pi to look.
 The Pi already runs a runner for another repository; this is a **second runner instance**, in its own
 directory, registered to `michalwy/stamporama` only.
 
+**The runner runs the deploy and nothing else.** Its job-started hook,
+[`scripts/runner-job-started-hook.sh`](../../scripts/runner-job-started-hook.sh) (#2697), runs before
+every job it picks up and fails the job, before any step, unless the job is `deploy.yml` from
+`michalwy/stamporama`, at a `v*` tag or at `main`, started by a published release or a manual run.
+**The hook is installed before the runner is registered**, so the runner never accepts a job
+without it.
+
 1. On GitHub: **Settings → Actions → Runners → New self-hosted runner**, Linux, ARM64. Keep the page
    open for its download URL and registration token.
-2. On the Pi, as the user the runner will run as:
+2. On the Pi, **install the hook** outside the runner's directory, owned by root so that the runner's
+   user cannot change it, and point the runner at it:
 
    ```bash
+   sudo mkdir -p /usr/local/lib/stamporama
+   curl -fsSL https://raw.githubusercontent.com/michalwy/stamporama/main/scripts/runner-job-started-hook.sh \
+     -o /tmp/runner-job-started-hook.sh
+   less /tmp/runner-job-started-hook.sh    # read it: it is short, and it guards the Pi
+   sudo install -o root -g root -m 0755 /tmp/runner-job-started-hook.sh \
+     /usr/local/lib/stamporama/runner-job-started-hook.sh
+
    mkdir ~/actions-runner-stamporama && cd ~/actions-runner-stamporama
+   echo 'ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/lib/stamporama/runner-job-started-hook.sh' >> .env
+   ```
+
+   The runner reads `.env` in its own directory when it starts. Registering keeps the line:
+   `config.sh` only appends the variables it does not find there.
+3. Still in `~/actions-runner-stamporama`, as the user the runner will run as:
+
+   ```bash
    # download and unpack the archive exactly as the GitHub page shows, then:
+   grep ACTIONS_RUNNER_HOOK_JOB_STARTED .env    # the hook is there before the runner exists
    ./config.sh --url https://github.com/michalwy/stamporama --token <token from the page> \
      --name pi-stamporama --labels pi,stamporama --work _work --unattended
    sudo ./svc.sh install "$USER"
@@ -57,12 +81,48 @@ directory, registered to `michalwy/stamporama` only.
 
    `self-hosted`, `Linux` and `ARM64` are added automatically, so the runner carries
    `self-hosted,pi,stamporama` — the labels `deploy.yml` asks for.
-3. That user must be able to run `docker` without `sudo` (`sudo usermod -aG docker "$USER"`, then
+4. That user must be able to run `docker` without `sudo` (`sudo usermod -aG docker "$USER"`, then
    restart the service) and to **read and write** the installation directory and its `.env`.
-4. The runner's environment must **not** set `COMPOSE_PROJECT_NAME` or `COMPOSE_FILE`; the deploy
+5. The runner's environment must **not** set `COMPOSE_PROJECT_NAME` or `COMPOSE_FILE`; the deploy
    takes both from the installation, and refuses when the project name would differ.
 
 The runner shows as *Idle* under **Settings → Actions → Runners** when it is ready.
+
+#### A runner that is already registered
+
+When the runner was registered before the hook existed, add the hook and restart the runner — it
+reads `.env` only when it starts:
+
+```bash
+# install the hook to /usr/local/lib/stamporama/ as in step 2, then:
+cd ~/actions-runner-stamporama
+grep -q '^ACTIONS_RUNNER_HOOK_JOB_STARTED=' .env \
+  || echo 'ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/lib/stamporama/runner-job-started-hook.sh' >> .env
+sudo ./svc.sh stop
+sudo ./svc.sh start
+```
+
+A job already running when the service stops is cancelled, so do it while **Actions → Deploy** has
+nothing in progress. To update the hook later, repeat the `curl`, read it and `install` it again; no
+restart is needed, because the runner runs the file anew for every job.
+
+#### Checking that the hook is active
+
+1. **It refuses what it should**, on the Pi:
+
+   ```bash
+   env -i GITHUB_REPOSITORY=michalwy/stamporama GITHUB_EVENT_NAME=pull_request \
+     GITHUB_WORKFLOW_REF=michalwy/stamporama/.github/workflows/ci.yml@refs/heads/main \
+     /usr/local/lib/stamporama/runner-job-started-hook.sh; echo "exit $?"
+   ```
+
+   It prints one *Refused…* line and `exit 1`.
+2. **The runner calls it.** Start a manual **Actions → Deploy** run with the version that is already
+   running (see [the first deploy](#the-first-deploy-and-how-to-check-it)). Near the top of the job's
+   log, GitHub says a job started hook was configured by the runner's administrator, followed by the
+   hook's line *Accepted by the Pi's job-started hook (#2697): …deploy.yml@refs/heads/main on
+   workflow_dispatch.* No such line means the runner did not read the hook: check `.env` and restart
+   the service.
 
 ### 2. The `prod` environment
 
@@ -90,9 +150,18 @@ contributors**: choose **Require approval for all external contributors**. Agent
 fork's workflow run.
 
 Why it matters even though only `deploy.yml` may use the Pi's runner: a self-hosted runner runs
-whatever the job's commit says, and this repository is public. CI enforces the other half —
-`scripts/check-self-hosted-runners.mjs`, run in the required `Unit tests` check, fails when any
-workflow other than `deploy.yml` could reach a self-hosted runner.
+whatever the job's commit says, and this repository is public. Two other things guard the Pi, and
+neither replaces this setting:
+
+- **CI keeps such a workflow off `main`.** `scripts/check-self-hosted-runners.mjs`, run in the
+  required `Unit tests` check, fails when any workflow other than `deploy.yml` could reach a
+  self-hosted runner. It **does not stop that workflow from running**: a `pull_request` run uses the
+  workflow files from the pull request's own head, so a pull request that adds
+  `runs-on: [self-hosted, pi, stamporama]` to `ci.yml` would get its job onto the Pi in the same run
+  where the check goes red. That is true of a pull request from any branch of this repository —
+  every agent thread's is one — which no approval setting covers.
+- **The runner's job-started hook is what stops it running** (step 1 above): every job that is not
+  the deploy fails before its first step.
 
 ### 4. Turn Watchtower off — just before the first deploy
 
@@ -196,6 +265,7 @@ live in the `stamporama-data` volume (or in Google Cloud Storage) and a deploy d
 | What the run says | What it means | What to do |
 | --- | --- | --- |
 | Queued, never starts | The Pi's runner is offline | Start it (`sudo ./svc.sh start` in its directory). A queued job waits up to 24 hours. |
+| *Refused by the Pi's job-started hook* | The job is not the deploy as the hook defines it — or it is, and something about the run differs from what the hook expects | Read the reason on that line. A job from a pull request or another workflow is meant to be refused. For a release or manual Deploy run, check that it ran from a `v*` tag or `main`. |
 | *Watchtower is still switched on* / *still running* | Step 4 of the setup was not done | Do it, then re-run the job. |
 | *Compose project mismatch* | The deploy would have used another project name — and an empty photo volume | Check `STAMPORAMA_DIR` and that the runner's environment sets no `COMPOSE_PROJECT_NAME`. Nothing was changed. |
 | *pg_dump failed* | The database was unreachable, or its major is newer than the client's | Read `last-dump-error.log` in the backup directory. Nothing was deployed. |
