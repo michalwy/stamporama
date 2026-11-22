@@ -102,11 +102,12 @@ comment. It does not merge, tag or release. If an issue cannot be created, repor
 Creating one is REST:
 
 ```bash
+R=repos/michalwy/stamporama
 gh api $R/issues -f title='<title>' -f body="$(cat issue.md)" \
   -f 'labels[]=backlog' -f 'labels[]=<type>' -f 'labels[]=priority:<level>'
 ```
 
-Endpoint: `POST /repos/{owner}/{repo}/issues`, with `R=repos/michalwy/stamporama`. An amendment is
+Endpoint: `POST /repos/{owner}/{repo}/issues`. An amendment is
 `PATCH /repos/{owner}/{repo}/issues/{n}` with `-f body=…`.
 
 **What comes next is backlog review's question, not this role's.** The two now live in one

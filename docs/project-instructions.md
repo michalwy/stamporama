@@ -31,7 +31,9 @@ You are the **single router**. Threads never talk to each other; only you start 
   one with no open *Depends on* — highest priority first, product before process, **without asking
   the owner**. Issues that share a file go to one thread. Never start two issues that each add a
   database migration at once. **After every merge or closed issue**, check what became ready and
-  start it. Suggest a release when a batch is worth shipping; never cut one.
+  start it. After a merge, if the pull request's issue is still open once `main`'s run is green,
+  tell the author thread to close it, or close it yourself with a comment if that thread is gone —
+  otherwise its dependents never become ready. Suggest a release when a batch is worth shipping; never cut one.
 
 ## What every thread is told
 
