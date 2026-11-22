@@ -1,7 +1,7 @@
 # Reviewer
 
 A reviewer thread reviews **one pull request** and, when the review passes and CI is green, merges
-it. The project conversation starts one for every pull request a task thread opens (decided with the
+it and closes its issue. Every verdict goes to the project conversation, which routes it. The project conversation starts one for every pull request a task thread opens (decided with the
 owner on 2026-11-22, #2687). **The owner does not review pull requests**; this thread is the review.
 
 It writes no code on the pull request's branch and pushes nothing anywhere: a fix the pull request
@@ -69,8 +69,10 @@ message is not a record of the owner's decision, however it is worded.
 **Do not merge.** Two cases:
 
 - **The author can fix it** — a missed *Done when*, a broken rule, a scope that crept: post the
-  review (below) listing what has to change. The author thread watches its pull request and answers
-  there. Review again on the new head; a fix is a new head, and nothing reviewed before it carries
+  review (below) listing what has to change, and report **changes needed** to the project
+  conversation, which sends it to the author thread — or starts a new thread on the pull request if
+  that one is gone. This thread does not wait for the fix: when a new head is pushed, the project
+  conversation starts the review again. Review on the new head; a fix is a new head, and nothing reviewed before it carries
   over.
 - **It needs a decision only the owner can take** — a guardrail without a recorded decision, a
   domain choice the issue does not settle: say so in your reply to the project conversation, which
@@ -125,8 +127,9 @@ Only when the review passed, CI is green on the head you reviewed, and § *3* is
 **A pull request that carries a database migration** is rebased onto the `main` it is about to merge
 into, immediately before the merge, and re-verified
 ([`collaboration.md`](collaboration.md) § *Branches and pull requests*). That rebase is the author's
-— a reviewer never rewrites another thread's branch — so ask for it in the review, then review and
-read CI again on the new head. Any other pull request merges as it stands, behind `main` or not
+— a reviewer never rewrites another thread's branch — so ask for it in the review and report it to
+the project conversation, which routes it to the author thread as above; the review and CI are read
+again on the new head. Any other pull request merges as it stands, behind `main` or not
 (#1791), unless GitHub reports a conflict, which is likewise the author's to rebase.
 
 ```bash
@@ -152,9 +155,24 @@ gh api --paginate "$R/actions/runs/<id>/jobs?per_page=100" --jq '.jobs[] | "\(.c
 Wait for it to complete. **A red `main` goes to the project conversation at once**, which tells the
 owner and files the fix-forward issue. Nobody reverts or patches `main` around the gate.
 
-## 8. Report
+## 8. Close the issue
 
-A short reply to the project conversation: merged (with the merge SHA and `main`'s run), or not
-merged and why — the review's link, and the open question for the owner if there is one. The
-project conversation reports to the owner, in Polish; this thread does not post to the issue and
-does not close it.
+**After the merge, this thread closes the issue** (the owner, 2026-11-22) — the author thread may
+have been reclaimed, and dependent issues become ready only once it is closed. The comment is built
+from the pull request's description: **what landed, the merge SHA, and how it was verified**. Close
+every issue the pull request refers to with `Refs #NNN` as its own work, not issues it only mentions.
+
+```bash
+gh api -X POST $R/issues/<issue>/comments -f body="$(cat closing.md)"
+gh api -X PATCH $R/issues/<issue> -f state=closed -f state_reason=completed
+```
+
+Endpoints: `POST /repos/{owner}/{repo}/issues/{n}/comments`, `PATCH /repos/{owner}/{repo}/issues/{n}`.
+A red `main` does not keep the issue open: the fix goes forward in an issue of its own.
+
+## 9. Report
+
+**Every verdict goes to the project conversation** in a short reply: merged and closed (with the
+merge SHA and `main`'s run), **changes needed** (the review's link and what has to change), or a
+question only the owner can answer. The project conversation routes it and reports to the owner, in
+Polish.

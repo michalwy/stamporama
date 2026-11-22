@@ -33,8 +33,12 @@ return**, and the difference is the point:
 - **The project conversation routes the way the owner used to: by issue.** A thread is told an issue
   number, a role, a branch — and the issue is its whole brief. The specification lives on GitHub,
   not in a message, so there is nothing to relay and nothing to drift.
-- **Threads still never talk to each other.** The only traffic is router → thread at the start and
-  thread → router in its replies. No thread waits on another: only *ready* issues are started.
+- **Threads still never talk to each other.** The only traffic is router → thread and thread →
+  router. Router → thread is the brief at the start **and, later, a routed event on that thread's own
+  work** — a reviewer's *changes needed*, a request to rebase a migration (the owner, 2026-11-22). It
+  carries a fact and a pull request number, never a new brief. No thread waits on another: only
+  *ready* issues are started, and a thread that has gone idle is not kept alive for a later message —
+  see § *Branches and pull requests*.
 
 If a change to these rules starts adding messages between threads, a lead session, or a thread that
 starts and then waits for another, it is rebuilding the retired model. Stop and take it to the owner.
@@ -149,15 +153,10 @@ gh api repos/michalwy/stamporama/issues/<n> --jq '"\(.state)  \(.title)\n\n\(.bo
 gh api --paginate repos/michalwy/stamporama/issues/<n>/comments --jq '.[] | "--- \(.user.login) \(.created_at)\n\(.body)"'
 ```
 
-**Once its pull request has merged, the thread that did the work closes the issue** with a comment
-saying what landed and how it was verified — the reviewer merges, it does not close:
-
-```bash
-gh api -X POST repos/michalwy/stamporama/issues/<n>/comments -f body="$(cat closing.md)"
-gh api -X PATCH repos/michalwy/stamporama/issues/<n> -f state=closed -f state_reason=completed
-```
-
-Endpoints: `POST /repos/{owner}/{repo}/issues/{n}/comments`, `PATCH /repos/{owner}/{repo}/issues/{n}`.
+**Once the pull request has merged, the reviewer closes the issue** (the owner, 2026-11-22), with a
+comment taken from the pull request's description: what landed, the merge SHA, and how it was
+verified. The author thread may be gone by then, so the close does not wait on it
+([`reviewer.md`](reviewer.md) § *Close the issue*).
 
 ## Branches and pull requests
 
@@ -170,8 +169,15 @@ The ruleset itself is checked in — see
 Work happens on `task/<issue>-<slug>` — in a cloud thread, the branch the platform gave it —
 branched from `main`. **Once the task is verified, the thread commits, pushes and opens the pull
 request on its own**, with no question to anybody first (the owner, 2026-09-13). **The thread that
-opens the pull request owns it until it merges**: it watches the pull request, answers the reviewer's
-review, rebases when it has to and re-runs the checks after every rebase.
+opens the pull request owns it until it merges** — but it does not sit watching it: an idle thread is
+reclaimed. The flow goes through the router (the owner, 2026-11-22):
+
+1. The reviewer reports its verdict to the project conversation.
+2. On **changes needed**, or a **request to rebase** a pull request that carries a migration, the
+   project conversation sends it to the author thread. **If that thread is gone, it starts a new
+   thread on the same pull request** — same issue, same branch — which takes the pull request over.
+3. The author thread (or its successor) makes the change, re-runs the checks after every rebase,
+   pushes, and says so in its reply; the project conversation starts the review again.
 
 **A separate reviewer thread merges it** (the owner, 2026-11-22): the project conversation starts one
 for every pull request, and it merges with a rebase merge when the review passes and CI is green.
@@ -326,8 +332,7 @@ the change, in the pull request. The project conversation, as backlog manager, d
 whether it becomes an issue and writes it. This keeps one voice on the backlog and stops five threads
 filing five versions of the same observation.
 
-A task thread opens no issues, closes none but its own once its pull request has merged, and merges
-nothing.
+A task thread opens no issues, closes none, and merges nothing.
 
 ## Worktrees *(local-only)*
 

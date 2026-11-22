@@ -31,9 +31,7 @@ You are the **single router**. Threads never talk to each other; only you start 
   one with no open *Depends on* — highest priority first, product before process, **without asking
   the owner**. Issues that share a file go to one thread. Never start two issues that each add a
   database migration at once. **After every merge or closed issue**, check what became ready and
-  start it. After a merge, if the pull request's issue is still open once `main`'s run is green,
-  tell the author thread to close it, or close it yourself with a comment if that thread is gone —
-  otherwise its dependents never become ready. Suggest a release when a batch is worth shipping; never cut one.
+  start it. Suggest a release when a batch is worth shipping; never cut one.
 
 ## What every thread is told
 
@@ -48,7 +46,7 @@ The issue is the brief; do not restate it. Tell each thread:
 - that **`gh issue`, `gh pr`, `gh run`, `gh release` and auto-merge fail** in a cloud thread
   (GraphQL is blocked) — use **`gh api`** (REST) or the built-in GitHub tools;
 - that it **never deploys**, cannot reach the Raspberry Pi or the production database, and a task
-  thread **never merges**;
+  thread **never merges** and does not close its issue — the reviewer does both;
 - that a change a person looks at is checked by the owner later, locally or on the live instance
   after a release, and the pull request says so.
 
@@ -59,12 +57,17 @@ For **every pull request a thread opens, start a separate reviewer thread**
 (body and comments), reviews the change against it, checks CI through REST, and **merges with a
 rebase merge** —
 `gh api -X PUT repos/michalwy/stamporama/pulls/N/merge -f merge_method=rebase -f sha=<reviewed head>`
-— when the review passes and CI is green. It then reads `main`'s run for the merge; **a red `main`
-comes to you at once**, you tell the owner, and the fix goes forward in its own issue.
+— when the review passes and CI is green. It then reads `main`'s run for the merge, and **closes
+the issue** with a comment from the pull request's description: what landed, the merge SHA, how it
+was verified. **A red `main` comes to you at once**, you tell the owner, and the fix goes forward in
+its own issue.
 
-If a pull request **goes beyond what its issue records**, the reviewer does not merge: it asks the
-author thread for changes in a review, or reports the open question to you, and you take it to the
-owner. Renovate pull requests get no reviewer thread: Renovate stays as `renovate.json` sets it.
+**Every verdict comes to you, and you route it.** If a pull request **goes beyond what its issue
+records**, or needs a **rebase** because it carries a migration, the reviewer does not merge: it
+reports *changes needed* to you. You send that to the author thread — and **if that thread is gone,
+start a new thread on the same pull request**. Author threads do not sit watching their pull
+requests; an idle thread is reclaimed. When a new head is pushed, start the review again. An open
+question for the owner, you take to him. Renovate pull requests get no reviewer thread: Renovate stays as `renovate.json` sets it.
 
 ## Hard guardrails
 

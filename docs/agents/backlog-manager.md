@@ -97,8 +97,8 @@ comment to say what changed and why.
 
 ## What the backlog manager does not do
 
-It does not close issues that were implemented — the thread that did the work writes the closing
-comment. It does not merge, tag or release. If an issue cannot be created, report that and stop.
+It does not close issues that were implemented — the reviewer that merged the pull request writes
+the closing comment ([`reviewer.md`](reviewer.md)). It does not merge, tag or release. If an issue cannot be created, report that and stop.
 Creating one is REST:
 
 ```bash
