@@ -4,8 +4,8 @@ The owner's live instance is deployed by GitHub Actions: **publishing a GitHub R
 (#2689, [ADR-0083](../decisions/0083-release-deploys-to-the-pi.md)). The workflow is
 [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml); it runs on a self-hosted runner
 on the Pi and calls [`scripts/deploy.sh`](../../scripts/deploy.sh) in the existing installation
-directory. Nothing here applies to other self-hosters, who keep `scripts/install.sh` and, if they
-chose it, Watchtower.
+directory. Nothing here applies to other self-hosters, who install with `scripts/install.sh` and
+update with `scripts/update.sh` (README, *Updating*; Watchtower is gone since #2690).
 
 This is the owner's runbook. **No agent thread can reach the Pi**; every step below is done by the
 owner, on the Pi or in the repository's settings.
@@ -105,14 +105,22 @@ In the installation directory:
 
 ```bash
 sed -i 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=""/' .env
-docker compose --profile autoupdate rm -s -f watchtower
+project="$(docker compose config | sed -n 's/^name: *//p')"
+docker rm -f $(docker ps -aq --filter "label=com.docker.compose.project=$project" \
+  --filter label=com.docker.compose.service=watchtower)
 docker compose ps -a    # only the app is left
 ```
 
+(The container is found by its labels because a compose file from #2690 on has no `watchtower`
+service for `docker compose rm` to name. `docker rm` complaining that it needs an argument means
+there was no Watchtower container left.)
+
 Both lines are needed: clearing the profile alone leaves the running Watchtower container in place,
-and the deploy refuses while it runs. A Watchtower running elsewhere on the Pi for other applications would update this app too, because
-the app container carries the `com.centurylinklabs.watchtower.enable` label — make sure no such
-Watchtower watches all containers or labelled ones.
+and the deploy refuses while it runs. Since #2690 the app container no longer carries the
+`com.centurylinklabs.watchtower.enable` label, so a Watchtower kept elsewhere on the Pi for other
+applications leaves it alone in label mode — but one that watches *all* containers would still
+update it, so make sure none does. Do not schedule `scripts/update.sh` on the Pi either: this
+workflow is its updater.
 
 ## The first deploy, and how to check it
 
