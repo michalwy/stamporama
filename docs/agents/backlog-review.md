@@ -79,6 +79,19 @@ issue.
 ([`reviewer.md`](reviewer.md)). **After every merge or closed issue**, measure again and start what
 became ready.
 
+**After a merge, check that its issue was closed.** The author thread closes it
+([`collaboration.md`](collaboration.md) § *One session owns one issue*), and readiness waits on that
+close — so an author thread that was reclaimed, or never woken by the merge, would leave every
+dependent issue blocked with nothing reporting it. If the issue the pull request refers to is still
+open once `main`'s run for the merge is green, tell the author thread to close it; if that thread is
+gone, close it yourself with a short comment linking the pull request and its `main` run:
+
+```bash
+gh api $R/issues/<n> --jq '"#\(.number) \(.state)"'
+gh api -X POST $R/issues/<n>/comments -f body="$(cat closing.md)"
+gh api -X PATCH $R/issues/<n> -f state=closed -f state_reason=completed
+```
+
 ## Report to the owner
 
 Short, and in Polish: what was started and why, what is blocked and on what, what merged. The owner
