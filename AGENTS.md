@@ -111,6 +111,7 @@ and ADR references.
 | Dialogs, escape handling, sidebar, settings, notifications | [`ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, reordering, tooltips, icons, tokens, toast | [`ui-patterns.md`](docs/agents/ui-patterns.md) |
 | The Project model, cloud threads, branches, pull requests, verification | [`collaboration.md`](docs/agents/collaboration.md) |
+| The cloud environment: setup script, versions, running the suites in a thread | [`cloud-environment.md`](docs/agents/cloud-environment.md) |
 | Starting threads for ready issues (the project conversation) | [`backlog-review.md`](docs/agents/backlog-review.md) |
 | Turning ideas and bug reports into issues (the project conversation) | [`backlog-manager.md`](docs/agents/backlog-manager.md) |
 | Reviewing and merging a pull request | [`reviewer.md`](docs/agents/reviewer.md) |
