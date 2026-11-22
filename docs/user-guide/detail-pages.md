@@ -278,7 +278,9 @@ Offers. Details, Checklists and Stamps are always there.
 - **Checklists** — every [checklist](collections.md#checklists) the issue carries, in the order
   you arranged them: its name, how many stamps are on it, how many of those you hold (in any
   disposition and condition, with **×** and the number of complete sets once there is one) and its
-  catalog value. The figures are the ones the Issues list's checklist badge and the Completeness
+  catalog value. The count, the holdings and the value each sit in a column of their own, lined up
+  from row to row so the checklists compare at a glance; a checklist with nothing priced leaves its
+  value cell empty. The figures are the ones the Issues list's checklist badge and the Completeness
   card show, so they always agree. **Click a checklist** to narrow the Stamps tree below to it;
   click it again to see every stamp. **Manage…** opens the checklist editor — the same one the
   Issues list opens from the issue's **⋮ → Checklists…**, with the checklists on the left and the
