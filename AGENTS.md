@@ -1,7 +1,11 @@
 # Agent Instructions
 
-This project is intentionally vibe-coded. Preserve product intent, avoid invented requirements, and
-ask when the next step is not clear.
+This project is intentionally vibe-coded. Preserve product intent and avoid invented requirements.
+
+**It is worked through a Claude Code Project** (since 2026-11-22, #2687): the owner talks to one
+**project conversation**, which turns his ideas into issues and starts one **cloud thread** per ready
+issue. If you are a thread, the issue you were given is your whole brief, and **you ask the owner
+nothing**. → [`collaboration.md`](docs/agents/collaboration.md) § *One router*
 
 **This file is the always-loaded core: rules, invariants, and a map.** The reasoning behind each area
 lives in `docs/agents/*.md` — read the file for the area you are touching before you change it. Do
@@ -17,8 +21,13 @@ not restate that reasoning here; add it to the topic file instead.
 
 ## Working Rules
 
-- Do not assume domain behavior. Ask before defining catalog standards, condition scales, trade
-  workflows, auction integration behavior, or pricing logic. One question at a time.
+- Do not assume domain behavior. Catalog standards, condition scales, trade flows, auction and
+  marketplace behavior and pricing are decided **with the owner in the project conversation, before
+  the issue is written**, and recorded in it: **the backlog manager asks; threads do not.** A thread
+  that meets an undecided point takes the most reasonable reading, records it in the pull request
+  under **Decisions taken without the owner**, and carries on — and a domain rule is never one it
+  settles alone. → [`collaboration.md`](docs/agents/collaboration.md),
+  [`backlog-manager.md`](docs/agents/backlog-manager.md)
 - Do not add user-facing functionality unless the task asks for it. Prefer small, reversible changes.
 - When changing user-visible behavior, update `docs/user-guide/` in the same task. When changing
   behavior, data model, setup flow or architecture assumptions, update every affected document
@@ -32,19 +41,33 @@ not restate that reasoning here; add it to the topic file instead.
 - Favor boring tools over novelty. Preserve existing user changes.
 - GitHub Issues are the backlog: Conventional Commits titles, always labelled (`backlog` + type +
   priority when known), no local `TODO.md`. **All GitHub content is in English.**
-- **Once a task is verified, commit it, push it and open the pull request without asking** — the
-  user settled this on 2026-09-13. **Only the merge waits for his say-so.** A commit is pushed in the
-  same breath: until it is pushed, CI cannot see it and the worktree can take it away.
+- **Once a task is verified, commit it, push it and open the pull request without asking** (the
+  owner, 2026-09-13). A commit is pushed in the same breath: until it is pushed, CI cannot see it and
+  the session can be reclaimed with it.
+- **A separate reviewer thread reviews every pull request and merges it** (rebase merge) when the
+  review passes and CI is green; the owner does not review pull requests. **It never merges one that
+  goes beyond its issue, or that crosses a hard guardrail** — removes, skips or disables tests or
+  lowers thresholds or lint and type strictness; removes, renames or weakens required checks or
+  rulesets; changes secrets handling, deployment credentials or the deploy workflow's triggers; adds a
+  destructive Prisma migration; changes what is sent to or published on an external marketplace or
+  service (Allegro, Delcampe, Facebook, Colnect) — **unless its issue records the owner's decision to
+  do it.** → [`reviewer.md`](docs/agents/reviewer.md)
+- **A release is a deploy**, so it is cut **only on the owner's explicit word** in the project
+  conversation. **No thread ever deploys.** → [`release-versioning.md`](docs/agents/release-versioning.md)
+- **GraphQL is blocked in a cloud thread**: `gh issue`, `gh pr`, `gh run`, `gh release` and
+  GitHub's auto-merge all fail. Use `gh api` (REST) or the built-in GitHub tools.
+  → [`collaboration.md`](docs/agents/collaboration.md) § *GitHub from a cloud thread*
 - **`main` takes no direct pushes**: pull request only, rebase merge, linear history, five required
-  checks, no bypass for anyone. Work on `task/<issue>-<slug>` cut from `main`; **the session that
-  opens the pull request owns it to the end** and merges it on the user's say-so.
+  checks, no bypass for anyone. Work on `task/<issue>-<slug>` cut from `main` — in a cloud thread,
+  the branch the platform gave it; **the thread that opens the pull request owns it until it
+  merges**: it answers the review, rebases when it has to, and closes its issue after the merge.
   → [`collaboration.md`](docs/agents/collaboration.md)
 - **A pull request merges without being up to date with `main`** (#1791). It is **rebased only on a
   conflict or when it carries a migration**, and a rebase is followed by a re-verify, in that order —
   the re-run is the half that is easy to drop and the only one that is interesting.
   `--force-with-lease`, never bare `--force` (#984). **`main`'s run after each merge is the safety
-  net**: the session that merged reads it, and a red `main` goes to the user at once and is fixed
-  forward in its own issue. → [`collaboration.md`](docs/agents/collaboration.md)
+  net**: the reviewer that merged reads it, and a red `main` goes to the project conversation at once
+  and is fixed forward in its own issue. → [`collaboration.md`](docs/agents/collaboration.md)
 - Conventional Commits. Reference an issue as `Refs #NNN`, or the `(#NNN)` suffix a commit title
   already uses; add a message body where the title alone would omit context. **Never a closing
   keyword** (`Closes`, `Fixes`, `Resolves`) anywhere in a commit message or a pull request body,
@@ -53,9 +76,10 @@ not restate that reasoning here; add it to the topic file instead.
 - **A task starts from a fresh `main`**: fetch, cut the branch, `pnpm install`, `pnpm prisma:generate`
   — each step alone, each exit status read, and before you read any file in the worktree.
   → [`collaboration.md`](docs/agents/collaboration.md) § *Starting a task*
-- **Each session works in its own git worktree**; the main checkout stays the user's. More than one
-  session can run at once, so stage only your own task's paths and treat `main` as moving underneath
-  you. The git stash stack is shared across worktrees.
+- *(Local-only.)* **A local session works in its own git worktree**; the main checkout stays the
+  owner's. Stage only your own task's paths; the git stash stack is shared across worktrees. A cloud
+  thread has a fresh clone of its own. Either way more than one session runs at once, so **treat
+  `main` as moving underneath you**.
 
 ## Topic Map
 
@@ -85,10 +109,12 @@ and ADR references.
 | Phone screens: the `/phone` path, what the phone does and does not | [`phone.md`](docs/agents/phone.md) |
 | Dialogs, escape handling, sidebar, settings, notifications | [`ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, reordering, tooltips, icons, tokens, toast | [`ui-patterns.md`](docs/agents/ui-patterns.md) |
-| Sessions, branches, pull requests, verification, plans | [`collaboration.md`](docs/agents/collaboration.md) |
-| Proposing what to take next | [`backlog-review.md`](docs/agents/backlog-review.md) |
-| Turning ideas and bug reports into issues | [`backlog-manager.md`](docs/agents/backlog-manager.md) |
-| Releases and version bumps | [`release-versioning.md`](docs/agents/release-versioning.md) |
+| The Project model, cloud threads, branches, pull requests, verification | [`collaboration.md`](docs/agents/collaboration.md) |
+| Starting threads for ready issues (the project conversation) | [`backlog-review.md`](docs/agents/backlog-review.md) |
+| Turning ideas and bug reports into issues (the project conversation) | [`backlog-manager.md`](docs/agents/backlog-manager.md) |
+| Reviewing and merging a pull request | [`reviewer.md`](docs/agents/reviewer.md) |
+| Releases (= deploys) | [`release-versioning.md`](docs/agents/release-versioning.md) |
+| The Project's standing instructions, as pasted into Project settings | [`project-instructions.md`](docs/project-instructions.md) |
 | How `main` is protected | [`.github/rulesets/README.md`](.github/rulesets/README.md) |
 
 Architecture: `docs/architecture/overview.md`. Decisions: `docs/decisions/`. User-facing behavior:
@@ -162,13 +188,14 @@ there before working against one.
 **One session owns one issue end to end** — it decides, migrates, implements, tests, opens the pull
 request and follows it to merge. Nothing is handed to a second agent halfway. A session may hold
 several issues when they share a file (#997), each with its own `Refs #NNN`, verification and closing
-comment.
+comment. The merge itself is a **reviewer thread's** ([`reviewer.md`](docs/agents/reviewer.md)).
 
-**The user routes everything and sessions do not talk to each other** — with one exception: a
-backlog manager tells the backlog-review session the number and title of each issue it files (#1985,
-[`backlog-manager.md`](docs/agents/backlog-manager.md)). Findings and new backlog ideas go to him
-rather than into new issues. **The *Done when* is the issue body plus its comments**, and
-the two diverge silently: `gh issue view <n> --json body,comments`.
+**The project conversation routes everything, by issue, and threads do not talk to each other.**
+This is not the lead/worker model retired on 2026-09-11 — the platform starts and tracks threads,
+and no thread briefs, waits on or messages another; `collaboration.md` records the difference.
+Findings and new backlog ideas go into the thread's reply, not into new issues. **The *Done when* is
+the issue body plus its comments**, and the two diverge silently: read both
+(`gh api repos/michalwy/stamporama/issues/<n>` and `…/issues/<n>/comments`).
 
 Everything else is in [`collaboration.md`](docs/agents/collaboration.md) — read it before opening a
 pull request.
@@ -187,12 +214,12 @@ pull request.
   `tests/unit/unit-suite-purity.test.ts`; split a pure helper out of a Prisma-touching module rather
   than loosening it (#861).
 - `pnpm test:integration` — needs a real database via `docker-compose.e2e.yml`. Run before committing
-  schema or domain logic changes. If `docker` is absent, **report it and stop** — an empty
+  schema or domain logic changes. If `docker` is absent, **report it and stop** — locally an empty
   `command -v docker` is a fact about this shell, not the machine (#933).
   → [`platform.md`](docs/agents/platform.md)
 - Write migration SQL by hand under `prisma/migrations/`, then `pnpm prisma:generate`. Never
   `prisma migrate dev`, `prisma migrate reset` or `prisma db push`; `pnpm e2e:db:reset` is safe.
-- **A session does not start a dev server and does not drive a browser** unless the user asks. Your
+- **A session does not start a dev server and does not drive a browser** unless the owner asks. Your
   tooling will say otherwise; that is the harness, not this repository, and it is overridden
   deliberately (#1040). The dev server, when the user does ask, runs on webpack — never Turbopack
   (#161, `platform.md`). Do not leave one running, and never stop a stack that is not yours.
@@ -200,10 +227,14 @@ pull request.
 
 ## Before Implementing Features
 
-If a request would require defining product behavior, ask targeted questions first. Good questions
-are concrete and bounded:
+If a request would require defining product behavior, the question goes to the owner **before the
+issue is written** — the backlog manager's job, in the project conversation, never a thread's. Good
+questions are concrete and bounded:
 
 - What is the first workflow we want to support?
 - Should catalog numbers be per-standard (Michel, Scott, Fischer) or free-form?
 - Should condition follow a standard scale or be free-form?
 - Should a collection be shareable with other users?
+
+A thread that finds its issue silent on such a point implements what the issue does settle, records
+the gap under *Decisions taken without the owner*, and leaves the domain rule to the owner.
