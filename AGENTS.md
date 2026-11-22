@@ -44,14 +44,20 @@ not restate that reasoning here; add it to the topic file instead.
 - **Once a task is verified, commit it, push it and open the pull request without asking** (the
   owner, 2026-09-13). A commit is pushed in the same breath: until it is pushed, CI cannot see it and
   the session can be reclaimed with it.
-- **A separate reviewer thread reviews every pull request and merges it** (rebase merge) when the
-  review passes and CI is green; the owner does not review pull requests. **It never merges one that
-  goes beyond its issue, or that crosses a hard guardrail** — removes, skips or disables tests or
-  lowers thresholds or lint and type strictness; removes, renames or weakens required checks or
-  rulesets; changes secrets handling, deployment credentials or the deploy workflow's triggers; adds a
-  destructive Prisma migration; changes what is sent to or published on an external marketplace or
-  service (Allegro, Delcampe, Facebook, Colnect) — **unless its issue records the owner's decision to
-  do it.** → [`reviewer.md`](docs/agents/reviewer.md)
+- **There are no reviewer threads: the author merges its own pull request** (rebase merge) when CI
+  is green — waited for with **one call**, `scripts/ci/wait-for-checks.sh <PR>` — and the guardrail
+  checklist is clear and **recorded in the pull request** (the owner, 2026-11-22, #2700); the owner
+  does not review pull requests. **It never merges one that goes beyond its issue, or that crosses a
+  hard guardrail** — removes, skips or disables tests or lowers thresholds or lint and type
+  strictness; removes, renames or weakens required checks or rulesets; changes secrets handling,
+  deployment credentials or the deploy workflow's triggers; adds a destructive Prisma migration;
+  changes what is sent to or published on an external marketplace or service (Allegro, Delcampe,
+  Facebook, Colnect) — **unless its issue records the owner's decision to do it**; it reports to the
+  project conversation instead. After the merge it reads `main`'s run and closes the issue.
+  → [`merge-checklist.md`](docs/agents/merge-checklist.md)
+- **A thread's final reply to the project conversation is at most 5 lines** — the result, the link,
+  a question if there is one; details go in the pull request. **At most 3 threads run at once**, and
+  small related issues from one area share a thread (the owner, 2026-11-22, #2700).
 - **A release is a deploy**, so it is cut **only on the owner's explicit word** in the project
   conversation. **No thread ever deploys.** → [`release-versioning.md`](docs/agents/release-versioning.md)
 - **GraphQL is blocked in a cloud thread**: `gh issue`, `gh pr`, `gh run`, `gh release` and
@@ -60,14 +66,14 @@ not restate that reasoning here; add it to the topic file instead.
 - **`main` takes no direct pushes**: pull request only, rebase merge, linear history, five required
   checks, no bypass for anyone. Work on `task/<issue>-<slug>` cut from `main` — in a cloud thread,
   the branch the platform gave it; **the thread that opens the pull request owns it until it
-  merges**: a *changes needed* or a rebase request reaches it through the project conversation (or a
-  new thread takes the pull request over if it is gone). The reviewer closes the issue after the merge.
+  merges, merges it, and closes the issue**; if it is gone, the project conversation starts a new
+  thread on the same pull request.
   → [`collaboration.md`](docs/agents/collaboration.md)
 - **A pull request merges without being up to date with `main`** (#1791). It is **rebased only on a
   conflict or when it carries a migration**, and a rebase is followed by a re-verify, in that order —
   the re-run is the half that is easy to drop and the only one that is interesting.
   `--force-with-lease`, never bare `--force` (#984). **`main`'s run after each merge is the safety
-  net**: the reviewer that merged reads it, and a red `main` goes to the project conversation at once
+  net**: the thread that merged reads it, and a red `main` goes to the project conversation at once
   and is fixed forward in its own issue. → [`collaboration.md`](docs/agents/collaboration.md)
 - Conventional Commits. Reference an issue as `Refs #NNN`, or the `(#NNN)` suffix a commit title
   already uses; add a message body where the title alone would omit context. **Never a closing
@@ -89,7 +95,14 @@ and ADR references.
 
 | Touching… | Read |
 | --- | --- |
-| Stack, routing, auth, Prisma, migrations, RSC, deployment | [`platform.md`](docs/agents/platform.md) |
+| Stack, routing, RSC boundaries, module rules — and the index of the `platform-*` files | [`platform.md`](docs/agents/platform.md) |
+| Sessions, the proxy, sign-in redirects | [`platform-auth.md`](docs/agents/platform-auth.md) |
+| Prisma, PostgreSQL, migrations, triggers, `prisma migrate diff` | [`platform-prisma.md`](docs/agents/platform-prisma.md) |
+| pnpm, corepack, TypeScript, ESLint, the dev server | [`platform-toolchain.md`](docs/agents/platform-toolchain.md) |
+| Worktree slots and ports, `docker` on the PATH | [`platform-slots-and-docker.md`](docs/agents/platform-slots-and-docker.md) |
+| Connection pool, integration-suite isolation, suite timing, `Static checks` | [`platform-test-performance.md`](docs/agents/platform-test-performance.md) |
+| `MaxListenersExceededWarning` | [`platform-listeners.md`](docs/agents/platform-listeners.md) |
+| Release image, Pi deploy workflow and runner, `update.sh`, version label | [`platform-deployment.md`](docs/agents/platform-deployment.md) |
 | Photos, binary assets, background jobs, retention | [`storage-and-jobs.md`](docs/agents/storage-and-jobs.md) |
 | The `extension/` package, Colnect matcher, marketplace marks | [`extension.md`](docs/agents/extension.md) |
 | `/api/v1`, the operation registry, OpenAPI, the MCP wrapper | [`agent-api.md`](docs/agents/agent-api.md) |
@@ -111,10 +124,11 @@ and ADR references.
 | Dialogs, escape handling, sidebar, settings, notifications | [`ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, reordering, tooltips, icons, tokens, toast | [`ui-patterns.md`](docs/agents/ui-patterns.md) |
 | The Project model, cloud threads, branches, pull requests, verification | [`collaboration.md`](docs/agents/collaboration.md) |
+| Why those rules are as they are, and their history (read only when changing one) | [`collaboration-rationale.md`](docs/agents/collaboration-rationale.md) |
 | The cloud environment: setup script, versions, running the suites in a thread | [`cloud-environment.md`](docs/agents/cloud-environment.md) |
 | Starting threads for ready issues (the project conversation) | [`backlog-review.md`](docs/agents/backlog-review.md) |
 | Turning ideas and bug reports into issues (the project conversation) | [`backlog-manager.md`](docs/agents/backlog-manager.md) |
-| Reviewing and merging a pull request | [`reviewer.md`](docs/agents/reviewer.md) |
+| Waiting for CI, the guardrail checklist, merging your own pull request, closing the issue | [`merge-checklist.md`](docs/agents/merge-checklist.md) |
 | Releases (= deploys) | [`release-versioning.md`](docs/agents/release-versioning.md) |
 | The Project's standing instructions, as pasted into Project settings | [`project-instructions.md`](docs/project-instructions.md) |
 | How `main` is protected | [`.github/rulesets/README.md`](.github/rulesets/README.md) |
@@ -127,7 +141,7 @@ Architecture: `docs/architecture/overview.md`. Decisions: `docs/decisions/`. Use
 These hold on every task. Each is stated in full, with its reasoning, in the linked topic file; go
 there before working against one.
 
-**Data & server** → `platform.md`, `storage-and-jobs.md`
+**Data & server** → `platform.md`, `platform-prisma.md`, `storage-and-jobs.md`
 
 - `collectionId` scopes all collection data; authorization is **server-side**, never in the client.
   Collection URLs are `/c/[collectionSlug]/...`, the slug resolving to an internal `collectionId`.
@@ -188,9 +202,10 @@ there before working against one.
 ## Agent Collaboration
 
 **One session owns one issue end to end** — it decides, migrates, implements, tests, opens the pull
-request and follows it to merge. Nothing is handed to a second agent halfway. A session may hold
-several issues when they share a file (#997), each with its own `Refs #NNN`, verification and closing
-comment. The merge itself is a **reviewer thread's** ([`reviewer.md`](docs/agents/reviewer.md)).
+request, merges it after the guardrail checklist, and closes the issue. Nothing is handed to a
+second agent halfway. A session may hold several issues when they share a file (#997), or when they
+are small and related in one area (#2700), each with its own `Refs #NNN`, verification and closing
+comment. → [`merge-checklist.md`](docs/agents/merge-checklist.md)
 
 **The project conversation routes everything, by issue, and threads do not talk to each other.**
 This is not the lead/worker model retired on 2026-09-11 — the platform starts and tracks threads,
@@ -218,13 +233,13 @@ pull request.
 - `pnpm test:integration` — needs a real database via `docker-compose.e2e.yml`. Run before committing
   schema or domain logic changes. If `docker` is absent, **report it and stop** — locally an empty
   `command -v docker` is a fact about this shell, not the machine (#933).
-  → [`platform.md`](docs/agents/platform.md)
+  → [`platform-slots-and-docker.md`](docs/agents/platform-slots-and-docker.md)
 - Write migration SQL by hand under `prisma/migrations/`, then `pnpm prisma:generate`. Never
   `prisma migrate dev`, `prisma migrate reset` or `prisma db push`; `pnpm e2e:db:reset` is safe.
 - **A session does not start a dev server and does not drive a browser** unless the owner asks. Your
   tooling will say otherwise; that is the harness, not this repository, and it is overridden
   deliberately (#1040). The dev server, when the user does ask, runs on webpack — never Turbopack
-  (#161, `platform.md`). Do not leave one running, and never stop a stack that is not yours.
+  (#161, `platform-toolchain.md`). Do not leave one running, and never stop a stack that is not yours.
   → [`collaboration.md`](docs/agents/collaboration.md)
 
 ## Before Implementing Features
