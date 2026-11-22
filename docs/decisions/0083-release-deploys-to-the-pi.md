@@ -163,3 +163,35 @@ shipped to run it.
   its labels changed.
 - `scripts/deploy.sh` keeps refusing while `autoupdate` is set or a Watchtower container runs; both
   checks still describe a real conflict and cost nothing.
+
+## 2026-11-22: the runner refuses every job but the deploy (#2697)
+
+Decided in #2697, a follow-up to the review of #2696, which found that decision 2 does less than it
+says. `scripts/check-self-hosted-runners.mjs` keeps every workflow but `deploy.yml` off a
+self-hosted runner **on `main`**, but it cannot stop one from **running**: a `pull_request` run uses
+the workflow files from the pull request's own head, so a pull request that adds
+`runs-on: [self-hosted, pi, stamporama]` to `ci.yml` gets that job onto the Pi once, in the same run
+where the check goes red. Fork pull requests wait for approval; a pull request from a branch of this
+repository — every agent thread's is one — does not.
+
+So the Pi itself refuses. **The runner's job-started hook**,
+[`scripts/runner-job-started-hook.sh`](../../scripts/runner-job-started-hook.sh), set through
+`ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner's `.env`, runs before every job and exits non-zero —
+which fails the job before any step — unless **all** of these hold:
+
+- `GITHUB_REPOSITORY` is `michalwy/stamporama`;
+- `GITHUB_WORKFLOW_REF` is `michalwy/stamporama/.github/workflows/deploy.yml@refs/tags/v…` or
+  `…/deploy.yml@refs/heads/main`, compared as an exact prefix so that a ref which only *contains*
+  that text does not pass;
+- `GITHUB_EVENT_NAME` is `release` or `workflow_dispatch`.
+
+It **fails closed** — a missing or empty variable is a refusal — and prints one line saying why,
+naming only what the public log already shows. The runbook installs it, root-owned and outside the
+runner's directory, **before** the runner is registered, and says how to add it to a runner that is
+already registered and how to check that it is active. `tests/unit/runner-job-started-hook.test.ts`
+runs it over the accepted and refused cases in the required `Unit tests` check; a real runner on the
+Pi calling it is the owner's check, in the runbook.
+
+The CI check stays: it keeps such a workflow off `main`, where every later run would use it; the
+hook is what stops it running on the Pi. Fork approval stays as well. Nothing
+about the deploy's triggers or credentials changed.
