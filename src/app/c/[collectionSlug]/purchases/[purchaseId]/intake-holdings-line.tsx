@@ -5,6 +5,7 @@ import {
   heldConditionsText,
   summarizeHeldCopies,
   type HeldCopyRow,
+  type HeldMarker,
 } from "@/lib/held-copies";
 import { useStampHoldings } from "@/app/c/[collectionSlug]/inventory/use-inventory-query";
 import { WantChip } from "@/app/c/[collectionSlug]/wants/want-chip";
@@ -22,7 +23,7 @@ import { COPY_BUCKET_COLOR } from "@/app/c/[collectionSlug]/wants/want-copy-coun
  *
  *     You hold 2:  1 in collection (MNH) · 1 for sale (U)   [want]
  *     You hold none · 1 on its way (MNH)
- *     You hold 1:  1 in collection (MNH) · 1 being sorted (U)
+ *     You hold 1:  1 in collection (MNH) · 2 being sorted: 1 to collection (MH) · 1 to sale (U)
  *
  * The headline counts **delivered copies only** — that is what *hold* means. Copies bought and not
  * yet arrived are counted by every figure in the app, rightly (a copy in the post is bought, and
@@ -33,11 +34,16 @@ import { COPY_BUCKET_COLOR } from "@/app/c/[collectionSlug]/wants/want-copy-coun
  * only physical copy in tweezers — and the second copy inside the stockbook being sorted right now,
  * entered ten minutes ago, which would otherwise read as existing stock.
  *
- * So every other bucket gets its own clause after the headline, with its own count and conditions
- * and **no disposition markers**: an in-flight copy's disposition is unset or provisional, and a
- * marker on it would be a blank dressed up as a decision. `to_sort` stands apart from both sides
- * deliberately — the copy is physically here but not filed, which is both the other parcel on the
- * desk and the one just entered from this one. Which *purchase* an in-flight copy belongs to is
+ * So every other bucket gets its own clause after the headline, with its own count and conditions.
+ * Copies in the post or on their way get **no disposition markers**: an in-flight copy's
+ * disposition is unset or provisional, and a marker on it would be a blank dressed up as a decision.
+ * Copies **being sorted** do (#2685), worded as an intent — *to collection*, *to sale*, *to trade*,
+ * *not decided* — because they were identified here and their disposition chosen then: working a
+ * large set of scans, the copy marked *In collection* three pieces ago is exactly what the piece in
+ * hand is decided against, and a bare *9 being sorted* left the collector going back through the
+ * run to find it. They still do not count towards *You hold N*. `to_sort` stands apart from both
+ * sides deliberately — the copy is physically here but not filed, which is both the other parcel on
+ * the desk and the one just entered from this one. Which *purchase* an in-flight copy belongs to is
  * deliberately unsaid: the useful fact is the state, not the order, and a link would not fit on one
  * line. The buckets, their order and their wording are `COPY_BUCKETS`, shared with the want list.
  *
@@ -98,6 +104,11 @@ export function IntakeHoldingsLine({
     const condition = conditions.find((c) => c.id === id);
     return condition ? condition.abbreviation || condition.name : "?";
   };
+  // The dispositions are markers, not slices — a copy can be in the collection *and* for sale — so
+  // the figures can exceed the total. Said only when they actually do, and once: the badge's popover
+  // has room for the sentence unconditionally, a one-line summary does not, and in the ordinary case
+  // there is nothing to add up wrongly.
+  const heldOverlaps = summary.markers.reduce((sum, m) => sum + m.count, 0) > summary.total;
 
   return (
     <div
@@ -144,43 +155,47 @@ export function IntakeHoldingsLine({
           {summary.markers.map((marker, i) => (
             <span key={marker.key} style={{ display: "inline-flex", gap: "0.375rem" }}>
               {i > 0 && <span style={{ color: "var(--color-text-muted)" }}>·</span>}
-              <span
-                style={{
-                  color: marker.token
-                    ? `var(--color-disposition-${marker.token})`
-                    : "var(--color-text-muted)",
-                  fontWeight: 500,
-                }}
-              >
-                {marker.count} {marker.label}{" "}
-                <span style={{ color: "var(--color-text-secondary)", fontWeight: 400 }}>
-                  ({heldConditionsText(marker, nameFor)})
-                </span>
-              </span>
+              <MarkerClause marker={marker} nameFor={nameFor} />
             </span>
           ))}
-          {/* The dispositions are markers, not slices — a copy can be in the collection *and* for
-              sale — so the figures can exceed the total. Said only when they actually do: the
-              badge's popover has room for the sentence unconditionally, a one-line summary does
-              not, and in the ordinary case there is nothing to add up wrongly. */}
-          {summary.markers.reduce((sum, m) => sum + m.count, 0) > summary.total && (
-            <span style={{ color: "var(--color-text-muted)" }}>
-              (a copy can carry more than one disposition)
-            </span>
-          )}
-          {/* Bought but not filed, each bucket its own clause — count and conditions, no disposition
-              markers (an in-flight copy's is unset or provisional). Which *purchase* it belongs to is
-              deliberately unsaid: the useful fact is the state, and a link would not fit on a line.
-              Tinted with the want line's own bucket hues, the one place they are chosen. */}
+          {heldOverlaps && <OverlapNote />}
+          {/* Bought but not filed, each bucket its own clause — count and conditions. Which
+              *purchase* it belongs to is deliberately unsaid: the useful fact is the state, and a
+              link would not fit on a line. Tinted with the want line's own bucket hues, the one
+              place they are chosen. Copies in the post or on their way carry no disposition (theirs
+              is unset or provisional); copies **being sorted** are broken down by the one each was
+              given at identification (#2685), so the next piece of the stamp can be decided
+              against them — *9 being sorted: 1 to collection (MH) · 7 to sale (1 MNG, 6 U)*. */}
           {summary.inFlight.map((bucket) => (
-            <span key={bucket.key} style={{ display: "inline-flex", gap: "0.375rem" }}>
+            <span
+              key={bucket.key}
+              style={{ display: "inline-flex", gap: "0.375rem", flexWrap: "wrap" }}
+            >
               <span style={{ color: "var(--color-text-muted)" }}>·</span>
-              <span style={{ color: COPY_BUCKET_COLOR[bucket.state], fontWeight: 500 }}>
-                {bucket.count} {bucket.label}{" "}
-                <span style={{ color: "var(--color-text-secondary)", fontWeight: 400 }}>
-                  ({heldConditionsText(bucket, nameFor)})
+              {bucket.dispositions ? (
+                <>
+                  <span style={{ color: COPY_BUCKET_COLOR[bucket.state], fontWeight: 500 }}>
+                    {bucket.count} {bucket.label}:
+                  </span>
+                  {bucket.dispositions.map((part, i) => (
+                    <span key={part.key} style={{ display: "inline-flex", gap: "0.375rem" }}>
+                      {i > 0 && <span style={{ color: "var(--color-text-muted)" }}>·</span>}
+                      <MarkerClause marker={part} nameFor={nameFor} />
+                    </span>
+                  ))}
+                  {!heldOverlaps &&
+                    bucket.dispositions.reduce((sum, m) => sum + m.count, 0) > bucket.count && (
+                      <OverlapNote />
+                    )}
+                </>
+              ) : (
+                <span style={{ color: COPY_BUCKET_COLOR[bucket.state], fontWeight: 500 }}>
+                  {bucket.count} {bucket.label}{" "}
+                  <span style={{ color: "var(--color-text-secondary)", fontWeight: 400 }}>
+                    ({heldConditionsText(bucket, nameFor)})
+                  </span>
                 </span>
-              </span>
+              )}
             </span>
           ))}
           {/* The pictured counterpart of the line (#1207): the question is often not *do I need
@@ -227,5 +242,39 @@ export function IntakeHoldingsLine({
         }
       />
     </div>
+  );
+}
+
+/** One disposition clause — *1 in collection (MNH)*, *7 to sale (1 MNG, 6 U)* — in its disposition's
+ *  colour, muted for the copies that carry none. */
+function MarkerClause({
+  marker,
+  nameFor,
+}: {
+  marker: HeldMarker;
+  nameFor: (conditionId: string) => string;
+}) {
+  return (
+    <span
+      style={{
+        color: marker.token
+          ? `var(--color-disposition-${marker.token})`
+          : "var(--color-text-muted)",
+        fontWeight: 500,
+      }}
+    >
+      {marker.count} {marker.label}{" "}
+      <span style={{ color: "var(--color-text-secondary)", fontWeight: 400 }}>
+        ({heldConditionsText(marker, nameFor)})
+      </span>
+    </span>
+  );
+}
+
+function OverlapNote() {
+  return (
+    <span style={{ color: "var(--color-text-muted)" }}>
+      (a copy can carry more than one disposition)
+    </span>
   );
 }
