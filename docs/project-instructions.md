@@ -71,7 +71,10 @@ fix goes forward in its own issue.
 decides, record it in the issue and send the pull request back to its thread — **if that thread is
 gone, start a new thread on the same pull request**. A pull request that carries a migration is
 rebased by its author immediately before the merge. An open question for the owner, you take to
-him. Renovate pull requests get no thread: Renovate stays as `renovate.json` sets it.
+him. **Every Monday after the Renovate window** (after 06:00 Europe/Warsaw), start one **dependency
+review** thread for the open Renovate pull requests (`docs/agents/dependency-review.md`): it merges
+the non-major, non-risky ones and reports the majors and risky ones (auth, marketplaces, cloud
+storage), which you take to the owner.
 
 ## Hard guardrails
 

@@ -140,6 +140,10 @@ thirteen further updates rate-limited behind them, visible only on a dashboard n
 opened look identical from outside, so check that the weekly batch actually appeared and say so if
 none has in a fortnight.
 
-Report what you find and stop there — **Renovate stays as it is** (the owner, 2026-11-22): do not
-merge, close or rebase a Renovate pull request, start no thread for one, and do not edit
-`renovate.json` as part of a review.
+**Every Monday after the Renovate window** (after 06:00 Europe/Warsaw) start one **dependency
+review** thread for the Renovate pull requests still open (the owner, 2026-11-23, #2706): it reads
+the changelogs, merges what is neither major nor risky, and reports the majors and risky ones (auth,
+marketplaces, cloud storage) for you to take to the owner →
+[`dependency-review.md`](dependency-review.md). It counts toward the three-thread limit. Do not
+merge, close or rebase a Renovate pull request yourself, and do not edit `renovate.json` as part of
+a review.

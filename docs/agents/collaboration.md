@@ -172,9 +172,11 @@ Renovate automerges a weekly batch of patch and minor updates once the five requ
 `packageRules` apply in array order and later rules win. **What the rules actually
 automerge is checked, not argued**: `scripts/check-renovate-automerge.mjs` simulates them (#818); the `Renovate rules` workflow runs it on a pull request touching
 `renovate.json` — **advisory, not required** (2026-10-04), so read its result before merging such a
-pull request. **Renovate stays as it is** (the owner, 2026-11-22): its pull requests are not a
-thread's; a held-back one (a major, a never-alone dependency) waits for the owner's word. Do not
-widen the boundary without the owner.
+pull request. Renovate runs **before 6am on Monday, Europe/Warsaw**, and a **dependency review**
+thread reads what it holds back that same Monday (the owner, 2026-11-23, #2706): it merges the
+never-alone patches and minors whose changelogs are clear, and a major or a risky one (auth,
+marketplaces, cloud storage) waits for the owner's word → [`dependency-review.md`](dependency-review.md).
+Do not widen the automerge boundary without the owner.
 
 ## If the machine is broken, report it and stop
 

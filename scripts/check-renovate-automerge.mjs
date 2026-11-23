@@ -59,6 +59,10 @@ const INERT_TOP_LEVEL = new Set([
   "automergeType",
   "automergeStrategy",
   "packageRules",
+  // When Renovate opens and updates pull requests, never whether one automerges (#2706).
+  "schedule",
+  "timezone",
+  "updateNotScheduled",
 ]);
 
 const MODELLED_MATCHERS = new Set(["matchDepNames", "matchUpdateTypes"]);
