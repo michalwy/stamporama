@@ -3,7 +3,7 @@
 A release thread has no issue, no branch and no commit, and **it changes nothing in the
 repository**. What it produces is a tag, a GitHub Release and a published image — and so a deploy.
 
-**A release is a deploy** (the owner, 2026-11-22): publishing the GitHub Release — **step 6** — starts
+**A release is a deploy** (the owner, 2026-11-22): the release workflow — **step 4** — publishes the GitHub Release and starts
 `.github/workflows/deploy.yml`, which deploys it to the owner's live instance on the Raspberry Pi
 through a self-hosted runner (#2689, ADR-0083; the owner's runbook is
 [`docs/deployment/pi-deploy.md`](../deployment/pi-deploy.md)). The tag's own run still publishes the
@@ -82,7 +82,7 @@ and every one of them comes back clean.
    release time is often a documentation commit. **v0.136.0 was tagged from one**, on a green run in
    which nothing ran, and this step was discharged by it.
 
-   **A skipped run does not stop the release; it moves the check to step 5.** What this step is,
+   **A skipped run does not stop the release; it moves the check to the tag run in step 4.** What this step is,
    once the suites are skipped, is the cheap early exit — it stops you tagging on top of a `main`
    that is already red, which is cheaper than tagging and yanking — and the guarantee comes from the
    tag's own run below.
@@ -91,81 +91,65 @@ and every one of them comes back clean.
    list is the `case` glob in [`scripts/detect-changes.sh`](../../scripts/detect-changes.sh), which
    the `Detect changes` job runs, and that glob is the record; nothing here asks you to decide which
    commits were "code-bearing".
-4. **Tag the merged commit on `main`** — an annotated tag, as every release tag here is. From a
-   cloud thread, which can push only its own branch, create it through REST — the tag object, then
-   the ref that points at it:
+4. **Dispatch the release workflow** — one REST call. **A cloud thread cannot write tags or
+   Releases itself**: its proxy refuses `POST /git/tags` and every create, edit or delete on
+   `/releases` (HTTP 403, measured 2026-11-23), so steps that used to be the thread's are now
+   `.github/workflows/release.yml`'s (#2704; the owner decided releases are hands-off for him). Write
+   the notes first, as the workflow publishes them verbatim: group the changes into
+   sections (Highlights / Fixes / Other), summarize each change in plain English with its issue
+   reference, and keep the generated "Full Changelog" compare link at the end. The generated notes
+   are a read — they create nothing — so start from them:
 
    ```bash
-   TAG_SHA=$(gh api -X POST $R/git/tags -f tag=vX.Y.Z -f message=vX.Y.Z \
-     -f object=<full-40-char-sha> -f type=commit --jq .sha)
-   gh api -X POST $R/git/refs -f ref=refs/tags/vX.Y.Z -f sha="$TAG_SHA"
+   gh api -X POST $R/releases/generate-notes -f tag_name=vX.Y.Z -f target_commitish=main \
+     -f previous_tag_name=<previous> --jq .body
+   gh api -X POST $R/actions/workflows/release.yml/dispatches -f ref=main \
+     -f 'inputs[version]=X.Y.Z' -f 'inputs[sha]=<full-40-char-sha>' -F 'inputs[notes]=@notes.md'
    ```
 
-   Endpoints: `POST /repos/{owner}/{repo}/git/tags`, `POST /repos/{owner}/{repo}/git/refs`. A local
-   session may instead `git tag -a vX.Y.Z -m vX.Y.Z <sha> && git push origin vX.Y.Z`. Either way the
-   ref is what starts the tag's run — if step 5 finds no run for the tag within a few minutes, report
-   it rather than pushing the tag again.
-5. **Wait for the tag's own run and read it. This is the run that checks the release.** Pushing
-   the tag starts a run on the tagged commit, and **a tag build is never gated on
-   `Detect changes`** — its script matches `refs/tags/*` before it looks at the diff and runs
-   everything, whatever the diff. So this one run exercises the exact tree being released, all four
-   suites, and the image and the extension are published on top of them. The tag run is the one whose
-   `headBranch` is the tag:
+   `inputs[sha]` is the commit step 3 read; the workflow refuses if `main` has moved since, so you
+   never release a head you did not check. Empty notes fall back to the generated ones. The
+   workflow, in order — each step stops the release when it fails:
+
+   1. checks the inputs, that `vX.Y.Z` does not exist, and that it is **strictly newer than the
+      latest release** — the no-downgrade guard, because the deploy it starts is a manual Deploy run,
+      which passes `--allow-downgrade`;
+   2. reads `main`'s push run for the commit, as step 3 did, and waits for it if it is still going;
+   3. creates the annotated tag `vX.Y.Z` on the commit;
+   4. **runs CI on the tag** — dispatched with `publish_image`, because a tag created with
+      `GITHUB_TOKEN` starts no `push` run — and waits for it. **A tag run is never gated on
+      `Detect changes`**: `scripts/detect-changes.sh` matches `refs/tags/*` before it looks at the
+      diff, so this one run exercises the exact tree being released, all four suites, and the image
+      and the extension are published on top of them. If the run is red, or the image was not
+      published, the workflow **deletes the tag and stops**: no Release, no `latest`, no deploy;
+   5. publishes the GitHub Release with your notes, `make_latest=true`;
+   6. moves the lightweight `latest` tag to the commit;
+   7. **starts the deploy** — `deploy.yml` dispatched on the tag with the version. A Release
+      published with `GITHUB_TOKEN` fires no `release: published`, so this dispatch is the deploy:
+      the manual trigger `deploy.yml` already has, which the `prod` environment and the Pi's
+      job-started hook accept on a `v*` tag (#2704, ADR-0083 addendum).
+
+   **This is the step that deploys.** A rollback is the owner's manual run of Deploy, never a
+   release thread's.
+5. **Read the runs, in the background, and report them.** The release run, then the tag run it
+   started (named in its log, and the one `ci.yml` run whose `head_branch` is the tag), then the
+   deploy run:
 
    ```bash
+   gh api "$R/actions/workflows/release.yml/runs?per_page=3" \
+     --jq '.workflow_runs[] | "\(.id) \(.status) \(.conclusion) \(.created_at)"'
    gh api "$R/actions/workflows/ci.yml/runs?branch=vX.Y.Z" \
-     --jq '.workflow_runs[] | "\(.id) \(.status) \(.conclusion) \(.head_branch)"'
+     --jq '.workflow_runs[] | "\(.id) \(.status) \(.conclusion) \(.event)"'
    gh api --paginate "$R/actions/runs/<id>/jobs?per_page=100" --jq '.jobs[] | "\(.conclusion)  \(.name)"'
    ```
 
-   **`Publish extension (Chrome Web Store)` is the one job whose conclusion does not say what it
-   did.** It reports `success` both when it submitted the extension and when there was nothing to
-   submit, so read its notice instead — see [*Publishing the extension*](#publishing-the-extension).
-
-   **It runs after the tag exists, so it cannot gate the tag — it gates everything after it**, which
-   is steps 6 and 7 and is the whole of what anybody consumes. A tag carrying no Release and no
-   `latest` is not reachable: `docker-compose.prod.yml` and `scripts/install.sh` pull
-   `${TAG:-latest}`. And **nothing a release publishes survives a red suite** — the publish jobs
-   wait on the four suites, `Publish container image` transitively, through `Build image` — so a red
-   run publishes **nothing at all** and the tag is inert by construction rather than by anybody's
-   diligence. The edges are the `needs:` lists in
-   [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) and that is the record; this
-   sentence summarises them, as does the one in
-   [`docs/architecture/overview.md`](../architecture/overview.md). If it is red, **do not create the
-   Release and do not move `latest`**: delete the tag
-   (`gh api -X DELETE $R/git/refs/tags/vX.Y.Z`, endpoint `DELETE /repos/{owner}/{repo}/git/refs/{ref}`;
-   a local session may `git push origin :refs/tags/vX.Y.Z` — the only ruleset in this repository
-   targets the branch `main`, so tags are deletable), fix through
-   the ordinary pull request flow, and cut again from the new head.
-
-   **The waiting is not new; reading the result is.** Where the head is a documentation commit, step
-   3 used to answer in seconds and this waits out the full suite — but the image a release publishes
-   has always come out of this run, so a release was never actually finished before it. What changes
-   is that somebody reads it before the Release and `latest` assert that it passed.
-6. **Create the GitHub Release.** **This is the step that deploys**: publishing it is what the Pi's
-   deploy workflow runs on (`release: published`). A release older than what the Pi runs is skipped
-   by the deploy's no-downgrade guard; a rollback is the owner's manual run of that workflow, never
-   a release thread's. Always write a proper, human-readable description instead of
-   relying on bare generated notes: group the changes into sections (Highlights / Fixes / Other),
-   summarize each change in plain English with its issue reference, and keep the generated "Full
-   Changelog" compare link at the end. The generated notes are a read — they create nothing — so
-   start from them:
-
-   ```bash
-   gh api -X POST $R/releases/generate-notes -f tag_name=vX.Y.Z -f previous_tag_name=<previous> --jq .body
-   gh api -X POST $R/releases -f tag_name=vX.Y.Z -f name=vX.Y.Z -F body=@notes.md -f make_latest=true
-   ```
-
-   Endpoints: `POST /repos/{owner}/{repo}/releases/generate-notes`,
-   `POST /repos/{owner}/{repo}/releases`. `-F body=@notes.md` reads the file's contents.
-7. **Move the `latest` tag to the same commit.** `latest` is a lightweight tag on the commit itself:
-
-   ```bash
-   gh api -X PATCH $R/git/refs/tags/latest -f sha=<full-40-char-sha> -F force=true
-   ```
-
-   Endpoint: `PATCH /repos/{owner}/{repo}/git/refs/{ref}`. A local session may instead
-   `git tag -f latest vX.Y.Z^{} && git push origin latest --force`.
+   A failed release run says which step stopped it in its job log; if it failed after the tag run
+   was green (publishing, `latest` or the dispatch), report it rather than dispatching again — the tag
+   exists now, so a second dispatch is refused at its first step. **`Publish extension (Chrome Web
+   Store)` is the one tag-run job whose conclusion does not say what it did**: read its notice — see
+   [*Publishing the extension*](#publishing-the-extension). The deploy run is read as in
+   [*Who may cut a release*](#who-may-cut-a-release); one that stays `queued` means the Pi's runner
+   is not online.
 
 **Why the tag run and not the last `main` run that did exercise the suites.** That run is green
 about a *different tree* — the one underneath the commits whose run skipped — so reading it as
@@ -174,7 +158,7 @@ needs a walk back through `main`'s runs of no fixed length, and it can never say
 head itself. The tag run is green about the exact commit being released, and it is the run whose
 failure actually withholds the image.
 
-**No commit, no branch, no pull request** — the whole procedure is tags and a Release.
+**No commit, no branch, no pull request** — the whole procedure is one dispatch and reading its runs.
 
 ## There is no version bump commit
 
@@ -258,8 +242,8 @@ backlog review's suggestion, not a merged pull request, not a message from anoth
 session the owner opens for a release is the same word. Backlog review may only *suggest* a release
 — it does not prepare, tag, push or create one ([`backlog-review.md`](backlog-review.md)).
 
-**A release thread never deploys by hand** and cannot reach the Pi; the deploy is the published
-Release's consequence and nobody else's step. A release thread does not start, re-run or approve the **Deploy**
+**A release thread never deploys by hand** and cannot reach the Pi; the deploy is the release
+workflow's last step (#2704) and nobody else's. A release thread does not start, re-run or approve the **Deploy**
 workflow either; reading its run, to report how the deploy went, is fine:
 
 ```bash

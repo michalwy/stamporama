@@ -1,0 +1,180 @@
+name: Release
+
+# Cuts a release: tag, the tag's own CI run, GitHub Release, `latest`, deploy (#2704).
+#
+# Why a workflow: a cloud thread's proxy refuses `POST /git/tags` and every write to `/releases`
+# (HTTP 403, measured 2026-11-23), and the owner decided releases are hands-off for him — "To powinno
+# być bezobsługowe dla mnie" (#2704). A workflow dispatch does reach GitHub, so a release thread
+# starts this file with one REST call and reads the runs it starts:
+#
+#   gh api -X POST repos/michalwy/stamporama/actions/workflows/release.yml/dispatches \
+#     -f ref=main -f 'inputs[version]=X.Y.Z' -f 'inputs[sha]=<full-40-char-sha>' -F 'inputs[notes]=@notes.md'
+#
+# The procedure — and why each check is here — is `docs/agents/release-versioning.md`.
+#
+# **Why it starts CI and Deploy itself.** Everything this job writes is written with `GITHUB_TOKEN`,
+# and an event caused by `GITHUB_TOKEN` starts no workflow — except `workflow_dispatch`. So the tag
+# it creates does not start `ci.yml`'s `push` run, and the Release it publishes does not fire
+# `deploy.yml`'s `release: published`. It dispatches both instead, on the tag: CI with
+# `publish_image`, Deploy with the version. Deploy's triggers are unchanged; a dispatch on a `v*` tag
+# is the manual run it already has, which the `prod` environment and the Pi's job-started hook
+# already accept. The owner's decision for that is in #2704.
+#
+# **The no-downgrade guard moves here.** A manual Deploy run passes `--allow-downgrade`, so this job
+# refuses a version that is not newer than the latest published release before it creates anything.
+#
+# **Nothing is published unless the tag's run is green.** A red tag run deletes the tag and fails
+# this job, so no Release, no `latest` and no deploy follow it.
+#
+# Every value reaches a script through `env:`, never `${{ }}` inside `run:`: the notes are free text.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, X.Y.Z (no leading v)"
+        required: true
+        type: string
+      sha:
+        description: "Full 40-character SHA of main's head you checked; the run refuses if main moved"
+        required: true
+        type: string
+      notes:
+        description: "Release notes (Markdown). Empty uses GitHub's generated notes"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# One release at a time, and never cancelled halfway: a cancelled run can leave a tag without a Release.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag, verify, publish and deploy
+    if: github.repository == 'michalwy/stamporama' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    permissions:
+      # The tag, the Release and `latest`.
+      contents: write
+      # Dispatching `ci.yml` and `deploy.yml` and reading their runs.
+      actions: write
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      R: repos/${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      EXPECTED_SHA: ${{ inputs.sha }}
+      NOTES: ${{ inputs.notes }}
+
+    steps:
+      - name: Check the inputs, main and the version
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must be X.Y.Z, got '$VERSION'"; exit 1; }
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha must be the full 40-character SHA"; exit 1; }
+          [ "$EXPECTED_SHA" = "$GITHUB_SHA" ] || { echo "::error::main is at $GITHUB_SHA, not $EXPECTED_SHA; check the new head and dispatch again"; exit 1; }
+
+          if gh api "$R/git/ref/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag v$VERSION already exists"; exit 1
+          fi
+
+          # The no-downgrade guard: strictly newer than the latest published release.
+          latest=$(gh api "$R/releases/latest" --jq .tag_name)
+          latest=${latest#v}
+          newest=$(printf '%s\n%s\n' "$latest" "$VERSION" | sort -V | tail -n1)
+          if [ "$VERSION" = "$latest" ] || [ "$newest" != "$VERSION" ]; then
+            echo "::error::v$VERSION is not newer than the latest release v$latest"; exit 1
+          fi
+          echo "Releasing v$VERSION from $GITHUB_SHA (previous v$latest)."
+          echo "PREVIOUS=v$latest" >> "$GITHUB_ENV"
+
+      # Step 3 of the procedure: main's own push run for this commit must have completed green.
+      # A run still going is waited for; a missing, cancelled or red one stops the release.
+      - name: Read main's CI run for the commit
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            line=$(gh api "$R/actions/workflows/ci.yml/runs?branch=main&event=push&head_sha=$GITHUB_SHA" \
+              --jq '.workflow_runs | sort_by(.run_started_at) | last | "\(.id) \(.status) \(.conclusion)"')
+            read -r id status conclusion <<<"$line"
+            if [ "$id" = "null" ] || [ -z "$id" ]; then
+              echo "::error::no CI run on main for $GITHUB_SHA"; exit 1
+            fi
+            if [ "$status" = "completed" ]; then
+              [ "$conclusion" = "success" ] || { echo "::error::main's run $id for $GITHUB_SHA is $conclusion"; exit 1; }
+              echo "main's run $id: success"; exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::main's run for $GITHUB_SHA did not finish in 30 minutes"; exit 1
+
+      - name: Create the annotated tag
+        run: |
+          set -euo pipefail
+          tag_sha=$(gh api -X POST "$R/git/tags" -f tag="v$VERSION" -f message="v$VERSION" \
+            -f object="$GITHUB_SHA" -f type=commit --jq .sha)
+          gh api -X POST "$R/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$tag_sha" --jq .ref
+
+      # Step 5: the tag's own run — all four suites (a tag is never gated on `Detect changes`), then
+      # the image. The tag is new, so the only dispatched run on it is the one started here.
+      - name: Run CI on the tag and wait for it
+        run: |
+          set -euo pipefail
+          gh api -X POST "$R/actions/workflows/ci.yml/dispatches" -f ref="v$VERSION" -f 'inputs[publish_image]=true'
+          id=""
+          for _ in $(seq 1 30); do
+            sleep 10
+            id=$(gh api "$R/actions/workflows/ci.yml/runs?branch=v$VERSION&event=workflow_dispatch" \
+              --jq '.workflow_runs[0].id // empty')
+            [ -n "$id" ] && break
+          done
+          [ -n "$id" ] || { echo "::error::no CI run appeared for v$VERSION"; gh api -X DELETE "$R/git/refs/tags/v$VERSION"; exit 1; }
+          echo "Tag run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$id"
+          echo "TAG_RUN=$id" >> "$GITHUB_ENV"
+
+          while :; do
+            read -r status conclusion < <(gh api "$R/actions/runs/$id" --jq '"\(.status) \(.conclusion)"')
+            [ "$status" = "completed" ] && break
+            sleep 60
+          done
+          image=$(gh api --paginate "$R/actions/runs/$id/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name == "Publish container image") | .conclusion')
+          if [ "$conclusion" != "success" ] || [ "$image" != "success" ]; then
+            echo "::error::tag run $id is $conclusion (image: ${image:-missing}); deleting v$VERSION, nothing is published"
+            gh api -X DELETE "$R/git/refs/tags/v$VERSION"
+            exit 1
+          fi
+          echo "Tag run $id: success, image published."
+
+      # Step 6. The notes come from the input; empty falls back to GitHub's generated notes.
+      - name: Publish the GitHub Release
+        run: |
+          set -euo pipefail
+          if [ -z "${NOTES//[[:space:]]/}" ]; then
+            NOTES=$(gh api -X POST "$R/releases/generate-notes" -f tag_name="v$VERSION" \
+              -f previous_tag_name="$PREVIOUS" --jq .body)
+          fi
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          gh api -X POST "$R/releases" -f tag_name="v$VERSION" -f name="v$VERSION" \
+            -F body=@"$RUNNER_TEMP/notes.md" -f make_latest=true --jq .html_url
+
+      # Step 7: `latest` is a lightweight tag on the commit itself.
+      - name: Move latest
+        run: |
+          set -euo pipefail
+          gh api -X PATCH "$R/git/refs/tags/latest" -f sha="$GITHUB_SHA" -F force=true --jq .object.sha
+
+      # A Release published with `GITHUB_TOKEN` does not fire `release: published`, so the deploy is
+      # dispatched on the tag — the manual run `deploy.yml` already has (#2704).
+      - name: Start the deploy
+        run: |
+          set -euo pipefail
+          gh api -X POST "$R/actions/workflows/deploy.yml/dispatches" -f ref="v$VERSION" -f "inputs[version]=$VERSION"
+          echo "::notice::v$VERSION released; the Deploy workflow was started on the tag."

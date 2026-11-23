@@ -39,6 +39,11 @@ exactly this reason, because a fork's pull request can run a workflow.
    `github.repository == 'michalwy/stamporama'`, runs on `[self-hosted, pi, stamporama]` in the
    `prod` environment, in a concurrency group that **queues rather than cancels**, with a timeout.
    `tests/unit/deploy-workflow.test.ts` pins every one of these.
+   *Addendum (2026-11-23, #2704):* releases are now cut by `.github/workflows/release.yml`, and
+   because what it publishes with `GITHUB_TOKEN` fires no `release: published`, it starts this
+   workflow by `workflow_dispatch` on the new `v*` tag — the manual trigger above, unchanged. The
+   owner decided this in #2704. The no-downgrade guard a manual run skips is enforced by the release
+   workflow before it tags.
 2. **No other workflow may reach a self-hosted runner, and CI enforces it.**
    `scripts/check-self-hosted-runners.mjs`, run by `tests/unit/self-hosted-runners.test.ts` inside
    the required `Unit tests` check, fails when another workflow names `self-hosted` — the owner's
