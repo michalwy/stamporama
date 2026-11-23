@@ -130,6 +130,7 @@ and ADR references.
 | Turning ideas and bug reports into issues (the project conversation) | [`backlog-manager.md`](docs/agents/backlog-manager.md) |
 | Waiting for CI, the guardrail checklist, merging your own pull request, closing the issue | [`merge-checklist.md`](docs/agents/merge-checklist.md) |
 | Releases (= deploys) | [`release-versioning.md`](docs/agents/release-versioning.md) |
+| Renovate's schedule and the Monday dependency-review thread | [`dependency-review.md`](docs/agents/dependency-review.md) |
 | The Project's standing instructions, as pasted into Project settings | [`project-instructions.md`](docs/project-instructions.md) |
 | How `main` is protected | [`.github/rulesets/README.md`](.github/rulesets/README.md) |
 
