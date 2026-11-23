@@ -8,7 +8,16 @@ on:
   # `concurrency` below, a title or body edit would cancel the full suite in progress (#935).
   # The one check that has to see an edit lives in `closing-refs.yml`.
   pull_request:
+  # By hand, or from `release.yml` (#2704). A tag created with `GITHUB_TOKEN` starts no `push` run, so
+  # the release workflow dispatches this one on the tag with `publish_image`; a manual re-run on a
+  # tag (the extension retry below) leaves it off and does not rebuild a shipped release's images.
   workflow_dispatch:
+    inputs:
+      publish_image:
+        description: "On a v* tag: build and publish the container image (the release workflow sets it)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -446,10 +455,11 @@ jobs:
     name: Build image (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     needs: [static-checks, unit, integration, extension]
-    # Publish only for release tags (vX.Y.Z) — never for every main commit or PRs.
+    # Publish only for release tags (vX.Y.Z) — never for every main commit or PRs: the tag's push, or
+    # the release workflow's dispatch on it (#2704).
     if: >-
-      github.event_name == 'push'
-      && startsWith(github.ref, 'refs/tags/v')
+      startsWith(github.ref, 'refs/tags/v')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image))
     timeout-minutes: 30
 
     permissions:
@@ -532,8 +542,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-image]
     if: >-
-      github.event_name == 'push'
-      && startsWith(github.ref, 'refs/tags/v')
+      startsWith(github.ref, 'refs/tags/v')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image))
     timeout-minutes: 15
 
     permissions:

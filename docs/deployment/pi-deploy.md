@@ -129,8 +129,8 @@ restart is needed, because the runner runs the file anew for every job.
 **Settings → Environments → New environment**, named `prod`:
 
 - **Deployment branches and tags → Selected branches and tags**: add the branch `main` and the tag
-  pattern `v*`. A published release runs on its tag; a manual run on `main`. Nothing else can use
-  the environment.
+  pattern `v*`. A release runs on its tag — `release.yml` starts the deploy there (#2704); a manual
+  run on `main`. Nothing else can use the environment.
 - **Environment variables**:
 
   | Variable | Required | Value |
