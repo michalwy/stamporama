@@ -145,7 +145,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24.22.3
+          node-version: 26.13.1
           cache: pnpm
 
       - name: Install dependencies
@@ -175,7 +175,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24.22.3
+          node-version: 26.13.1
           cache: pnpm
 
       - name: Install dependencies
@@ -220,7 +220,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24.22.3
+          node-version: 26.13.1
           cache: pnpm
 
       - name: Install dependencies
@@ -272,7 +272,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24.22.3
+          node-version: 26.13.1
           cache: pnpm
 
       - name: Install dependencies
@@ -331,7 +331,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24.22.3
+          node-version: 26.13.1
           cache: pnpm
 
       - name: Install dependencies
