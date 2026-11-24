@@ -142,7 +142,7 @@ export default async function OrderSummaryPage({ params, searchParams }: OrderSu
       areasInLanguage(areas, translateTo),
       locations,
       buildAreaVendorMaps(areas, issuePrefixes),
-      { grouping: "set", rowOrder: "given", merge: false }
+      { grouping: "set", rowOrder: "given" }
     );
     copyCount = list.totalCopies;
     const rowsBySet = new Map(list.groups.map((g) => [g.set?.id ?? "", g.rows]));

@@ -26,7 +26,7 @@ import { specificationCopyCount, specificationLabels } from "@/lib/offer-specifi
 // packing list's are — how the collector writes to buyers, not a property of one sale.
 //
 // The copy rows draw the packing list's own descriptive columns, so a copy reads alike on both
-// printouts; the ones that belong to the collector (quantity, ref, location, copy and offer numbers)
+// printouts; the ones that belong to the collector (ref, location, copy and offer numbers)
 // are not offered at all, and there is no tick box.
 //
 // The sheet is in the buyer's language (#2604): its column names and copy counts are the offer

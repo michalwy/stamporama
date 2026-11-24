@@ -19,14 +19,14 @@ import type { PieceKind } from "./piece-valuation";
 //
 // The default order is a **packing walk-order**: one section per storage location, and within a
 // section the copies ordered by their in-location ref (`A234`) — the identifier you actually read
-// off the shelf. Copies that are indistinguishable while packing (same stamp, same condition, same
-// shelf ref, same ticked state) collapse into one row with a quantity, so a run of duplicates is one
-// line to tick rather than five identical ones.
+// off the shelf. **Every copy is its own row** (#2708): copies of one stamp are never collapsed into
+// one row with a quantity, even when nothing tells them apart on paper. A merged row read as one
+// piece and carried one photo, so the second and third copy were easy to miss while packing and their
+// pictures were not on the sheet at all — each copy is a line to pick and tick, with its own photo.
 //
 // A sale's sheet can instead be divided by **sold set** (#2187): one division per set the buyer took,
 // so a parcel packed down the sheet goes out with its sets apart. The set's copies still read in shelf
-// order — by location, then ref — so a set is picked down the shelf all the same, and a merge never
-// crosses two sets, because each set is its own bucket.
+// order — by location, then ref — so a set is picked down the shelf all the same.
 //
 // A sale's sheet names a location by its **full code** (#2191, #2192; `A.B.1`, its levels' codes
 // joined, since #2235), not its path: the sheet goes into the parcel, and the path is the
@@ -35,8 +35,7 @@ import type { PieceKind } from "./piece-valuation";
 //
 // Every row carries its stamp's **issue format** (#2444) — a souvenir sheet and a stamp taken out of
 // one are different things to pull off the shelf — and the sheet prints it only when the collector
-// switches it on. It needs no place in the merge key: the issue format is the stamp's (#2439), and
-// the stamp is already in the key, so two rows differing in it are two stamps and never one row.
+// switches it on.
 //
 // A sheet the partner reads is the same shaping with the shelf taken out of it: the divisions are the
 // transaction's own (a trade's sections), and the rows inside them read by catalogue number, because
@@ -69,12 +68,9 @@ export interface PackingValue {
 }
 
 /**
- * The transaction line a copy sits on, where the printout is **per line** rather than per copy.
- *
- * Carrying one makes the row *that line*: two otherwise identical copies stay two rows, because what
- * is recorded from the sheet is recorded against a line and a merged row of three could not be
- * answered for one piece at a time. This is the whole reason a trade's checklist does not merge while
- * a sale's does — a sale ticks copies, a trade answers for lines (#642).
+ * The transaction line a copy sits on, where the printout is **per line** (a trade's checklist,
+ * #642): what is recorded from the sheet is recorded against a line. A give line is one copy, so the
+ * row is the copy and the line alike.
  */
 export interface PackingLine {
   id: string;
@@ -180,20 +176,17 @@ export interface PackingCopy {
 }
 
 export interface PackingListRow {
-  /** Stable identity of the merged row (grouping key). */
+  /** Stable identity of the row — one copy (#2708). */
   key: string;
   /** Catalog number with vendor prefix (e.g. `Mi·PL 200`), or the stamp name when it has none. */
   catalog: string;
   stampName: string | null;
-  /** Name of the issue (series) the stamp belongs to, or null when it is in none. Constant across
-   * a merged row — the merge key pins the stamp, and the issue is the stamp's. */
+  /** Name of the issue (series) the stamp belongs to, or null when it is in none. */
   issueName: string | null;
-  /** Full path of the collection area the stamp sits in (`Polska › II RP`), or null. Like the
-   * issue, it is a property of the stamp, so it is constant across a merged row. */
+  /** Full path of the collection area the stamp sits in (`Polska › II RP`), or null. */
   areaPath: string | null;
   /** The stamp's issue format abbreviation (#2444, `Bl`), or null for an ordinary stamp — printed
-   *  beside the catalogue number when the sheet's switch is on. The stamp's, so constant across a
-   *  merged row like the issue. */
+   *  beside the catalogue number when the sheet's switch is on. */
   issueFormat: string | null;
   /** The issue format's full name, for the hover hint. */
   issueFormatName: string | null;
@@ -201,12 +194,11 @@ export interface PackingListRow {
   condition: string | null;
   /** Full condition name, for the printed legend / tooltip. */
   conditionName: string | null;
-  /** Certificate status of the copy, or null when it has none. Printed beside the condition,
-   * and part of the merge key — a certified copy is not interchangeable with an uncertified one. */
+  /** Certificate status of the copy, or null when it has none. Printed beside the condition. */
   certificateStatusName: string | null;
   /** In-location identifier, or null when the copy has none. */
   locationRef: string | null;
-  /** Where the copies behind the row are, as the sheet prints it — the full location path, or the
+  /** Where the copy is, as the sheet prints it — the full location path, or the
    * location's code on a sheet that prints codes ({@link PackingListOptions.locationLabel}) — or null
    * when they are filed nowhere. Carried on the row as well as on the group because a sheet divided
    * by something *else* still wants to say where the piece is — and one divided by location does not
@@ -214,27 +206,19 @@ export interface PackingListRow {
   location: string | null;
   /** The full location path whatever the sheet prints: what shelf order collates. */
   locationPath: string | null;
-  /** Id of the first photo of the first copy behind the row (#112), or null when it has none —
-   * the thumbnail column renders it. Merged copies share one thumbnail: they are the same stamp
-   * in the same condition, so any of their photos identifies the piece to pull. */
+  /** Id of the copy's first photo (#112), or null when it has none — the thumbnail column renders
+   * it. Each copy's own (#2708): two copies of one stamp are two pieces, and each is pulled by its
+   * own picture. */
   photoId: string | null;
-  /** Every copy number (#268) behind the row, ascending (#474). A merged row stands for several
-   * physical copies, and the number is written on the piece itself — so all of them are carried;
-   * one of them would name a copy the collector cannot tell from its neighbours. */
-  itemNos: number[];
-  /** The distinct offer numbers (#416) the row's copies left through, ascending. Usually one — a
-   * merged row is one stamp in one grade — but two identical copies can have been listed on two
-   * offers of the same sale. Empty when no listing is on record. */
-  offerNos: number[];
-  /** How many copies this row stands for. */
-  quantity: number;
-  /** True when every copy behind the row is already ticked at source. */
+  /** The copy's number (#268), written on the piece itself. */
+  itemNo: number;
+  /** The offer number (#416) the copy left through, or null when no listing is on record. */
+  offerNo: number | null;
+  /** True when the copy is already ticked at source. */
   packed: boolean;
-  /** The copies behind the row are free extras (#2408) — part of the merge key, so a row is all of
-   *  one or none. */
+  /** The copy is a free extra (#2408). */
   freeExtra: boolean;
-  /** The line this row **is**, or null on a per-copy sheet. A row carrying one always stands for a
-   * single copy — see {@link PackingLine}. */
+  /** The line this row **is**, or null on a per-copy sheet — see {@link PackingLine}. */
   line: PackingLine | null;
 }
 
@@ -299,12 +283,6 @@ export interface PackingListOptions {
    */
   rowOrder?: "shelf" | "catalog" | "given";
   /**
-   * Whether indistinguishable copies collapse into one row with a quantity (the default). `false`
-   * prints every copy as its own row — the buyer's order summary (#2512), which lists a set's copies
-   * one each and has no tick box a merge would save.
-   */
-  merge?: boolean;
-  /**
    * How a location is printed, in headings and rows alike: `path` (`Szafa 1 › Klaser A`), or `code`
    * — the location's full code (#2192, #2235), for a sheet whose names are explained by a legend kept apart
    * from it. The order is the paths' either way.
@@ -323,7 +301,7 @@ interface Bucket {
   location: string;
   order: string;
   set: PackingSet | null;
-  rows: Map<string, PackingListRow>;
+  rows: PackingListRow[];
 }
 
 /** Shape a set of copies into printable, sectioned rows. */
@@ -341,7 +319,6 @@ export function buildPackingList(
     options.ungroupedLabel ?? (byGroup || bySet ? NO_GROUP_LABEL : NO_LOCATION_LABEL);
   const rowOrder = options.rowOrder ?? "shelf";
   const byCode = options.locationLabel === "code";
-  const merge = options.merge ?? true;
 
   const buckets = new Map<string, Bucket>();
   let currency: string | null = null;
@@ -367,40 +344,14 @@ export function buildPackingList(
         location: heading,
         order: (bySet || byGroup ? null : locationPath) ?? heading,
         set,
-        rows: new Map(),
+        rows: [],
       };
       buckets.set(bucketKey, bucket);
     }
-    // Copies only merge when nothing distinguishes them on paper — a half-packed pair stays two
-    // rows so each half can be ticked on its own. A copy that carries a **line** never merges: the
-    // line is what a verdict is recorded against, and its id in the key is what says so. On a sheet
-    // divided by set a division holds several shelves, so the location is in the key too — one ref
-    // in two boxes is two places to go.
-    const rowKey = [
-      copy.line?.id ?? "",
-      bySet ? (copy.locationId ?? "") : "",
-      copy.stampId,
-      copy.conditionId,
-      copy.certificateStatusId ?? "",
-      copy.locationRef ?? "",
-      copy.packed ? "1" : "0",
-      copy.freeExtra ? "free" : "",
-      merge ? "" : String(copy.itemNo),
-    ].join("|");
+    // Every copy is its own row (#2708) — never merged with another copy of the same stamp.
     currency ??= copy.line?.value?.currency ?? null;
-    const existing = bucket.rows.get(rowKey);
-    if (existing) {
-      existing.quantity += 1;
-      existing.itemNos.push(copy.itemNo);
-      if (copy.offerNo != null && !existing.offerNos.includes(copy.offerNo)) {
-        existing.offerNos.push(copy.offerNo);
-      }
-      // A later copy can carry the photo an earlier one lacks.
-      existing.photoId ??= copy.photos[0]?.id ?? null;
-      continue;
-    }
-    bucket.rows.set(rowKey, {
-      key: rowKey,
+    bucket.rows.push({
+      key: `${copy.line?.id ?? ""}|${copy.itemNo}`,
       catalog: catalogLabel(catalogSubject(copy), maps),
       stampName: copy.stampName,
       issueName: copy.issueName,
@@ -414,9 +365,8 @@ export function buildPackingList(
       location: locationLabel,
       locationPath,
       photoId: copy.photos[0]?.id ?? null,
-      itemNos: [copy.itemNo],
-      offerNos: copy.offerNo == null ? [] : [copy.offerNo],
-      quantity: 1,
+      itemNo: copy.itemNo,
+      offerNo: copy.offerNo ?? null,
       packed: copy.packed,
       freeExtra: copy.freeExtra ?? false,
       line: copy.line ?? null,
@@ -432,25 +382,19 @@ export function buildPackingList(
           ? compareByCatalog
           : compareByShelf;
   const groups: PackingListGroup[] = Array.from(buckets.values()).map((bucket) => {
-    const rows = Array.from(bucket.rows.values());
+    const rows = bucket.rows;
     if (compareRows) rows.sort(compareRows);
-    // The numbers a row carries read as a list on paper, so they read ascending (#474) — the copy
-    // order inside a merged row is an accident of how the transaction was assembled.
-    for (const row of rows) {
-      row.itemNos.sort((a, b) => a - b);
-      row.offerNos.sort((a, b) => a - b);
-    }
     return {
       key: bucket.key,
       location: bucket.location,
       order: bucket.order,
       set: bucket.set,
       rows,
-      copyCount: rows.reduce((sum, r) => sum + r.quantity, 0),
-      packedCount: rows.reduce((sum, r) => sum + (r.packed ? r.quantity : 0), 0),
-      // Per piece × how many pieces, the same arithmetic the balance engine sums a side by, so a
-      // division's figure and the trade's own total can never disagree about what a row is worth.
-      value: rows.reduce((sum, r) => sum + (r.line?.value ? r.line.value.amount * r.quantity : 0), 0),
+      copyCount: rows.length,
+      packedCount: rows.filter((r) => r.packed).length,
+      // One piece per row, the same arithmetic the balance engine sums a side by, so a division's
+      // figure and the trade's own total can never disagree about what a row is worth.
+      value: rows.reduce((sum, r) => sum + (r.line?.value?.amount ?? 0), 0),
       valueMissing: rows.reduce((sum, r) => sum + (r.line && !r.line.value ? 1 : 0), 0),
     };
   });
@@ -492,8 +436,7 @@ export function packingLocationLegend(
 //
 // What kinds of pieces go into the parcel, so the packing supplies can be judged before packing
 // starts: loose stamps go in a stock card, while a souvenir sheet, a booklet pane or a cover each want
-// a sleeve or a bigger envelope of their own. Counted in **pieces**, not rows — a merged row of five
-// is five — and over **every** copy on the sheet, packed or not and free extras included, so it
+// a sleeve or a bigger envelope of their own. Counted in **pieces** — one per copy — and over **every** copy on the sheet, packed or not and free extras included, so it
 // describes the whole parcel and its total is the sheet's own copy count.
 //
 // A **piece** (#744, #2383) is counted as itself and never by the stamps on it: by its format's kind
@@ -622,11 +565,14 @@ function compareByShelf(a: PackingListRow, b: PackingListRow): number {
   return compareByCatalog(a, b);
 }
 
-/** Rows by catalog label, then condition — the order of a sheet that prints no shelf refs. */
+/** Rows by catalog label, then condition, then copy number — the order of a sheet that prints no
+ *  shelf refs. The copy number settles two copies of one stamp (#2708), so they read ascending. */
 function compareByCatalog(a: PackingListRow, b: PackingListRow): number {
   const byCatalog = COLLATOR.compare(a.catalog, b.catalog);
   if (byCatalog !== 0) return byCatalog;
-  return COLLATOR.compare(a.condition ?? "", b.condition ?? "");
+  const byCondition = COLLATOR.compare(a.condition ?? "", b.condition ?? "");
+  if (byCondition !== 0) return byCondition;
+  return a.itemNo - b.itemNo;
 }
 
 /**

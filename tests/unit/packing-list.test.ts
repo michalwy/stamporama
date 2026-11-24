@@ -95,39 +95,42 @@ describe("buildPackingList", () => {
     );
   });
 
-  it("merges indistinguishable copies into one row with a quantity", () => {
+  it("lists every copy as its own row, even when nothing tells them apart (#2708)", () => {
     const list = buildPackingList([copy({}), copy({}), copy({})], AREAS, LOCATIONS, MAPS);
     assert.equal(list.groups.length, 1);
     assert.deepEqual(
-      list.groups[0].rows.map((r) => ({ catalog: r.catalog, quantity: r.quantity })),
-      [{ catalog: "Mi·PL 200", quantity: 3 }]
+      list.groups[0].rows.map((r) => r.catalog),
+      ["Mi·PL 200", "Mi·PL 200", "Mi·PL 200"]
     );
+    assert.equal(new Set(list.groups[0].rows.map((r) => r.key)).size, 3);
+    assert.equal(list.groups[0].copyCount, 3);
     assert.equal(list.totalCopies, 3);
   });
 
-  it("carries every copy number behind a merged row, ascending (#474)", () => {
+  it("reads copies of one stamp on one ref by copy number, ascending (#2708)", () => {
     const list = buildPackingList(
       [copy({ itemNo: 30 }), copy({ itemNo: 10 }), copy({ itemNo: 20 })],
       AREAS,
       LOCATIONS,
       MAPS
     );
-    assert.deepEqual(list.groups[0].rows[0].itemNos, [10, 20, 30]);
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.itemNo),
+      [10, 20, 30]
+    );
   });
 
-  it("collects the distinct offer numbers of a row's copies, ascending (#474)", () => {
+  it("carries each copy's own offer number (#474, #2708)", () => {
     const list = buildPackingList(
-      [copy({ offerNo: 5 }), copy({ offerNo: 2 }), copy({ offerNo: 5 }), copy({ offerNo: null })],
+      [copy({ offerNo: 5 }), copy({ offerNo: 2 }), copy({ offerNo: null })],
       AREAS,
       LOCATIONS,
       MAPS
     );
-    assert.deepEqual(list.groups[0].rows[0].offerNos, [2, 5]);
-  });
-
-  it("leaves the offer numbers empty when no copy of a row came through a listing (#474)", () => {
-    const list = buildPackingList([copy({ offerNo: null })], AREAS, LOCATIONS, MAPS);
-    assert.deepEqual(list.groups[0].rows[0].offerNos, []);
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.offerNo),
+      [5, 2, null]
+    );
   });
 
   it("keeps packed and unpacked copies of the same stamp apart", () => {
@@ -158,18 +161,21 @@ describe("buildPackingList", () => {
     );
   });
 
-  it("carries the first photo of a merged row's copies", () => {
+  it("gives every copy of one stamp its own photo (#2708)", () => {
     const list = buildPackingList(
       [
         copy({ photos: [] }),
         copy({ photos: [{ id: "p1" }] as SaleCopyItem["photos"] }),
+        copy({ photos: [{ id: "p2" }, { id: "p3" }] as SaleCopyItem["photos"] }),
       ],
       AREAS,
       LOCATIONS,
       MAPS
     );
-    assert.equal(list.groups[0].rows[0].quantity, 2);
-    assert.equal(list.groups[0].rows[0].photoId, "p1");
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.photoId),
+      [null, "p1", "p2"]
+    );
   });
 
   it("keeps copies with a different certificate status apart", () => {
@@ -230,25 +236,19 @@ function value(amount: number, over: Partial<PackingValue> = {}): PackingValue {
 
 describe("buildPackingList over transaction lines", () => {
   it("keeps two indistinguishable copies apart when each carries its own line", () => {
-    // The sale's merge would make these one row of two. A verdict is recorded per line, so a merged
-    // row of two could not be answered for one piece at a time.
+    // A verdict is recorded per line, so each row is the line it carries.
+    const first = line();
+    const second = line();
     const list = buildPackingList(
-      [copy({ line: line() }), copy({ line: line() })],
+      [copy({ line: first }), copy({ line: second })],
       AREAS,
       LOCATIONS,
       MAPS
     );
-    assert.equal(list.groups[0].rows.length, 2);
     assert.deepEqual(
-      list.groups[0].rows.map((r) => r.quantity),
-      [1, 1]
+      list.groups[0].rows.map((r) => r.line?.id),
+      [first.id, second.id]
     );
-  });
-
-  it("still merges indistinguishable copies that carry no line", () => {
-    const list = buildPackingList([copy({}), copy({})], AREAS, LOCATIONS, MAPS);
-    assert.equal(list.groups[0].rows.length, 1);
-    assert.equal(list.groups[0].rows[0].quantity, 2);
   });
 
   it("divides the sheet by the line's group, in the order the copies came in", () => {
@@ -358,19 +358,17 @@ describe("buildPackingList over transaction lines", () => {
 // ── Free extras (#2408) ───────────────────────────────────────────────────────
 
 describe("buildPackingList with free extras", () => {
-  it("marks a free extra's row and never merges it with a sold copy of the same stamp", () => {
+  it("marks a free extra's row beside the sold copies of the same stamp", () => {
     const list = buildPackingList(
       [copy({}), copy({ freeExtra: true }), copy({})],
       AREAS,
       LOCATIONS,
       MAPS
     );
-    const rows = list.groups[0].rows;
-    assert.equal(rows.length, 2);
-    const free = rows.find((r) => r.freeExtra);
-    const sold = rows.find((r) => !r.freeExtra);
-    assert.equal(free?.quantity, 1);
-    assert.equal(sold?.quantity, 2);
+    assert.deepEqual(
+      list.groups[0].rows.map((r) => r.freeExtra),
+      [false, true, false]
+    );
   });
 
   it("reads a copy without the flag — a trade's give line — as not free", () => {
@@ -438,7 +436,7 @@ describe("buildPackingList by sold set", () => {
     );
   });
 
-  it("merges identical copies within a set, never across two", () => {
+  it("lists identical copies one row each, each in its own set", () => {
     const first = soldSet(0);
     const second = soldSet(1);
     const list = buildPackingList(
@@ -449,8 +447,8 @@ describe("buildPackingList by sold set", () => {
       { grouping: "set" }
     );
     assert.deepEqual(
-      list.groups.map((g) => g.rows.map((r) => r.quantity)),
-      [[2], [1]]
+      list.groups.map((g) => g.rows.length),
+      [2, 1]
     );
   });
 
@@ -592,7 +590,7 @@ describe("buildPackingList — issue format (#2444)", () => {
     }
   });
 
-  it("never merges a souvenir sheet with a stamp out of one", () => {
+  it("prints each copy's own issue format, one row per copy", () => {
     const list = buildPackingList(
       [
         copy({ stampId: "sheet", issueFormat: SHEET }),
@@ -606,31 +604,20 @@ describe("buildPackingList — issue format (#2444)", () => {
       LOCATIONS,
       MAPS
     );
-    const rows = list.groups[0].rows.map((r) => ({ format: r.issueFormat, quantity: r.quantity }));
-    assert.equal(rows.length, 2);
-    assert.deepEqual(
-      rows.sort((a, b) => (a.format ?? "").localeCompare(b.format ?? "")),
-      [
-        { format: "Bl", quantity: 2 },
-        { format: "exBl", quantity: 1 },
-      ]
-    );
+    const formats = list.groups[0].rows.map((r) => r.issueFormat);
+    assert.deepEqual(formats.sort(), ["Bl", "Bl", "exBl"]);
   });
 });
 
 // ── The buyer's order summary (#2512): every copy its own row, in the order given ──
 
 describe("buildPackingList for the order summary", () => {
-  it("prints identical copies as separate rows when merging is off", () => {
+  it("prints identical copies as separate rows", () => {
     const set = soldSet(0);
     const list = buildPackingList([copy({ set }), copy({ set }), copy({ set })], AREAS, LOCATIONS, MAPS, {
       grouping: "set",
-      merge: false,
     });
-    assert.deepEqual(
-      list.groups[0].rows.map((r) => r.quantity),
-      [1, 1, 1]
-    );
+    assert.equal(list.groups[0].rows.length, 3);
     assert.equal(list.groups[0].copyCount, 3);
   });
 
@@ -645,7 +632,7 @@ describe("buildPackingList for the order summary", () => {
       AREAS,
       LOCATIONS,
       MAPS,
-      { grouping: "set", rowOrder: "given", merge: false }
+      { grouping: "set", rowOrder: "given" }
     );
     assert.deepEqual(
       list.groups[0].rows.map((r) => r.locationRef),
@@ -735,10 +722,10 @@ describe("packingFormatSummary (#2571)", () => {
     assert.equal(summary.lines[0].abbreviation, null);
   });
 
-  it("counts every copy behind a merged row", () => {
+  it("counts every copy, as the sheet's rows do", () => {
     const copies = times(5, copy({ issueFormat: { ...BL, color: null } }));
     const list = buildPackingList(copies, AREAS, LOCATIONS, MAPS);
-    assert.equal(list.groups[0].rows.length, 1);
+    assert.equal(list.groups[0].rows.length, 5);
     const summary = packingFormatSummary(copies, ORDER, KINDS);
     assert.deepEqual(
       summary.lines.map((l) => [l.label, l.count]),

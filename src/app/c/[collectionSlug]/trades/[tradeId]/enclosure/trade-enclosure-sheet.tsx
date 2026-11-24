@@ -56,7 +56,7 @@ const VALUE: PackingColumnSpec = {
     if (!value) return <span style={{ color: "var(--color-text-muted)" }}>—</span>;
     return (
       <span>
-        {money(value.amount * row.quantity, value.currency)}
+        {money(value.amount, value.currency)}
         {(value.uncertain || value.manual || value.attribution) && (
           <span
             style={{
@@ -107,7 +107,7 @@ const REALISATION: PackingColumnSpec = {
     ) : null,
 };
 
-// No `Ref`, no `Copy no.`, no `Location`, no `Qty` (a give line is one copy) and no `Offer no.` (a
+// No `Ref`, no `Copy no.`, no `Location` and no `Offer no.` (a
 // trade has no listing). What is left is what identifies a stamp to somebody who does not own it.
 const COLUMNS: PackingColumnSpec[] = [
   PACKING_COLUMN.photo,

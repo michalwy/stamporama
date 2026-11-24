@@ -29,7 +29,6 @@ const PREF_KEY = "stamporama:packingList:columns:v2";
 
 const COLUMNS: PackingColumnSpec[] = [
   PACKING_COLUMN.photo,
-  PACKING_COLUMN.qty,
   PACKING_COLUMN.ref,
   PACKING_COLUMN.itemNo,
   PACKING_COLUMN.catalog,
