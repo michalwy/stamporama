@@ -68,8 +68,7 @@ const VERDICT: PackingColumnSpec = {
     ) : null,
 };
 
-// No `Qty`: a give line is one copy by construction (ADR-0039 §1), and a column of ones is a column
-// of ones. No `Offer no.` either — a trade has no listing, which is what #643 dropped it for.
+// No `Offer no.` — a trade has no listing, which is what #643 dropped it for.
 const COLUMNS: PackingColumnSpec[] = [
   PACKING_COLUMN.photo,
   PACKING_COLUMN.ref,

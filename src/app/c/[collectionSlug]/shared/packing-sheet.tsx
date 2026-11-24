@@ -27,7 +27,7 @@ import { THUMB_OBJECT_FIT } from "@/app/c/[collectionSlug]/inventory/photo-thumb
 // **Shared between three printouts** (#643): a sale's packing list, a trade's packing checklist, and
 // the parcel enclosure that goes in the envelope. What each one *is* is its column set, its division
 // of the paper and — on the checklist — what a tick writes; all of it comes in as props, because the
-// header, the tick box, the merge rows and the print behaviour are the same sheet in every case and a
+// header, the tick box, the rows and the print behaviour are the same sheet in every case and a
 // second copy of them would be a second sheet to keep in step.
 //
 // The column **preference key comes in with the columns**: a stored list names the columns that
@@ -69,7 +69,7 @@ const MUTED_DASH = <span style={{ color: "var(--color-text-muted)" }}>—</span>
  * The columns every packing sheet can draw, by key.
  *
  * Each printout composes its own array from these plus whatever is its own, in **print order** —
- * left to right, the walk-order of the eye: find the piece (photo, how many, shelf ref, catalog
+ * left to right, the walk-order of the eye: find the piece (photo, shelf ref, copy and catalog
  * number), then place it (area, series, name), then check its state.
  */
 export const PACKING_COLUMN = {
@@ -101,16 +101,6 @@ export const PACKING_COLUMN = {
         MUTED_DASH
       ),
   },
-  qty: {
-    key: "qty",
-    label: "Qty",
-    header: "Qty",
-    defaultOn: true,
-    align: "right",
-    nowrap: true,
-    numeric: true,
-    render: (row) => row.quantity,
-  },
   ref: {
     key: "ref",
     label: "Ref",
@@ -128,18 +118,16 @@ export const PACKING_COLUMN = {
     render: (row) => row.location ?? MUTED_DASH,
   },
   // The copy's own internal number (#268/#474), beside the shelf ref: both are identifiers read off
-  // the piece rather than descriptions of it, and this is the one written on the piece itself.
-  // Wrapping, unlike the other short columns: a merged row carries one number per copy behind it,
-  // and a run of five must fold rather than stretch the sheet past the page.
+  // the piece rather than descriptions of it, and this is the one written on the piece itself. One
+  // number per row, since every copy is its own row (#2708).
   itemNo: {
     key: "itemNo",
     label: "Copy no.",
     header: "Copy",
     defaultOn: true,
+    nowrap: true,
     numeric: true,
-    // Every copy the row stands for (#474), because the number is what identifies the piece in
-    // hand — a merged row of five is five labels to check off, not one.
-    render: (row) => row.itemNos.map((no) => formatItemNo(no)).join(" "),
+    render: (row) => formatItemNo(row.itemNo),
   },
   catalog: {
     key: "catalog",
@@ -224,10 +212,7 @@ export const PACKING_COLUMN = {
     header: "Offer",
     defaultOn: true,
     numeric: true,
-    render: (row) =>
-      row.offerNos.length === 0
-        ? MUTED_DASH
-        : row.offerNos.map((no) => formatEntityNo(no)).join(" "),
+    render: (row) => (row.offerNo == null ? MUTED_DASH : formatEntityNo(row.offerNo)),
   },
 } satisfies Record<string, PackingColumnSpec>;
 

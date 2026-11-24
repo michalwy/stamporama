@@ -786,9 +786,9 @@ laid out as a walk through your shelves:
   Refs of the usual `prefix + number` shape (`A100`, `A1200`, `B-3000`) sort **by prefix first,
   then by the number**, so `A100` comes before `A1200` and the whole `A` run comes before `B`;
   the separator doesn't matter (`A-100` and `A100` sort together). Copies with no ref go last.
-- Copies that are indistinguishable while packing — same stamp, same condition, same certificate
-  status, same ref, same packed state — collapse into a **single line with a quantity**, so five of
-  the same stamp are one line to tick rather than five.
+- **Every copy is its own line**, with its own photo, copy number and tick box — even five copies
+  of the same stamp in the same condition on the same ref are five lines, so none of them can be
+  overlooked while packing. Copies of one stamp on one ref read in copy-number order.
 - A copy already **packed** is off its location, and is printed under the location and ref it was
   [taken from](locations.md#copies-that-leave), so the sheet still says where every piece came from.
 
@@ -812,8 +812,7 @@ the head of the chips row turns the sheet into **one section per sold set** inst
   code — beside
   its **Ref**, and both stay on while the sheet is by set — your own choice for **Ref** comes back
   when you switch to *Location*.
-- Identical copies merge into one line **only within a set** — never across two sets, so each set's
-  count is right on paper.
+- Each copy of a set is its own line, as on the sheet by shelf.
 
 The switch starts on **Location** and is remembered the same way as the columns: once, for every
 sale.
@@ -835,17 +834,16 @@ parcel. A sale whose copies are all unfiled has no legend and no **Print legend*
 ### Choosing the columns
 
 Above the list, a row of **Columns** chips picks what the sheet prints. They print in this order:
-**Photo** (a thumbnail of the copy), **Qty**, **Ref**, **Copy no.**, **Catalog**, **Area** (the full
+**Photo** (a thumbnail of the copy), **Ref**, **Copy no.**, **Catalog**, **Area** (the full
 path, e.g. `Polska › II RP`), **Series** (the issue the stamp belongs to), **Stamp**, **Condition**,
 **Certificate**, and **Offer no.** Click a chip to turn its column on or off — the tick box always
 stays, since it's the point of the sheet. The chips themselves never print, and each column is only
 as wide as its own content needs, so turning columns off tightens the sheet instead of leaving gaps.
 
 **Copy no.** is each copy's [internal number](inventory.md) — the one written on the piece or its
-label — printed exactly as wide as your collection writes it. A line that stands for several merged
-copies lists **every** one of their numbers, since each is a separate piece to find. **Offer no.**
-is the [offer](offers.md) the line was sold through; it reads `—` on a line whose listing has since
-been deleted, and can name two offers where merged copies came from different ones.
+label — printed exactly as wide as your collection writes it. **Offer no.** is the
+[offer](offers.md) the copy was sold through; it reads `—` on a line whose listing has since been
+deleted. (There is no **Qty** column: every line is one copy.)
 
 Your selection is remembered **globally**, across every sale and every collection: it describes how
 you like to pack, not something about one order. So set it once and every packing list you open
@@ -863,8 +861,7 @@ hover it on screen for the full name. It prints in the **Catalog** column, so it
 column is on.
 
 The switch starts **off**, so the sheet reads as it always has until you turn it on, and is
-remembered the same way as the columns: once, for every sale. Lines that differ only in issue format
-are always different stamps, so they never merge into one line with a quantity.
+remembered the same way as the columns: once, for every sale.
 
 ### Pieces by issue format
 
