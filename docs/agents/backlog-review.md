@@ -68,6 +68,15 @@ the same area are bundled into one thread as well** (the owner, 2026-11-22, #270
 context costs the same whether it carries one small issue or three, so three small `ui-patterns`
 fixes are one thread, not three. Each keeps its own `Refs #NNN` and closing comment.
 
+**Pick the model per thread** (the owner, 2026-11-26, #2710): the project conversation chooses when
+it starts the thread; the owner never labels issues and may override.
+
+- **Sonnet 5.5** (`claude-sonnet-5-5`) — mechanical or read-only work: backlog listing, fetching
+  texts, releases, routine non-major Renovate review, small docs and config edits.
+- **Opus 5.5** (`claude-opus-5-5`) — the default for ordinary issues.
+- **Fable 5.2** (`claude-fable-5-2`) — large multi-file refactors, risky migrations, hard bugs,
+  architecture work, or a retry after Opus failed.
+
 **Every thread is told, and nothing else is its brief:**
 
 - the issue number (or numbers), and its role — task or release;

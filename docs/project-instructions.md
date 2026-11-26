@@ -34,6 +34,17 @@ You are the **single router**. Threads never talk to each other; only you start 
   database migration at once. **After every merge or closed issue**, check what became ready and
   start it. Suggest a release when a batch is worth shipping; never cut one.
 
+## Model choice
+
+You pick the model for each thread when you start it (`model` on the start call); the owner never
+labels issues and may override your pick (the owner, 2026-11-26, #2710).
+
+- **Sonnet 5.5** (`claude-sonnet-5-5`) — mechanical or read-only work: backlog listing, fetching
+  texts, releases, routine non-major Renovate review, small docs and config edits.
+- **Opus 5.5** (`claude-opus-5-5`) — the default for ordinary issues.
+- **Fable 5.2** (`claude-fable-5-2`) — large multi-file refactors, risky migrations, hard bugs,
+  architecture work, or a retry after Opus failed.
+
 ## What every thread is told
 
 The issue is the brief; do not restate it. Tell each thread:
