@@ -32,6 +32,12 @@ registration switch. Read this before touching `src/lib/admin*.ts`, `src/app/adm
   backend and reads follow each object's recorded one. **A prefix is a whole path segment** and an
   empty one is refused: it would be every collection at once. Staging uploads (`staging/…`) belong to
   no collection and are not counted. The figures are read when the page is opened; nothing is cached.
+  **They are measured apart from the list** (#2731): measuring walks every stored file and took
+  seconds on the owner's Pi with one account and three collections, while the page waited for it
+  before drawing anything. `getAdminOverview` reads the database only; `getAdminStorage` measures
+  every collection at once and the page passes it **un-awaited** to `AdminPanel`, which shows
+  *measuring…* until the streamed promise settles. The filesystem walk stats a directory's entries
+  concurrently, and the GCS listing asks for `items(name,size)` only.
 - **Deleting a collection is one `DELETE` that PostgreSQL may refuse, so there is a second way.**
   Every table carrying `collectionId` cascades from `collection`, but the tables also refer to each
   other, seventy-odd times with `ON DELETE RESTRICT`, and a `RESTRICT` is checked the moment the

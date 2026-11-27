@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { signInPath } from "@/lib/sign-in-redirect";
-import { getAdminOverview, isAdmin } from "@/lib/admin";
+import { getAdminOverview, getAdminStorage, isAdmin } from "@/lib/admin";
 import { ThemeToggle } from "@/components/theme-toggle";
 import SignOutButton from "../collections/sign-out-button";
 import { listFeedbackReports } from "@/lib/feedback";
@@ -23,6 +23,9 @@ export default async function AdminPage() {
   if (!(await isAdmin(session.user.id))) notFound();
 
   const overview = await getAdminOverview(session.user.id);
+  // Not awaited (#2731): measuring walks every stored file and takes seconds, so the panel is drawn
+  // from the database first and the figures stream in when the measurement ends.
+  const storage = getAdminStorage(session.user.id);
   // The newest reports, every status (#2720). The panel narrows them itself; an agent that wants
   // the rest pages through `list_feedback`.
   const feedback = await listFeedbackReports(session.user.id, { limit: FEEDBACK_SHOWN, offset: 0 });
@@ -63,7 +66,7 @@ export default async function AdminPage() {
         <AdminPanel
           currentUserId={session.user.id}
           registration={overview.registration}
-          totalStorage={overview.storage}
+          storage={storage}
           accounts={overview.accounts.map((account) => ({
             ...account,
             createdAt: account.createdAt.toISOString(),

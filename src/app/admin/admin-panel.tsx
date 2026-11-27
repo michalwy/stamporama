@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { baseBtn } from "@/app/button-style";
 import { formControl } from "@/app/control-style";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
@@ -16,14 +16,15 @@ import {
 } from "@/app/actions/admin";
 
 // The administrator's panel, drawn (#2719). Everything shown was read by the server component and
-// arrives as props; each action answers and the page is revalidated behind it.
+// arrives as props; each action answers and the page is revalidated behind it. The storage figures
+// arrive later than the rest (#2731): the server streams them as a promise, and until it settles
+// their cells say *measuring…*.
 
 export interface PanelCollection {
   id: string;
   slug: string;
   name: string;
   createdAt: string;
-  storage: StorageFigure;
 }
 
 export interface PanelAccount {
@@ -33,7 +34,13 @@ export interface PanelAccount {
   isAdmin: boolean;
   createdAt: string;
   collections: PanelCollection[];
-  storage: StorageFigure;
+}
+
+/** The storage figures, keyed by collection and by account (`getAdminStorage`). */
+export interface PanelStorage {
+  collections: Record<string, StorageFigure>;
+  accounts: Record<string, StorageFigure>;
+  total: StorageFigure;
 }
 
 export interface PanelRegistration {
@@ -43,8 +50,8 @@ export interface PanelRegistration {
 }
 
 type DeleteTarget =
-  | { kind: "collection"; id: string; name: string; owner: string; storage: StorageFigure }
-  | { kind: "account"; id: string; name: string; collections: number; storage: StorageFigure };
+  | { kind: "collection"; id: string; name: string; owner: string; storage: StorageFigure | undefined }
+  | { kind: "account"; id: string; name: string; collections: number; storage: StorageFigure | undefined };
 
 const card: CSSProperties = {
   background: "var(--color-bg-elevated)",
@@ -107,13 +114,14 @@ function Badge({ children }: { children: ReactNode }) {
 export function AdminPanel({
   currentUserId,
   registration,
-  totalStorage,
+  storage,
   accounts,
   children,
 }: {
   currentUserId: string;
   registration: PanelRegistration;
-  totalStorage: StorageFigure;
+  /** Settles once every collection has been measured. */
+  storage: Promise<PanelStorage>;
   accounts: PanelAccount[];
   /** Further sections of the panel, drawn under the accounts. */
   children?: ReactNode;
@@ -121,6 +129,26 @@ export function AdminPanel({
   const { toast } = useToast();
   const [target, setTarget] = useState<DeleteTarget | null>(null);
   const [isPending, startTransition] = useTransition();
+  // null while measuring; "failed" if the measurement itself was refused.
+  const [figures, setFigures] = useState<PanelStorage | "failed" | null>(null);
+  useEffect(() => {
+    let current = true;
+    storage.then(
+      (value) => {
+        if (current) setFigures(value);
+      },
+      () => {
+        if (current) setFigures("failed");
+      }
+    );
+    return () => {
+      current = false;
+    };
+  }, [storage]);
+  const measured = figures !== null && figures !== "failed" ? figures : null;
+  const notYet = figures === "failed" ? "—" : "measuring…";
+  const files = (figure: StorageFigure | undefined) => (figure ? figure.objects : notYet);
+  const bytes = (figure: StorageFigure | undefined) => (figure ? formatStorageBytes(figure.bytes) : notYet);
 
   function report(result: AdminActionResult, done: string) {
     if (result.status === "error") {
@@ -174,7 +202,7 @@ export function AdminPanel({
         <h2 style={sectionTitle}>Accounts and collections</h2>
         <p style={{ margin: "0 0 1rem", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
           {accounts.length} {accounts.length === 1 ? "account" : "accounts"}, {collectionCount}{" "}
-          {collectionCount === 1 ? "collection" : "collections"}, {formatStorageBytes(totalStorage.bytes)} in storage.
+          {collectionCount === 1 ? "collection" : "collections"}, {measured ? `${formatStorageBytes(measured.total.bytes)} in storage` : `storage ${notYet}`}.
         </p>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
@@ -197,8 +225,8 @@ export function AdminPanel({
                 </td>
                 <td style={td}>{account.email}</td>
                 <td style={td}>{day(account.createdAt)}</td>
-                <td style={{ ...td, ...numeric }}>{account.storage.objects}</td>
-                <td style={{ ...td, ...numeric, fontWeight: 600 }}>{formatStorageBytes(account.storage.bytes)}</td>
+                <td style={{ ...td, ...numeric }}>{files(measured?.accounts[account.id])}</td>
+                <td style={{ ...td, ...numeric, fontWeight: 600 }}>{bytes(measured?.accounts[account.id])}</td>
                 <td style={td}>
                   <RowActionsMenu
                     ariaLabel={`Actions for ${account.name}`}
@@ -216,7 +244,7 @@ export function AdminPanel({
                             id: account.id,
                             name: account.email,
                             collections: account.collections.length,
-                            storage: account.storage,
+                            storage: measured?.accounts[account.id],
                           }),
                       },
                     ]}
@@ -235,8 +263,8 @@ export function AdminPanel({
                   <td style={{ ...td, paddingLeft: "2rem" }}>{collection.name}</td>
                   <td style={{ ...td, color: "var(--color-text-muted)" }}>/c/{collection.slug}</td>
                   <td style={td}>{day(collection.createdAt)}</td>
-                  <td style={{ ...td, ...numeric }}>{collection.storage.objects}</td>
-                  <td style={{ ...td, ...numeric }}>{formatStorageBytes(collection.storage.bytes)}</td>
+                  <td style={{ ...td, ...numeric }}>{files(measured?.collections[collection.id])}</td>
+                  <td style={{ ...td, ...numeric }}>{bytes(measured?.collections[collection.id])}</td>
                   <td style={td}>
                     <RowActionsMenu
                       ariaLabel={`Actions for ${collection.name}`}
@@ -252,7 +280,7 @@ export function AdminPanel({
                               id: collection.id,
                               name: collection.name,
                               owner: account.email,
-                              storage: collection.storage,
+                              storage: measured?.collections[collection.id],
                             }),
                         },
                       ]}
@@ -279,6 +307,11 @@ export function AdminPanel({
       )}
     </div>
   );
+}
+
+/** What a deletion removes from storage, or all of it when the figure is not measured yet. */
+function storedFiles(figure: StorageFigure | undefined): string {
+  return figure ? `${formatStorageBytes(figure.bytes)} of stored files` : "all its stored files";
 }
 
 function DeleteDialog({
@@ -326,12 +359,12 @@ function DeleteDialog({
               <>
                 This deletes the account <strong>{target.name}</strong> with{" "}
                 {target.collections === 1 ? "its collection" : `its ${target.collections} collections`} and{" "}
-                {formatStorageBytes(target.storage.bytes)} of stored files.
+                {storedFiles(target.storage)}.
               </>
             ) : (
               <>
                 This deletes the collection <strong>{target.name}</strong> of {target.owner} — every stamp, copy,
-                offer and sale in it — and {formatStorageBytes(target.storage.bytes)} of stored files.
+                offer and sale in it — and {storedFiles(target.storage)}.
               </>
             )}{" "}
             It cannot be undone.
