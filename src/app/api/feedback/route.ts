@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createFeedbackReport } from "@/lib/feedback";
+import { fireFeedbackNotification } from "@/lib/feedback-notify";
 import {
   ANONYMOUS_PER_ADDRESS,
   ANONYMOUS_TOTAL,
@@ -64,5 +65,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.error("[feedback] could not store a report", error);
     return refuse(500, "The report could not be stored. Try again in a moment.");
   }
+  // Tell the coordinator there is something to triage (#2721). Not awaited and unable to throw:
+  // the report is stored, and that is what this request answers for.
+  fireFeedbackNotification();
   return NextResponse.json({ ok: true });
 }

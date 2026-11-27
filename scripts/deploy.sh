@@ -21,9 +21,10 @@
 #   5. wait for the container's health check, and **on failure roll back to the previous image**.
 #      Migrations are not rolled back; the dump from step 3 is how the database goes back.
 #
-# **The installation is the configuration.** `.env` is read, never rebuilt: the only key this
-# script writes is `TAG`, after a container came up healthy, so a later hand-run `docker compose up -d`
-# starts the same image instead of whatever `latest` is by then.
+# **The installation is the configuration.** `.env` is read, never rebuilt. The keys this script
+# writes are `TAG`, after a container came up healthy, so a later hand-run `docker compose up -d`
+# starts the same image instead of whatever `latest` is by then; and the feedback notification's
+# two (`FEEDBACK_NOTIFY_URL`, `FEEDBACK_NOTIFY_TOKEN`, #2721), when the workflow hands both over.
 #
 # **The output is public.** This repository is public, and so are its Actions logs. Nothing here
 # prints `.env`, the database address, a path on the Pi or the application's own logs; a failure
@@ -42,6 +43,8 @@
 #                                must be at least the server's)
 #   STAMPORAMA_HEALTH_TIMEOUT    seconds to wait for healthy  (default 600)
 #   STAMPORAMA_HEALTH_POLL       seconds between checks       (default 5)
+#   FEEDBACK_NOTIFY_URL          the routine trigger a stored feedback report fires, and
+#   FEEDBACK_NOTIFY_TOKEN        its token (#2721): written to .env when both are set, never printed
 
 set -euo pipefail
 umask 077
@@ -106,14 +109,18 @@ get_env() {
     sed -e 's/^"//' -e 's/"$//' -e 's/\$\$/$/g'
 }
 
-# Replace (or add) TAG in .env **in place**, so the file keeps its owner and mode.
-write_tag() {
+# Replace (or add) one key in .env **in place**, so the file keeps its owner and mode.
+write_env() { # <key> <value>
   local tmp
   tmp="$(mktemp)"
-  { grep -vE '^TAG=' .env || true; } >"$tmp"
-  printf 'TAG="%s"\n' "$1" >>"$tmp"
+  { grep -vE "^$1=" .env || true; } >"$tmp"
+  printf '%s="%s"\n' "$1" "$2" >>"$tmp"
   cat "$tmp" >.env
   rm -f "$tmp"
+}
+
+write_tag() {
+  write_env TAG "$1"
 }
 
 COMPOSE_FILES="$(get_env COMPOSE_FILE)"
@@ -209,9 +216,42 @@ NEW_VERSION="$(image_env "$NEW_IMAGE_ID" STAMPORAMA_VERSION)"
 # part keeps `docker ps` readable.
 NEW_REF="${VERSION}@${DIGEST}"
 
+# --- 1b. The feedback notification's settings (#2721) --------------------------------------------
+
+# Where a stored feedback report is announced: a claude.ai routine's API trigger and its token,
+# kept in GitHub (the `prod` environment's variable and secret) so that the owner sets them in one
+# place and never on the Pi. They are **settings of the installation that arrive with a deploy**:
+# when both are given and differ from what .env holds, they are written there in step 4, beside
+# TAG, and the container is recreated to read them. When either is missing, .env is left exactly
+# as it is - an operator who wrote them by hand keeps them.
+#
+# Neither value is ever printed, here or below - not the address either. Both are held to a narrow
+# alphabet first, because .env is read by docker compose, where a quote or a `$` means something.
+NOTIFY_URL="${FEEDBACK_NOTIFY_URL:-}"
+NOTIFY_TOKEN="${FEEDBACK_NOTIFY_TOKEN:-}"
+NOTIFY_CHANGED=false
+if [ -n "$NOTIFY_URL" ] && [ -n "$NOTIFY_TOKEN" ]; then
+  if ! [[ "$NOTIFY_URL" =~ ^https://[A-Za-z0-9._~:/?\&=%+-]+$ ]]; then
+    warn "FEEDBACK_NOTIFY_URL is not a plain https address - the feedback notification's settings were left as they are."
+  elif ! [[ "$NOTIFY_TOKEN" =~ ^[A-Za-z0-9._~+/=-]+$ ]]; then
+    warn "FEEDBACK_NOTIFY_TOKEN has characters a token does not have - the feedback notification's settings were left as they are."
+  elif [ "$(get_env FEEDBACK_NOTIFY_URL)" != "$NOTIFY_URL" ] || [ "$(get_env FEEDBACK_NOTIFY_TOKEN)" != "$NOTIFY_TOKEN" ]; then
+    NOTIFY_CHANGED=true
+  fi
+fi
+
+write_notify_settings() {
+  $NOTIFY_CHANGED || return 0
+  write_env FEEDBACK_NOTIFY_URL "$NOTIFY_URL"
+  write_env FEEDBACK_NOTIFY_TOKEN "$NOTIFY_TOKEN"
+  info "The feedback notification's settings were updated in .env."
+}
+
 # --- 2. No-downgrade guard ----------------------------------------------------------------------
 
-if [ -n "$PREV_IMAGE_ID" ] && [ "$PREV_IMAGE_ID" = "$NEW_IMAGE_ID" ] && $PREV_RUNNING &&
+# "Already running" holds only while there is nothing new to hand the container: changed settings
+# need it recreated, so such a run goes on through the dump and `docker compose up -d`.
+if [ -n "$PREV_IMAGE_ID" ] && [ "$PREV_IMAGE_ID" = "$NEW_IMAGE_ID" ] && $PREV_RUNNING && ! $NOTIFY_CHANGED &&
   { [ -z "$PREV_HEALTH" ] || [ "$PREV_HEALTH" = "healthy" ]; }; then
   # Pin it in .env all the same, so the installation that Watchtower left on `latest` says what it runs.
   [ "$(get_env TAG)" = "$NEW_REF" ] || write_tag "$NEW_REF"
@@ -345,6 +385,7 @@ start() { # <TAG value> <image id> -> the app container, if it runs that image, 
   echo "$cid"
 }
 
+write_notify_settings
 info "Starting ${VERSION} (compose project ${PROJECT})"
 NEW_CONTAINER="$(start "$NEW_REF" "$NEW_IMAGE_ID")" || NEW_CONTAINER=""
 

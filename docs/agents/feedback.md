@@ -39,5 +39,21 @@ The triage persona is [`feedback-triage.md`](feedback-triage.md); the panel is [
   call by name answers as any unknown tool does. The scope check is the ordinary one: a `read`
   credential is refused on `update_feedback`. `get_feedback` returns ids, never a name or an address,
   and says only `contactGiven` — the persona works towards public issues.
-- **Nothing here is sent anywhere outside the instance**; #2721 adds the one outbound call, a
-  notification that carries no report data.
+- **One thing leaves the instance, and it carries nothing** (#2721). After a report is stored the
+  route calls `fireFeedbackNotification()` (`src/lib/feedback-notify.ts`): `POST FEEDBACK_NOTIFY_URL`
+  with `authorization: Bearer FEEDBACK_NOTIFY_TOKEN`, `anthropic-version: 2023-06-01`,
+  `content-type: application/json` and the body **exactly `{}`** — a claude.ai routine's API trigger,
+  which refuses a body with a `text` field (403 *this project is paused*). The routine answers
+  "New in-app feedback." in the project and the coordinator starts the triage
+  ([`feedback-triage.md`](feedback-triage.md)). The rules, each held by
+  `tests/unit/feedback-notify.test.ts`: it is **not awaited and cannot throw**, so a report is
+  stored and answered whatever the trigger does; **at most one fire per 30 seconds** (in memory, per
+  process — the claim is taken before the request, so a trigger that is down is not hammered);
+  **both settings or nothing**, silently; `https` only; a five-second timeout; and **the log line is
+  the status code or the error's name — never the token, the address or the response body**. Not
+  fired for a refused request or a filled hidden field. Do not add report content to the body: the
+  triage reads reports through the admin tools, and the trigger would refuse it anyway.
+- **The two settings reach the Pi with a deploy, not by hand**: variable `FEEDBACK_NOTIFY_URL` and
+  secret `FEEDBACK_NOTIFY_TOKEN` in GitHub's `prod` environment → `deploy.yml`'s `env:` →
+  `scripts/deploy.sh` writes both into the installation's `.env` (only when both are given, never
+  printing either) → [`platform-deployment.md`](platform-deployment.md), `docs/deployment/pi-deploy.md`.

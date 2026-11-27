@@ -24,8 +24,10 @@ owner, on the Pi or in the repository's settings.
    previous image** and the run fails. **Migrations are not rolled back** — see
    [Restoring a dump](#restoring-a-dump).
 
-After a healthy start it writes `TAG="X.Y.Z@sha256:…"` into `.env` — the only key it ever writes — so
-that a `docker compose up -d` you run by hand later starts the same image. It also removes the
+After a healthy start it writes `TAG="X.Y.Z@sha256:…"` into `.env`, so that a `docker compose up -d`
+you run by hand later starts the same image. The only other keys it writes are the feedback
+notification's two, when the `prod` environment holds both — see
+[The feedback notification](#the-feedback-notification). It also removes the
 repository's unused app images, keeping the running one and the one a rollback would use.
 
 The run's summary in the Actions tab says which of these happened: *Deployed*, *Already running*,
@@ -139,8 +141,12 @@ restart is needed, because the runner runs the file anew for every job.
   | `STAMPORAMA_BACKUP_DIR` | no | Where dumps go; default `<STAMPORAMA_DIR>/backups` |
   | `STAMPORAMA_BACKUP_KEEP` | no | How many dumps are kept; default `14` |
 
-No secret is needed: the configuration stays in the installation's `.env`, and the image on GHCR is
-public. (If the package is ever made private, run `docker login ghcr.io` once on the Pi as the
+  | `FEEDBACK_NOTIFY_URL` | no | The routine trigger a stored feedback report fires — see [The feedback notification](#the-feedback-notification) |
+
+- **Environment secrets**: `FEEDBACK_NOTIFY_TOKEN`, optional, the token of that trigger.
+
+No other secret is needed: the configuration stays in the installation's `.env`, and the image on
+GHCR is public. (If the package is ever made private, run `docker login ghcr.io` once on the Pi as the
 runner's user.)
 
 ### 3. Fork pull requests need approval
@@ -273,6 +279,38 @@ live in the `stamporama-data` volume (or in Google Cloud Storage) and a deploy d
 | *Rolled back* | The release did not become healthy; the previous image runs again | Read `docker compose logs app` on the Pi. Decide whether to restore the dump. |
 | *Failed* after a failed health check | The rollback did not become healthy either, or there was nothing to roll back to | The instance is down. Read the logs, restore the dump, and deploy a release that worked. |
 
+## The feedback notification
+
+When somebody sends a report through *Report a problem* (#2720), the instance can tell the project's
+coordinator at once, by firing a claude.ai **routine** (#2721). It is optional: without it reports
+are still stored and still listed at `/admin`.
+
+1. At [claude.ai/code/routines](https://claude.ai/code/routines) create a routine named
+   **New in-app feedback**, bound to the Stamporama project, with an **API trigger** and this prompt:
+
+   ```
+   Reply exactly one line: 'New in-app feedback.' and end. Do not load tools, read the repo or fetch anything.
+   ```
+
+   Generate the trigger's token and copy the trigger's address.
+2. In the repository, **Settings → Environments → prod**: add the **variable**
+   `FEEDBACK_NOTIFY_URL` (the trigger's address, `https://…/fire`) and the **secret**
+   `FEEDBACK_NOTIFY_TOKEN` (the token).
+3. Nothing on the Pi. The next deploy — a release, or a manual run of **Deploy to Pi** with the
+   version that is already running — writes both into the installation's `.env` and recreates the
+   container so it reads them. The script prints neither value.
+
+The instance then sends `POST <FEEDBACK_NOTIFY_URL>` with `authorization: Bearer <token>`,
+`anthropic-version: 2023-06-01`, `content-type: application/json` and the body `{}` — exactly that:
+the trigger refuses a body with a `text` field with 403 *this project is paused*. At most one request
+per 30 seconds; a failure is one line in the app's log, with the status code and never the token, and
+the report is stored either way.
+
+To change the token, change the secret and deploy again. To turn the notification off, remove
+`FEEDBACK_NOTIFY_URL` and `FEEDBACK_NOTIFY_TOKEN` from `.env` on the Pi and restart the app
+(`docker compose up -d`), and delete the variable and the secret so the next deploy does not write
+them back — a deploy with either missing leaves `.env` as it is.
+
 ## Settings the script reads
 
 Set in the `prod` environment's variables (above), or in the shell when running
@@ -286,5 +324,6 @@ Set in the `prod` environment's variables (above), or in the shell when running
 | `STAMPORAMA_PG_CLIENT_IMAGE` | `postgres:18-alpine` | Image providing `pg_dump`; its major must be at least the server's |
 | `STAMPORAMA_HEALTH_TIMEOUT` | `600` | Seconds to wait for a healthy container |
 | `STAMPORAMA_IMAGE` | `ghcr.io/michalwy/stamporama` | Image repository (the compose file names the same one) |
+| `FEEDBACK_NOTIFY_URL`, `FEEDBACK_NOTIFY_TOKEN` | — | Written into `.env` when both are set and differ from what it holds; never printed (#2721) |
 
 By hand: `STAMPORAMA_DIR=$PWD bash scripts/deploy.sh --version X.Y.Z [--allow-downgrade]`.

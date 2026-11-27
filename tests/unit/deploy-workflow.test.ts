@@ -62,6 +62,18 @@ describe("deploy workflow", () => {
     assert.ok(has(/^ {4}timeout-minutes: \d+$/));
   });
 
+  it("hands the feedback notification's settings over through env: and names no other secret", () => {
+    // #2721, the owner's decision of 2026-11-27: the token lives in the prod environment and
+    // reaches scripts/deploy.sh as an environment variable, which never prints it.
+    assert.ok(has(/^ {10}FEEDBACK_NOTIFY_URL: \$\{\{ vars\.FEEDBACK_NOTIFY_URL \}\}$/));
+    assert.ok(has(/^ {10}FEEDBACK_NOTIFY_TOKEN: \$\{\{ secrets\.FEEDBACK_NOTIFY_TOKEN \}\}$/));
+    const secrets = lines.filter((line) => /\bsecrets\./.test(line));
+    assert.deepEqual(
+      secrets.map((line) => line.trim()),
+      ["FEEDBACK_NOTIFY_TOKEN: ${{ secrets.FEEDBACK_NOTIFY_TOKEN }}"]
+    );
+  });
+
   it("puts no expression inside a run: script, where a version string could become shell", () => {
     const start = lines.findIndex((line) => /^\s*run: \|$/.test(line));
     assert.notEqual(start, -1);

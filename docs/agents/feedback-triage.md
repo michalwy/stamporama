@@ -87,6 +87,14 @@ Quote the sender's own words about the *problem* freely; they are why the report
 ## When the coordinator hears "New in-app feedback."
 
 A routine fires when a report is saved (#2721) and its thread replies with exactly that line. The
-project conversation then lists `status=new` reports, sends them to a triage thread already running
-if there is one and starts one with this file as its brief otherwise, and resolves the notification
-thread. The notification carries nothing; the reports are fetched through the tools.
+coordinator then:
+
+1. lists the reports with `status=new` (`list_feedback`);
+2. if a triage thread is already running, sends them to it; otherwise starts one, with this file as
+   its brief;
+3. resolves the notification thread.
+
+The notification carries nothing — the instance sends an empty body — so the reports are always
+fetched through the tools, and a notification that finds no `new` report (a burst is one
+notification; somebody may have triaged by hand) is resolved with nothing started. How the instance
+fires it: [`feedback.md`](feedback.md).
