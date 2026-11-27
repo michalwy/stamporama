@@ -11,6 +11,7 @@ export type {
   StorageAccess,
   StorageBackend,
   StorageObject,
+  StorageUsage,
   ResolveResult,
 } from "./types";
 export { dataDir, toWebStream } from "./filesystem";
@@ -77,6 +78,19 @@ const BINDINGS: Record<StorageBackend, () => Storage> = {
 export function getActiveStorage(): Storage {
   const configured = process.env.STAMPORAMA_STORAGE_BACKEND?.trim();
   return configured === "gcs" ? gcsBinding() : filesystem;
+}
+
+/**
+ * Every binding that may hold bytes on this instance (#2719): the filesystem always, and GCS when it
+ * is the active backend or a bucket is configured. Writes go to one backend and reads follow each
+ * object's recorded one (write-one, read-many), so a collection's bytes may sit on both — measuring
+ * or deleting a collection has to ask each.
+ */
+export function getConfiguredStorages(): readonly Storage[] {
+  const gcsConfigured =
+    process.env.STAMPORAMA_STORAGE_BACKEND?.trim() === "gcs" ||
+    Boolean(process.env.STAMPORAMA_GCS_BUCKET?.trim());
+  return gcsConfigured ? [filesystem, gcsBinding()] : [filesystem];
 }
 
 /** The binding that holds a given photo's bytes, for *reads*. Dispatches by the photo's

@@ -78,6 +78,23 @@ class CountingStorage implements Storage {
     this.objects.set(toKey, { ...held });
   }
 
+  async usage(prefix: string): Promise<{ bytes: number; objects: number }> {
+    let bytes = 0;
+    let objects = 0;
+    for (const [key, held] of this.objects) {
+      if (!key.startsWith(`${prefix}/`)) continue;
+      bytes += held.bytes.byteLength;
+      objects += 1;
+    }
+    return { bytes, objects };
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    for (const key of [...this.objects.keys()]) {
+      if (key.startsWith(`${prefix}/`)) this.objects.delete(key);
+    }
+  }
+
   async resolveUrl(key: string): Promise<ResolveResult> {
     return { kind: "redirect", url: `https://example.invalid/${key}` };
   }
@@ -433,6 +450,8 @@ describe("local storage cache (#591)", () => {
       delete: (key: string) => remote.delete(key),
       move: (from: string, to: string) => remote.move(from, to),
       copy: (from: string, to: string) => remote.copy(from, to),
+      usage: (prefix: string) => remote.usage(prefix),
+      deletePrefix: (prefix: string) => remote.deletePrefix(prefix),
       resolveUrl: (key: string) => remote.resolveUrl(key),
       describe: () => remote.describe(),
       healthCheck: () => remote.healthCheck(),

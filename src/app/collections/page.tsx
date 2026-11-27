@@ -3,6 +3,8 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getCollectionsByOwner } from "@/lib/collections";
+import { isAdmin } from "@/lib/admin-access";
+import Link from "next/link";
 import SignOutButton from "./sign-out-button";
 import { CollectionsList } from "./collections-list";
 import { CreateCollectionForm } from "./create-collection-form";
@@ -15,6 +17,8 @@ export default async function CollectionsPage() {
   if (!session) redirect(await signInPath());
 
   const collections = await getCollectionsByOwner(session.user.id);
+  // The way into the administrator's panel (#2719), shown to administrators only.
+  const admin = await isAdmin(session.user.id);
 
   return (
     <div
@@ -46,6 +50,11 @@ export default async function CollectionsPage() {
           Stamporama
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          {admin && (
+            <Link href="/admin" style={{ fontSize: "0.875rem", color: "var(--color-accent)" }}>
+              Admin
+            </Link>
+          )}
           <ThemeToggle />
           <SignOutButton />
         </div>

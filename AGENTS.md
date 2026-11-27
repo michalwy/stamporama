@@ -121,6 +121,7 @@ and ADR references.
 | The Overview screen: Value and Progress tiles | [`overview.md`](docs/agents/overview.md) |
 | The Dashboard: the operational screen of work waiting | [`dashboard.md`](docs/agents/dashboard.md) |
 | Phone screens: the `/phone` path, what the phone does and does not | [`phone.md`](docs/agents/phone.md) |
+| The administrator's panel: accounts, storage per collection, deleting a collection or an account, the registration switch | [`admin.md`](docs/agents/admin.md) |
 | Dialogs, escape handling, sidebar, settings, notifications | [`ui-shell.md`](docs/agents/ui-shell.md) |
 | Toolbars, filters, reordering, tooltips, icons, tokens, toast | [`ui-patterns.md`](docs/agents/ui-patterns.md) |
 | The Project model, cloud threads, branches, pull requests, verification | [`collaboration.md`](docs/agents/collaboration.md) |

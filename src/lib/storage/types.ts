@@ -59,6 +59,12 @@ export type ResolveResult =
  */
 export type StorageAccess = "work" | "delivery";
 
+/** What a backend holds under one prefix: the bytes and the number of objects (#2719). */
+export interface StorageUsage {
+  bytes: number;
+  objects: number;
+}
+
 /** A storage binding. Two implementations: filesystem and GCS (#138); reads dispatch per-photo
  * so both coexist, and either can be the active write backend. Either may be wrapped by the
  * local cache (#591), which is why `backend` is the *inner* binding's identifier — that is the
@@ -96,6 +102,13 @@ export interface Storage {
    * What the local cache does about its own entries is therefore the cache's decision and not a
    * caller's — `CachingStorage.copy` states it. */
   copy(fromKey: string, toKey: string): Promise<void>;
+  /** How much is stored under `prefix` — every object whose key is `<prefix>/…` (#2719). A prefix
+   * is a whole path segment, so `abc` never counts `abcd/…`; one with nothing under it answers
+   * zeros rather than throwing. It reads what the backend holds, not what the database believes. */
+  usage(prefix: string): Promise<StorageUsage>;
+  /** Delete every object whose key is `<prefix>/…` (#2719) — a whole collection's bytes, when an
+   * administrator deletes it. Best-effort like `delete`: nothing under the prefix is a no-op. */
+  deletePrefix(prefix: string): Promise<void>;
   /** Resolve how the serving route should hand `key` to a client. */
   resolveUrl(key: string, mime: string): Promise<ResolveResult>;
   /** One-line, non-secret summary of this binding's effective config, for the startup log. */

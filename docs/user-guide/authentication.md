@@ -6,8 +6,9 @@ Stamporama uses email and password authentication. No external accounts or third
 
 **Registration is closed by default.** A new instance takes exactly one sign-up — its first account —
 and after that nobody can create another one: the sign-in form shows no **Sign up** link, and
-`/sign-up` says *Registration closed*. Whoever runs the instance can open it by setting
-`STAMPORAMA_ALLOW_REGISTRATION=true` in its `.env` and restarting it. Existing accounts sign in as
+`/sign-up` says *Registration closed*. An administrator opens or closes it with the switch in the
+[administrator's panel](admin.md), at once. Until that switch has been used, the instance follows
+`STAMPORAMA_ALLOW_REGISTRATION` in its `.env` (read at start). Existing accounts sign in as
 always.
 
 While registration is open:
