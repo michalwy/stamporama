@@ -804,6 +804,8 @@ The **Stamporama Assistant** browser extension matches marketplace catalog pages
 
 The one-time code lives for about five minutes and works once. If you wait too long, or want a fresh one, click **Start again**. Connecting the same instance and collection again refreshes that extension profile in place with a new token — that is how you recover from a token you revoked or lost, and it keeps whatever you named the profile.
 
+Below the tokens, **Connected apps** lists the apps that signed in to this collection themselves — Claude added as a connector, for one — with what each may do and when it was last used; **Disconnect**, in a row's `⋮` menu, cuts one off at once. See [Connecting an AI assistant](agent-api.md).
+
 ### Assistant tokens
 
 ### Filling in catalog numbers from Colnect

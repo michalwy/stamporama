@@ -71,6 +71,7 @@ import type { CatalogVendorData } from "@/lib/catalog";
 import type { ColnectMappingData, ColnectConditionMappingData } from "@/lib/colnect";
 import type { ColnectListMappingData } from "@/lib/colnect-list-sync";
 import type { AssistantTokenData } from "@/lib/api-tokens";
+import type { OAuthGrantData } from "@/lib/oauth-server";
 import type { MailSettings } from "@/lib/mail/messages";
 import type { AuctionReminderSettings } from "@/lib/auction-reminder";
 import type { StampConditionData } from "@/lib/conditions";
@@ -174,6 +175,8 @@ interface SettingsScreenProps {
   /** The groups under the Facebook platform (#1543). */
   facebookGroups: FacebookGroupList;
   initialAssistantTokens: AssistantTokenData[];
+  connectedApps: OAuthGrantData[];
+  mcpUrl: string | null;
   /** Email (#1372): the instance's mail provider as a summary — never its key — and this
    * collection's undelivered mail. */
   mailSettings: MailSettings;
@@ -788,6 +791,8 @@ function SettingsEntryBody({
   delcampeLearnedCategories,
   facebookGroups,
   initialAssistantTokens,
+  connectedApps,
+  mcpUrl,
   mailSettings,
   auctionReminder,
   bidFloorPercent,
@@ -1080,6 +1085,8 @@ function SettingsEntryBody({
           collectionId={collectionId}
           collectionName={collectionName}
           initialTokens={initialAssistantTokens}
+          connectedApps={connectedApps}
+          mcpUrl={mcpUrl}
         />
       );
     case "email":

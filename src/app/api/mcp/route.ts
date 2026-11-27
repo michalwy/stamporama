@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assertAgentApiScope, resolveAgentApiCaller } from "@/lib/route-auth";
+import { assertAgentApiScope, resolveMcpCaller } from "@/lib/route-auth";
+import { appBaseUrl } from "@/lib/app-url";
+import { mcpChallenge, oauthBaseUrl } from "@/lib/oauth-rules";
 import { errorResponseBody, unauthorized } from "@/lib/agent-api/errors";
 import {
   JSON_RPC,
@@ -35,32 +37,41 @@ import { getAppVersion } from "@/lib/version";
 // specification tells a Streamable HTTP server to validate the `Origin` header against DNS
 // rebinding. **The attack it prevents cannot reach this endpoint**, and the reason is structural
 // rather than a judgement about likelihood: rebinding buys an attacker the browser's *ambient*
-// authority, and there is none here — every call needs an `Authorization: Bearer stmpa_…` header
+// authority, and there is none here — every call needs an `Authorization: Bearer …` header
 // that a page cannot obtain, and a cross-origin request carrying one is a preflighted request this
 // route answers no CORS headers to, so the browser never sends it. An `Origin` check would refuse
 // requests that are already refused, while breaking the ordinary case of a client that legitimately
 // sets one. It is written down rather than silently skipped, because a `MUST` that a later reader
 // finds missing should read as a decision and not as an oversight (ADR-0051).
 
-/** The one place the endpoint's own 401 is spelled, so it matches `/api/v1`'s word for word. */
-function unauthenticated(): NextResponse {
+/**
+ * The one place the endpoint's own 401 is spelled, so its body is the shape `/api/v1`'s is.
+ *
+ * **Since #2715 the header points at the authorization server** (ADR-0084). It used to be the bare
+ * scheme, with a comment saying there was no OAuth metadata to point at because nothing here could
+ * issue a token; now something can, and `resource_metadata` is how a client that knows only this
+ * address — claude.ai adding a connector — finds the rest. A credential that was sent and refused
+ * also gets `error="invalid_token"`, which tells a connected app to refresh rather than to conclude
+ * it was never connected.
+ */
+function unauthenticated(request: NextRequest, credentialRefused: boolean): NextResponse {
   const { status, body } = errorResponseBody(
     unauthorized(
-      "Send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant & API."
+      "Connect through this server's OAuth sign-in, or send an Assistant token as `Authorization: Bearer stmpa_…`. Mint one in Settings → Assistant & API."
     )
   );
   return NextResponse.json(body, {
     status,
-    // The scheme, so a client that holds a credential and sent it wrongly can tell that from one it
-    // does not hold at all. There is no OAuth metadata to point at: this surface takes the token the
-    // collector minted, and nothing here can issue one.
-    headers: { "WWW-Authenticate": "Bearer" },
+    headers: {
+      "WWW-Authenticate": mcpChallenge(oauthBaseUrl(appBaseUrl(), request.url), credentialRefused),
+    },
   });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse | Response> {
-  const caller = await resolveAgentApiCaller(request);
-  if (!caller) return unauthenticated();
+  const resolved = await resolveMcpCaller(request);
+  if (resolved.kind !== "caller") return unauthenticated(request, resolved.kind === "refused");
+  const caller = resolved.caller;
 
   let message: unknown;
   try {

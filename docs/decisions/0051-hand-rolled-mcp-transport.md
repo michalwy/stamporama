@@ -110,6 +110,11 @@ rules.
 
 ### 5. Where this implementation deviates from the specification, and why
 
+**Since #2715 the endpoint takes a second credential** — an access token issued by the app's own
+OAuth authorization server, which is how claude.ai connects
+([ADR-0084](0084-oauth-authorization-server-for-the-mcp-connector.md)). Deviations 1 and 3 below were
+re-read against it and both stand; ADR-0084 §6 says why, against each retirement named here.
+
 **Every deviation here was found by reading the published specification rather than by remembering
 it**, which is the practice this section exists to record as much as the deviations themselves. #709
 read 2025-06-18; #1222 read 2026-07-28 — the changelogs since 2025-06-18, *Versioning*, *Streamable
