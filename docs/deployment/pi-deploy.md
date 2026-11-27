@@ -1,7 +1,12 @@
-# Deploying releases to the Raspberry Pi
+# Deploying `main` to the Raspberry Pi
 
-The owner's live instance is deployed by GitHub Actions: **publishing a GitHub Release deploys it**
-(#2689, [ADR-0083](../decisions/0083-release-deploys-to-the-pi.md)). The workflow is
+The owner's live instance is deployed by GitHub Actions: **every push to `main` whose CI run is
+green deploys it** (#2712, [ADR-0084](../decisions/0084-main-deploys-to-the-pi.md); before
+2026-11-27 a published release did, [ADR-0083](../decisions/0083-release-deploys-to-the-pi.md)).
+`main`'s CI run publishes `ghcr.io/michalwy/stamporama:main-<short sha>` and its last job,
+*Deploy main to the Pi*, dispatches the **Deploy** workflow on `main` with that version. A push that
+only changes documentation runs no suites, builds no image and deploys nothing. Releases no longer
+deploy; they are for other self-hosters. The workflow is
 [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml); it runs on a self-hosted runner
 on the Pi and calls [`scripts/deploy.sh`](../../scripts/deploy.sh) in the existing installation
 directory. Nothing here applies to other self-hosters, who install with `scripts/install.sh` and
@@ -12,10 +17,13 @@ owner, on the Pi or in the repository's settings.
 
 ## What a deploy does
 
-1. **Pulls the release image by digest.** `ghcr.io/michalwy/stamporama:X.Y.Z` is resolved once, and
-   from then on only `…@sha256:…` is used. The image must say it is `X.Y.Z` (`STAMPORAMA_VERSION`).
-2. **Refuses a downgrade.** When the running version is newer than the release, it does nothing and
-   **succeeds** — unless the run was started by hand, which is how a rollback is made.
+1. **Pulls the image by digest.** `ghcr.io/michalwy/stamporama:main-<short sha>` (or a release's
+   `X.Y.Z`, by hand) is resolved once, and from then on only `…@sha256:…` is used. The image must say
+   it is that version (`STAMPORAMA_VERSION`).
+2. **Refuses a downgrade.** When the running image is newer — a later commit of `main`, by the commit
+   time the image carries, or a later release — it does nothing and **succeeds**. That is what keeps a
+   CI run that finishes late from putting an older commit back. A run started by hand is allowed
+   past it, which is how a rollback is made.
 3. **Dumps the database** with `pg_dump` (custom format) into the backup directory, keeping the
    newest 14 dumps. A failed dump stops the deploy before anything changed.
 4. **Runs `docker compose up -d`** in the installation directory, with its own `.env` and compose
@@ -24,7 +32,7 @@ owner, on the Pi or in the repository's settings.
    previous image** and the run fails. **Migrations are not rolled back** — see
    [Restoring a dump](#restoring-a-dump).
 
-After a healthy start it writes `TAG="X.Y.Z@sha256:…"` into `.env` — the only key it ever writes — so
+After a healthy start it writes `TAG="main-<short sha>@sha256:…"` into `.env` — the only key it ever writes — so
 that a `docker compose up -d` you run by hand later starts the same image. It also removes the
 repository's unused app images, keeping the running one and the one a rollback would use.
 
@@ -45,7 +53,8 @@ directory, registered to `michalwy/stamporama` only.
 **The runner runs the deploy and nothing else.** Its job-started hook,
 [`scripts/runner-job-started-hook.sh`](../../scripts/runner-job-started-hook.sh) (#2697), runs before
 every job it picks up and fails the job, before any step, unless the job is `deploy.yml` from
-`michalwy/stamporama`, at a `v*` tag or at `main`, started by a published release or a manual run.
+`michalwy/stamporama`, at a `v*` tag or at `main`, started by a published release or a manual run
+(a dispatch — which is also how `main`'s CI run starts it, so the hook needed no change for #2712).
 **The hook is installed before the runner is registered**, so the runner never accepts a job
 without it.
 
@@ -129,8 +138,9 @@ restart is needed, because the runner runs the file anew for every job.
 **Settings → Environments → New environment**, named `prod`:
 
 - **Deployment branches and tags → Selected branches and tags**: add the branch `main` and the tag
-  pattern `v*`. A release runs on its tag — `release.yml` starts the deploy there (#2704); a manual
-  run on `main`. Nothing else can use the environment.
+  pattern `v*`. Every deploy runs on `main` — `main`'s CI run dispatches it there (#2712), and so
+  does a manual run; `v*` is only needed for a manual run started from a tag. Nothing else can use
+  the environment.
 - **Environment variables**:
 
   | Variable | Required | Value |
@@ -193,11 +203,11 @@ workflow is its updater.
 
 ## The first deploy, and how to check it
 
-The first deploy is the next release: the release procedure
-([`release-versioning.md`](../agents/release-versioning.md)) publishes a GitHub Release, and that
-starts **Deploy** in the Actions tab. To try the setup before then, start a manual run with the
-version that is already running — it pulls, finds the same image, writes `TAG` into `.env` and
-reports *Already running* without touching the container.
+The first deploy from `main` is the first push to `main` after #2712 merged that changes the
+application: its CI run publishes `main-<short sha>` and starts **Deploy** in the Actions tab. The
+running release is replaced by it — the no-downgrade guard does not compare a release with a `main`
+build. To redeploy what is running, start a manual run with its version — it pulls, finds the same
+image, writes `TAG` into `.env` and reports *Already running* without touching the container.
 
 Then check:
 
@@ -205,31 +215,33 @@ Then check:
 2. On the Pi, in the installation directory:
 
    ```bash
-   docker compose ps                    # app: running (healthy), image …:X.Y.Z@sha256:…
-   grep '^TAG=' .env                    # TAG="X.Y.Z@sha256:…"
-   ls -l backups/                       # stamporama-<UTC time>-before-X.Y.Z.dump
+   docker compose ps                    # app: running (healthy), image …:main-<sha>@sha256:…
+   grep '^TAG=' .env                    # TAG="main-<sha>@sha256:…"
+   ls -l backups/                       # stamporama-<UTC time>-before-main-<sha>.dump
    docker run --rm -i postgres:18-alpine pg_restore --list < backups/<that file> | head
    docker volume ls | grep stamporama-data   # the same photo volume as before, no new one
    ```
 
-3. In the app, the version shown in the sidebar is `X.Y.Z`, and photos still load.
+3. In the app, the version shown in the sidebar is `main-<sha>`, and photos still load.
 
 ## Rolling back
 
-**Actions → Deploy → Run workflow**, branch `main`, and the version to go back to. A manual run is
-allowed past the no-downgrade guard; it takes a dump first like any other deploy.
+**Actions → Deploy → Run workflow**, branch `main`, and the version to go back to — `main-<short
+sha>` of an earlier commit (its image is in the repository's packages) or a release `X.Y.Z`. Leave
+*automatic* off: a manual run is allowed past the no-downgrade guard; it takes a dump first like any
+other deploy. The next push to `main` deploys over it again.
 
-The older release then runs on a database that **still has the newer release's migrations**. Most
-migrations only add things and an older release ignores them; when one changed or removed something
-the older code needs, restore the dump taken before the bad release instead (next section).
+The older image then runs on a database that **still has the newer image's migrations**. Most
+migrations only add things and older code ignores them; when one changed or removed something
+the older code needs, restore the dump taken before the bad deploy instead (next section).
 
-When a release fails its health check the deploy rolls back to the previous image **by itself**, and
+When a new image fails its health check the deploy rolls back to the previous image **by itself**, and
 the run fails so it is seen; the same caveat about migrations applies.
 
 ## Restoring a dump
 
-A dump is named after the release it was taken **before**: `stamporama-…-before-1.4.0.dump` holds the
-database as the previous release left it. Restore it, then run that previous release.
+A dump is named after the version it was taken **before**: `stamporama-…-before-main-1a2b3c4.dump` holds the
+database as the previous image left it. Restore it, then run that previous version.
 
 In the installation directory:
 
@@ -243,7 +255,7 @@ PGURL='postgresql://<user>:<password>@<host>:<port>/<database>'
 # docker-compose.network.yml (STAMPORAMA_DB_NETWORK, default "stamporama"), otherwise "host".
 NET=stamporama
 
-# 1. Empty the schema (this is the step that throws away what the newer release migrated).
+# 1. Empty the schema (this is the step that throws away what the newer image migrated).
 docker run --rm -e PGURL="$PGURL" --network "$NET" postgres:18-alpine \
   sh -c 'psql -v ON_ERROR_STOP=1 --single-transaction --dbname="$PGURL" -c "DROP SCHEMA public CASCADE" -c "CREATE SCHEMA public"'
 
@@ -253,7 +265,7 @@ docker run --rm -i -e PGURL="$PGURL" --network "$NET" postgres:18-alpine \
   < backups/stamporama-<time>-before-<bad version>.dump
 ```
 
-Then **Actions → Deploy → Run workflow** with the release that ran before the bad one. (Starting the
+Then **Actions → Deploy → Run workflow** with the version that ran before the bad one. (Starting the
 app first with `docker compose start app` would start the newer image again, and it would migrate the
 restored database straight back.)
 
@@ -265,13 +277,13 @@ live in the `stamporama-data` volume (or in Google Cloud Storage) and a deploy d
 | What the run says | What it means | What to do |
 | --- | --- | --- |
 | Queued, never starts | The Pi's runner is offline | Start it (`sudo ./svc.sh start` in its directory). A queued job waits up to 24 hours. |
-| *Refused by the Pi's job-started hook* | The job is not the deploy as the hook defines it — or it is, and something about the run differs from what the hook expects | Read the reason on that line. A job from a pull request or another workflow is meant to be refused. For a release or manual Deploy run, check that it ran from a `v*` tag or `main`. |
+| *Refused by the Pi's job-started hook* | The job is not the deploy as the hook defines it — or it is, and something about the run differs from what the hook expects | Read the reason on that line. A job from a pull request or another workflow is meant to be refused. For a Deploy run, check that it ran from `main` (or a `v*` tag). |
 | *Watchtower is still switched on* / *still running* | Step 4 of the setup was not done | Do it, then re-run the job. |
 | *Compose project mismatch* | The deploy would have used another project name — and an empty photo volume | Check `STAMPORAMA_DIR` and that the runner's environment sets no `COMPOSE_PROJECT_NAME`. Nothing was changed. |
 | *pg_dump failed* | The database was unreachable, or its major is newer than the client's | Read `last-dump-error.log` in the backup directory. Nothing was deployed. |
-| *Skipped* | A release older than the running one was published | Nothing to do; a manual run deploys it if that was meant. |
-| *Rolled back* | The release did not become healthy; the previous image runs again | Read `docker compose logs app` on the Pi. Decide whether to restore the dump. |
-| *Failed* after a failed health check | The rollback did not become healthy either, or there was nothing to roll back to | The instance is down. Read the logs, restore the dump, and deploy a release that worked. |
+| *Skipped* | The image is older than the running one — a CI run on `main` finished after a newer commit's | Nothing to do; a manual run deploys it if that was meant. |
+| *Rolled back* | The new image did not become healthy; the previous image runs again | Read `docker compose logs app` on the Pi. Decide whether to restore the dump. |
+| *Failed* after a failed health check | The rollback did not become healthy either, or there was nothing to roll back to | The instance is down. Read the logs, restore the dump, and deploy a version that worked. |
 
 ## Settings the script reads
 

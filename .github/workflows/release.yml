@@ -1,6 +1,8 @@
 name: Release
 
-# Cuts a release: tag, the tag's own CI run, GitHub Release, `latest`, deploy (#2704).
+# Cuts a release: tag, the tag's own CI run, GitHub Release, `latest` (#2704). **A release no longer
+# deploys** (#2712, the owner, 2026-11-27): the owner's Pi follows `main` (`ci.yml`'s
+# `Deploy main to the Pi`), and a release is the version other self-hosters update to.
 #
 # Why a workflow: a cloud thread's proxy refuses `POST /git/tags` and every write to `/releases`
 # (HTTP 403, measured 2026-11-23), and the owner decided releases are hands-off for him — "To powinno
@@ -12,19 +14,15 @@ name: Release
 #
 # The procedure — and why each check is here — is `docs/agents/release-versioning.md`.
 #
-# **Why it starts CI and Deploy itself.** Everything this job writes is written with `GITHUB_TOKEN`,
-# and an event caused by `GITHUB_TOKEN` starts no workflow — except `workflow_dispatch`. So the tag
-# it creates does not start `ci.yml`'s `push` run, and the Release it publishes does not fire
-# `deploy.yml`'s `release: published`. It dispatches both instead, on the tag: CI with
-# `publish_image`, Deploy with the version. Deploy's triggers are unchanged; a dispatch on a `v*` tag
-# is the manual run it already has, which the `prod` environment and the Pi's job-started hook
-# already accept. The owner's decision for that is in #2704.
+# **Why it starts CI itself.** Everything this job writes is written with `GITHUB_TOKEN`, and an
+# event caused by `GITHUB_TOKEN` starts no workflow — except `workflow_dispatch`. So the tag it
+# creates does not start `ci.yml`'s `push` run; it dispatches CI on the tag with `publish_image`.
 #
-# **The no-downgrade guard moves here.** A manual Deploy run passes `--allow-downgrade`, so this job
-# refuses a version that is not newer than the latest published release before it creates anything.
+# **Versions only go up.** This job refuses a version that is not newer than the latest published
+# release before it creates anything.
 #
 # **Nothing is published unless the tag's run is green.** A red tag run deletes the tag and fails
-# this job, so no Release, no `latest` and no deploy follow it.
+# this job, so no Release and no `latest` follow it.
 #
 # Every value reaches a script through `env:`, never `${{ }}` inside `run:`: the notes are free text.
 
@@ -55,7 +53,7 @@ concurrency:
 
 jobs:
   release:
-    name: Tag, verify, publish and deploy
+    name: Tag, verify and publish
     if: github.repository == 'michalwy/stamporama' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 150
@@ -63,7 +61,7 @@ jobs:
     permissions:
       # The tag, the Release and `latest`.
       contents: write
-      # Dispatching `ci.yml` and `deploy.yml` and reading their runs.
+      # Dispatching `ci.yml` and reading its runs.
       actions: write
 
     env:
@@ -170,11 +168,3 @@ jobs:
         run: |
           set -euo pipefail
           gh api -X PATCH "$R/git/refs/tags/latest" -f sha="$GITHUB_SHA" -F force=true --jq .object.sha
-
-      # A Release published with `GITHUB_TOKEN` does not fire `release: published`, so the deploy is
-      # dispatched on the tag — the manual run `deploy.yml` already has (#2704).
-      - name: Start the deploy
-        run: |
-          set -euo pipefail
-          gh api -X POST "$R/actions/workflows/deploy.yml/dispatches" -f ref="v$VERSION" -f "inputs[version]=$VERSION"
-          echo "::notice::v$VERSION released; the Deploy workflow was started on the tag."

@@ -58,8 +58,12 @@ not restate that reasoning here; add it to the topic file instead.
 - **A thread's final reply to the project conversation is at most 5 lines** — the result, the link,
   a question if there is one; details go in the pull request. **At most 3 threads run at once**, and
   small related issues from one area share a thread (the owner, 2026-11-22, #2700).
-- **A release is a deploy**, so it is cut **only on the owner's explicit word** in the project
-  conversation. **No thread ever deploys.** → [`release-versioning.md`](docs/agents/release-versioning.md)
+- **A merge to `main` is a deploy**: once `main`'s CI run is green, its `Deploy main to the Pi` job
+  sends that commit to the owner's live instance (the owner, 2026-11-27, #2712). **A release is not a
+  deploy** — it is what other self-hosters update to — and is still cut **only on the owner's explicit
+  word** in the project conversation. **No thread ever deploys by hand.**
+  → [`release-versioning.md`](docs/agents/release-versioning.md),
+  [`platform-deployment.md`](docs/agents/platform-deployment.md)
 - **GraphQL is blocked in a cloud thread**: `gh issue`, `gh pr`, `gh run`, `gh release` and
   GitHub's auto-merge all fail. Use `gh api` (REST) or the built-in GitHub tools.
   → [`collaboration.md`](docs/agents/collaboration.md) § *GitHub from a cloud thread*
@@ -129,7 +133,7 @@ and ADR references.
 | Starting threads for ready issues (the project conversation) | [`backlog-review.md`](docs/agents/backlog-review.md) |
 | Turning ideas and bug reports into issues (the project conversation) | [`backlog-manager.md`](docs/agents/backlog-manager.md) |
 | Waiting for CI, the guardrail checklist, merging your own pull request, closing the issue | [`merge-checklist.md`](docs/agents/merge-checklist.md) |
-| Releases (= deploys) | [`release-versioning.md`](docs/agents/release-versioning.md) |
+| Releases (not deploys: `main` is deployed) | [`release-versioning.md`](docs/agents/release-versioning.md) |
 | Renovate's schedule and the Monday dependency-review thread | [`dependency-review.md`](docs/agents/dependency-review.md) |
 | The Project's standing instructions, as pasted into Project settings | [`project-instructions.md`](docs/project-instructions.md) |
 | How `main` is protected | [`.github/rulesets/README.md`](.github/rulesets/README.md) |

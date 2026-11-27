@@ -4,10 +4,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// `.github/workflows/release.yml` cuts a release and starts the deploy (#2704). What keeps it safe is
-// pinned here: only a manual dispatch from `main` starts it, it runs on a GitHub-hosted runner, it
-// never starts a deploy before the tag's own CI run and the image are green, and no input reaches a
-// `run:` script except through `env:`. Read as text, like `deploy-workflow.test.ts`.
+// `.github/workflows/release.yml` cuts a release (#2704). What keeps it safe is pinned here: only a
+// manual dispatch from `main` starts it, it runs on a GitHub-hosted runner, it publishes nothing
+// before the tag's own CI run and the image are green, it **does not deploy** — the owner's Pi follows
+// `main` since #2712 — and no input reaches a `run:` script except through `env:`. Read as text,
+// like `deploy-workflow.test.ts`.
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const text = readFileSync(path.join(repoRoot, ".github", "workflows", "release.yml"), "utf8");
@@ -40,7 +41,7 @@ describe("release workflow", () => {
     assert.ok(has(/^ {2}cancel-in-progress: false$/));
   });
 
-  it("publishes the Release, moves latest and deploys only after the tag run, in that order", () => {
+  it("publishes the Release and moves latest only after the tag run, in that order", () => {
     const at = (name: string) => {
       const index = lines.findIndex((line) => line.trim() === `- name: ${name}`);
       assert.notEqual(index, -1, `no step "${name}"`);
@@ -53,9 +54,12 @@ describe("release workflow", () => {
       "Run CI on the tag and wait for it",
       "Publish the GitHub Release",
       "Move latest",
-      "Start the deploy",
     ].map(at);
     assert.deepEqual(order, [...order].sort((a, b) => a - b));
+  });
+
+  it("does not start a deploy: the Pi follows main (#2712)", () => {
+    assert.ok(!text.includes("deploy.yml/dispatches"));
   });
 
   it("puts no expression inside a run: script, where free-text notes could become shell", () => {

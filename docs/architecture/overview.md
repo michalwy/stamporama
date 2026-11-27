@@ -48,21 +48,23 @@ There is no updater service: a self-hoster updates with `scripts/update.sh`, by 
 host's cron or a systemd timer (README, *Updating*). The `autoupdate` profile's Watchtower was
 removed in #2690 because Watchtower is unmaintained (ADR-0083).
 
-### The owner's instance: deployed by a published release (ADR-0083)
+### The owner's instance: deployed from `main` (ADR-0083, ADR-0084)
 
-The owner's instance on a Raspberry Pi is not updated by `scripts/update.sh`. Publishing a GitHub Release
-starts `.github/workflows/deploy.yml` on a self-hosted runner on the Pi (labels
+The owner's instance on a Raspberry Pi is not updated by `scripts/update.sh`, and since 2026-11-27 not
+by releases either (#2712). Every push to `main` whose CI run is green publishes
+`ghcr.io/michalwy/stamporama:main-<short sha>`, and the run's last job dispatches
+`.github/workflows/deploy.yml` on `main` with that version. It runs on a self-hosted runner on the Pi (labels
 `self-hosted, pi, stamporama`, environment `prod`), which runs `scripts/deploy.sh` in the existing
 installation directory, with its own `.env` and compose project name:
 
 ```
-GitHub Release published ──► deploy.yml (self-hosted runner on the Pi)
-                               │
-                               ├─ 1. pull ghcr.io/michalwy/stamporama:X.Y.Z, then only by @sha256 digest
-                               ├─ 2. no-downgrade guard (a manual run may roll back)
-                               ├─ 3. pg_dump of the external database → backups/, newest 14 kept
-                               ├─ 4. docker compose up -d   (migrations run at container start)
-                               └─ 5. wait for healthy ── fails ──► previous image again, job fails
+main green ──► ci.yml: image main-<sha> ──► deploy.yml (self-hosted runner on the Pi)
+                                                │
+                                                ├─ 1. pull …:main-<sha>, then only by @sha256 digest
+                                                ├─ 2. no-downgrade guard by commit time (a manual run may roll back)
+                                                ├─ 3. pg_dump of the external database → backups/, newest 14 kept
+                                                ├─ 4. docker compose up -d   (migrations run at container start)
+                                                └─ 5. wait for healthy ── fails ──► previous image again, job fails
 ```
 
 Migrations are not rolled back; the dump is restored by hand. A manual run of the workflow with a
@@ -793,9 +795,9 @@ The four application suites, each gated on `Detect changes`:
 
 Which of these `main` requires as a status check is deliberately not stated here: [`.github/rulesets/main.json`](../../.github/rulesets/main.json) is that record, and `docs/agents/collaboration.md` carries the reasoning around it.
 
-On a `v*` tag, **Build image** builds `linux/amd64` and `linux/arm64` on their own native runners and pushes each by digest, **Publish container image** merges those digests into one multi-arch manifest tagged on `ghcr.io/michalwy/stamporama`, and **Publish extension (Chrome Web Store)** submits the packaged extension when the `CWS_PUBLISH_ENABLED` repository variable is set and something it ships has changed since the version the store already holds — reporting `success` either way, so its notice rather than its conclusion says which (`docs/agents/release-versioning.md`). Nothing publishes over a red suite: `Build image` and `Publish extension` each `needs:` all four suites above, and `Publish container image` `needs:` `Build image`.
+On a `v*` tag — and on a push to `main` whose four suites ran (#2712) — **Build image** builds `linux/amd64` and `linux/arm64` on their own native runners and pushes each by digest, and **Publish container image** merges those digests into one multi-arch manifest tagged on `ghcr.io/michalwy/stamporama`: `X.Y.Z`, `X.Y` and `latest` for a tag, `main` and `main-<short sha>` for `main`. On a tag, **Publish extension (Chrome Web Store)** submits the packaged extension when the `CWS_PUBLISH_ENABLED` repository variable is set and something it ships has changed since the version the store already holds — reporting `success` either way, so its notice rather than its conclusion says which (`docs/agents/release-versioning.md`). Nothing publishes over a red suite: `Build image` and `Publish extension` each `needs:` all four suites above, and `Publish container image` `needs:` `Build image`.
 
-**Deploying is not part of this run.** [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) runs when the GitHub Release is published — after this run is green — or by hand, on the self-hosted runner on the owner's Pi; it is the only workflow allowed onto a self-hosted runner, which `tests/unit/self-hosted-runners.test.ts` enforces inside `Unit tests` (ADR-0083).
+**On `main`, the run ends by starting the deploy**: **Deploy main to the Pi** `needs:` `Publish container image` and dispatches [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml) on `main` with `main-<short sha>` (#2712). The deploy itself runs there — or by hand — on the self-hosted runner on the owner's Pi; it is the only workflow allowed onto a self-hosted runner, which `tests/unit/self-hosted-runners.test.ts` enforces inside `Unit tests` (ADR-0083).
 
 ## Authentication
 
