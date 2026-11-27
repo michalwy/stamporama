@@ -63,3 +63,23 @@ export function nextDeletionPass(
 ): { retry: readonly CollectionTable[]; stuck: boolean } {
   return { retry: refused, stuck: refused.length > 0 && refused.length === remaining.length };
 }
+
+/**
+ * The administrators' email addresses from `ADMIN_EMAILS` (#2729): a comma-separated list, each
+ * entry trimmed and lower-cased, empty entries dropped. Unset or empty is nobody — an instance has
+ * an administrator only because its operator named one.
+ */
+export function parseAdminEmails(raw: string | undefined): ReadonlySet<string> {
+  return new Set(
+    (raw ?? "")
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry !== "")
+  );
+}
+
+/** Whether an account with this email is an administrator under `ADMIN_EMAILS` (#2729). */
+export function isAdminEmail(email: string | null | undefined, raw: string | undefined): boolean {
+  if (!email) return false;
+  return parseAdminEmails(raw).has(email.trim().toLowerCase());
+}

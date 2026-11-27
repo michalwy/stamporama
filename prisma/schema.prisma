@@ -26,10 +26,9 @@ model User {
   // remembered, and again once that collection is deleted.
   phoneCollectionId String?
   phoneCollection   Collection?  @relation("PhoneCollection", fields: [phoneCollectionId], references: [id], onDelete: SetNull)
-  // An administrator of the instance (#2719): may open `/admin` — every account and collection, their
-  // storage, deleting either, and the registration switch. The oldest account was given it by the
-  // migration, and the first account of an instance that has no administrator gets it when created
-  // (`admin.ts`). Better Auth neither reads nor writes it.
+  // Unused since #2729: administrators are the accounts whose email is listed in `ADMIN_EMAILS`
+  // (`admin-access.ts`). The column, added by #2719, stays because dropping it would be a
+  // destructive migration; nothing reads or writes it.
   isAdmin       Boolean      @default(false)
   feedbackReports FeedbackReport[]
 

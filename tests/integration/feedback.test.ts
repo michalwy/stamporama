@@ -28,14 +28,16 @@ import { POST as postMcp } from "../../src/app/api/mcp/route";
 
 const RUN = `feedback-${Date.now()}`;
 
-async function createUser(suffix: string, admin = false) {
+// This file's administrator is named the way an operator names one (#2729).
+process.env.ADMIN_EMAILS = `test-${RUN}-admin@example.com`;
+
+async function createUser(suffix: string) {
   return prisma.user.create({
     data: {
       id: `test-user-${RUN}-${suffix}`,
       name: `Test ${suffix}`,
       email: `test-${RUN}-${suffix}@example.com`,
       emailVerified: true,
-      isAdmin: admin,
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -105,7 +107,7 @@ describe("in-app feedback", () => {
   let collectionId: string;
 
   before(async () => {
-    adminId = (await createUser("admin", true)).id;
+    adminId = (await createUser("admin")).id;
     collectorId = (await createUser("collector")).id;
     collectionId = (await createCollection(collectorId, `Feedback ${RUN}`, "EUR")).id;
   });

@@ -3,6 +3,7 @@ import { prisma, type DbTransaction } from "./db";
 import { AdminError, assertAdmin } from "./admin-access";
 import { getConfiguredStorages } from "./storage";
 import {
+  isAdminEmail,
   nextDeletionPass,
   sumStorage,
   type CollectionTable,
@@ -81,7 +82,6 @@ export async function getAdminOverview(adminId: string): Promise<AdminOverview> 
       id: true,
       name: true,
       email: true,
-      isAdmin: true,
       createdAt: true,
       collections: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -100,7 +100,7 @@ export async function getAdminOverview(adminId: string): Promise<AdminOverview> 
       id: user.id,
       name: user.name,
       email: user.email,
-      isAdmin: user.isAdmin,
+      isAdmin: isAdminEmail(user.email, process.env.ADMIN_EMAILS),
       createdAt: user.createdAt,
       collections,
       storage: sumStorage(collections.map((collection) => collection.storage)),

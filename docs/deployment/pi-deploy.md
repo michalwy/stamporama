@@ -140,7 +140,7 @@ restart is needed, because the runner runs the file anew for every job.
   | `STAMPORAMA_DIR` | yes | Absolute path of the installation directory on the Pi — the one holding `.env` and `docker-compose.prod.yml` |
   | `STAMPORAMA_BACKUP_DIR` | no | Where dumps go; default `<STAMPORAMA_DIR>/backups` |
   | `STAMPORAMA_BACKUP_KEEP` | no | How many dumps are kept; default `14` |
-
+  | `ADMIN_EMAILS` | no, but nobody can open `/admin` without it | The administrators' email addresses, comma-separated — see [Administrators](#administrators) |
   | `FEEDBACK_NOTIFY_URL` | no | The routine trigger a stored feedback report fires — see [The feedback notification](#the-feedback-notification) |
 
 - **Environment secrets**: `FEEDBACK_NOTIFY_TOKEN`, optional, the token of that trigger.
@@ -279,6 +279,25 @@ live in the `stamporama-data` volume (or in Google Cloud Storage) and a deploy d
 | *Rolled back* | The release did not become healthy; the previous image runs again | Read `docker compose logs app` on the Pi. Decide whether to restore the dump. |
 | *Failed* after a failed health check | The rollback did not become healthy either, or there was nothing to roll back to | The instance is down. Read the logs, restore the dump, and deploy a release that worked. |
 
+## Administrators
+
+Who may open `/admin` and use the admin MCP tools is named in the configuration, not by being the
+first account (#2729): the accounts whose **email address is listed in `ADMIN_EMAILS`**. With it
+unset, nobody is an administrator.
+
+1. In the repository, **Settings → Environments → prod → Environment variables**: add the
+   **variable** `ADMIN_EMAILS` with the addresses of the administrators' accounts, comma-separated —
+   for example `owner@example.com` or `owner@example.com,second@example.com`. Letter case and spaces
+   do not matter. It is a variable, not a secret.
+2. Nothing on the Pi. The next deploy — a release, or a manual run of **Deploy to Pi** with the
+   version that is already running — writes it into the installation's `.env` and recreates the
+   container so it reads it. The script does not print it.
+
+To change the list, change the variable and deploy again. With the variable deleted, a deploy
+leaves `.env` as it is; to remove every administrator, also delete `ADMIN_EMAILS` from `.env` on the
+Pi and restart the app (`docker compose up -d`). An instance not deployed by the workflow sets
+`ADMIN_EMAILS` in its `.env` by hand and restarts.
+
 ## The feedback notification
 
 When somebody sends a report through *Report a problem* (#2720), the instance can tell the project's
@@ -325,5 +344,6 @@ Set in the `prod` environment's variables (above), or in the shell when running
 | `STAMPORAMA_HEALTH_TIMEOUT` | `600` | Seconds to wait for a healthy container |
 | `STAMPORAMA_IMAGE` | `ghcr.io/michalwy/stamporama` | Image repository (the compose file names the same one) |
 | `FEEDBACK_NOTIFY_URL`, `FEEDBACK_NOTIFY_TOKEN` | — | Written into `.env` when both are set and differ from what it holds; never printed (#2721) |
+| `ADMIN_EMAILS` | — | Written into `.env` (whitespace removed) when set and different from what it holds; never printed (#2729) |
 
 By hand: `STAMPORAMA_DIR=$PWD bash scripts/deploy.sh --version X.Y.Z [--allow-downgrade]`.

@@ -1,5 +1,6 @@
 import "server-only";
-import { prisma, type Db, type DbTransaction } from "./db";
+import { prisma } from "./db";
+import { isAdminEmail, parseAdminEmails } from "./admin-rules";
 
 // Who is an administrator of the instance (#2719). Its own small module so that `auth.ts` and
 // `route-auth.ts` can ask without importing the panel and the storage layer behind it (`admin.ts`).
@@ -15,10 +16,18 @@ export class AdminError extends Error {
   }
 }
 
-/** Whether this account is an administrator. An unknown id is not. */
+/**
+ * Whether this account is an administrator: its email is listed in `ADMIN_EMAILS` (#2729, the
+ * owner's decision of 2026-11-27 — administrators are named in the instance's configuration, the
+ * first account is nobody special). Read on every call, so a changed list takes effect with the
+ * container's next start and nothing is cached. An unknown id is not an administrator, and neither
+ * is anyone while the variable is unset. `user.isAdmin` (#2719) is no longer read or written.
+ */
 export async function isAdmin(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } });
-  return user?.isAdmin === true;
+  const admins = process.env.ADMIN_EMAILS;
+  if (parseAdminEmails(admins).size === 0) return false;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  return isAdminEmail(user?.email, admins);
 }
 
 /** Refuse anyone who is not an administrator. */
@@ -26,17 +35,4 @@ export async function assertAdmin(userId: string): Promise<void> {
   if (!(await isAdmin(userId))) {
     throw new AdminError("forbidden", "Only an administrator of this instance can do this.");
   }
-}
-
-/**
- * Make this account an administrator **if the instance has none** — one statement, so two accounts
- * created at the same moment cannot both win. Called when an account is created (`auth.ts`): the
- * first account of a fresh installation is its administrator, the way the migration made the oldest
- * account the administrator of an existing one. Returns whether it was promoted.
- */
-export async function claimFirstAdmin(userId: string, db: Db | DbTransaction = prisma): Promise<boolean> {
-  const promoted = await db.$executeRaw`
-    UPDATE "user" SET "isAdmin" = true
-    WHERE "id" = ${userId} AND NOT EXISTS (SELECT 1 FROM "user" WHERE "isAdmin")`;
-  return promoted > 0;
 }

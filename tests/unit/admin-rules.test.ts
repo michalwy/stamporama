@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   deletionConfirmed,
   formatStorageBytes,
+  isAdminEmail,
   nextDeletionPass,
+  parseAdminEmails,
   sumStorage,
 } from "../../src/lib/admin-rules";
 import { resolveRegistrationSwitch } from "../../src/lib/registration";
@@ -85,5 +87,32 @@ describe("nextDeletionPass", () => {
 
   it("is stuck when a whole pass was refused", () => {
     assert.deepEqual(nextDeletionPass([a, b], [a, b]), { retry: [a, b], stuck: true });
+  });
+});
+
+describe("ADMIN_EMAILS (#2729)", () => {
+  it("is nobody while unset, empty or only separators", () => {
+    for (const raw of [undefined, "", "  ", " , ,"]) {
+      assert.equal(parseAdminEmails(raw).size, 0, String(raw));
+      assert.equal(isAdminEmail("owner@example.com", raw), false, String(raw));
+    }
+  });
+
+  it("trims and lower-cases every entry of a comma-separated list", () => {
+    assert.deepEqual([...parseAdminEmails(" Owner@Example.com ,second@example.com,, ")], [
+      "owner@example.com",
+      "second@example.com",
+    ]);
+  });
+
+  it("matches an account's email whatever its letter case, and nothing else", () => {
+    const raw = "Owner@Example.com, second@example.com";
+    assert.equal(isAdminEmail("owner@example.com", raw), true);
+    assert.equal(isAdminEmail("SECOND@example.com", raw), true);
+    assert.equal(isAdminEmail("third@example.com", raw), false);
+    assert.equal(isAdminEmail("owner@example.co", raw), false);
+    assert.equal(isAdminEmail("", raw), false);
+    assert.equal(isAdminEmail(null, raw), false);
+    assert.equal(isAdminEmail(undefined, raw), false);
   });
 });

@@ -66,6 +66,9 @@ jobs:
           # installation's .env when both are set, and prints neither.
           FEEDBACK_NOTIFY_URL: ${{ vars.FEEDBACK_NOTIFY_URL }}
           FEEDBACK_NOTIFY_TOKEN: ${{ secrets.FEEDBACK_NOTIFY_TOKEN }}
+          # Who is an administrator (#2729): the accounts whose email is in this comma-separated list.
+          # Written into .env when set, never printed.
+          ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS }}
           VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
           MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
