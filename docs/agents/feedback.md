@@ -12,6 +12,11 @@ The triage persona is [`feedback-triage.md`](feedback-triage.md); the panel is [
   is the seller's document for their buyer and the link is not part of it. It is not on the dead-link
   notices, and `/o/…` is a signed-in redirect, not a shared page. The contact field is offered only
   to the anonymous visitor; a collector is reachable through their account.
+- **The dialog is portalled to `<body>`** (#2725). The sidebar that opens it is `position: sticky`,
+  its own stacking context, so drawn in place the dialog ranked only within the sidebar and the
+  stamp cards of the main column painted over its fields (v1.4.0). `FeedbackDialog` returns
+  `createPortal(<DialogShell …>, document.body)` for every entry point, shared pages included;
+  `tests/unit/feedback-dialog-portal.test.ts` holds it there.
 - **`POST /api/feedback` takes a request with no session, on purpose**, and that is bounded three
   ways: an anonymous request must name a shared page (anything else is `401`); `rate-limit.ts` allows
   five an hour per address and sixty an hour for all anonymous senders together (`429`); and the
