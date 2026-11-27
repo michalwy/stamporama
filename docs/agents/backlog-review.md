@@ -117,9 +117,8 @@ redirects when he wants to; do not ask him which direction to pursue.
 
 ## Suggest a release, never cut one
 
-When a coherent batch of shippable commits has accumulated since the last release, say so. A release
-does not deploy — the owner's live instance follows `main` (#2712) — but it is what every other
-installation updates to, so it is cut only on
+When a coherent batch of shippable commits has accumulated since the last release, say so. **A
+release is a deploy** — a published release goes to the owner's live instance — so it is cut only on
 the owner's explicit word in the project conversation, by a release thread
 ([`release-versioning.md`](release-versioning.md)). A suggestion is not that word, and neither is
 silence after one.

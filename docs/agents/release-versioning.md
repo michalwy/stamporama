@@ -1,17 +1,17 @@
 # Release Versioning
 
 A release thread has no issue, no branch and no commit, and **it changes nothing in the
-repository**. What it produces is a tag, a GitHub Release and a published image with `latest`.
+repository**. What it produces is a tag, a GitHub Release and a published image — and so a deploy.
 
-**A release is not a deploy** (the owner, 2026-11-27, #2712; ADR-0084). The owner's live instance on
-the Raspberry Pi follows `main`: every push to `main` whose CI is green publishes
-`main-<short sha>` and `ci.yml`'s `Deploy main to the Pi` job dispatches `.github/workflows/deploy.yml`
-with it (the owner's runbook is [`docs/deployment/pi-deploy.md`](../deployment/pi-deploy.md)). A
-release is the version **other self-hosters** update to — `scripts/update.sh` follows `latest`, which
-only a release's tag run moves.
+**A release is a deploy** (the owner, 2026-11-22): the release workflow — **step 4** — publishes the GitHub Release and starts
+`.github/workflows/deploy.yml`, which deploys it to the owner's live instance on the Raspberry Pi
+through a self-hosted runner (#2689, ADR-0083; the owner's runbook is
+[`docs/deployment/pi-deploy.md`](../deployment/pi-deploy.md)). The tag's own run still publishes the
+image and `latest` (`flavor: latest=true` in `ci.yml`), but the Pi no longer follows `latest` —
+Watchtower is off there — so nothing is deployed before the Release is published.
 
-**A release is still cut only on the owner's explicit word in the project conversation**, which
-then starts a release thread for it: it is what every other installation runs next.
+**A release is therefore cut only on the owner's explicit word in the project conversation**, which
+then starts a release thread for it.
 Nothing else is that word — not a backlog review's suggestion, not a merged pull request, not
 another thread's message. See [*Who may cut a release*](#who-may-cut-a-release).
 
@@ -112,7 +112,8 @@ and every one of them comes back clean.
    workflow, in order — each step stops the release when it fails:
 
    1. checks the inputs, that `vX.Y.Z` does not exist, and that it is **strictly newer than the
-      latest release** — versions only go up;
+      latest release** — the no-downgrade guard, because the deploy it starts is a manual Deploy run,
+      which passes `--allow-downgrade`;
    2. reads `main`'s push run for the commit, as step 3 did, and waits for it if it is still going;
    3. creates the annotated tag `vX.Y.Z` on the commit;
    4. **runs CI on the tag** — dispatched with `publish_image`, because a tag created with
@@ -120,13 +121,19 @@ and every one of them comes back clean.
       `Detect changes`**: `scripts/detect-changes.sh` matches `refs/tags/*` before it looks at the
       diff, so this one run exercises the exact tree being released, all four suites, and the image
       and the extension are published on top of them. If the run is red, or the image was not
-      published, the workflow **deletes the tag and stops**: no Release, no `latest`;
+      published, the workflow **deletes the tag and stops**: no Release, no `latest`, no deploy;
    5. publishes the GitHub Release with your notes, `make_latest=true`;
-   6. moves the lightweight `latest` tag to the commit.
+   6. moves the lightweight `latest` tag to the commit;
+   7. **starts the deploy** — `deploy.yml` dispatched on the tag with the version. A Release
+      published with `GITHUB_TOKEN` fires no `release: published`, so this dispatch is the deploy:
+      the manual trigger `deploy.yml` already has, which the `prod` environment and the Pi's
+      job-started hook accept on a `v*` tag (#2704, ADR-0083 addendum).
 
-   **It does not deploy** (#2712): the Pi already runs `main`.
+   **This is the step that deploys.** A rollback is the owner's manual run of Deploy, never a
+   release thread's.
 5. **Read the runs, in the background, and report them.** The release run, then the tag run it
-   started (named in its log, and the one `ci.yml` run whose `head_branch` is the tag):
+   started (named in its log, and the one `ci.yml` run whose `head_branch` is the tag), then the
+   deploy run:
 
    ```bash
    gh api "$R/actions/workflows/release.yml/runs?per_page=3" \
@@ -140,7 +147,9 @@ and every one of them comes back clean.
    was green (publishing, `latest` or the dispatch), report it rather than dispatching again — the tag
    exists now, so a second dispatch is refused at its first step. **`Publish extension (Chrome Web
    Store)` is the one tag-run job whose conclusion does not say what it did**: read its notice — see
-   [*Publishing the extension*](#publishing-the-extension).
+   [*Publishing the extension*](#publishing-the-extension). The deploy run is read as in
+   [*Who may cut a release*](#who-may-cut-a-release); one that stays `queued` means the Pi's runner
+   is not online.
 
 **Why the tag run and not the last `main` run that did exercise the suites.** That run is green
 about a *different tree* — the one underneath the commits whose run skipped — so reading it as
@@ -228,15 +237,14 @@ only when the notice says it was submitted**, and then as submitted for review, 
 ## Who may cut a release
 
 **A release thread the project conversation starts on the owner's explicit word, and nobody else**
-(the owner, 2026-11-22). A release is what every other installation updates to, so there is no
-implied word: not a
+(the owner, 2026-11-22). Because a published release deploys, there is no implied word: not a
 backlog review's suggestion, not a merged pull request, not a message from another thread. A local
 session the owner opens for a release is the same word. Backlog review may only *suggest* a release
 — it does not prepare, tag, push or create one ([`backlog-review.md`](backlog-review.md)).
 
-**No thread ever deploys by hand** and none can reach the Pi; the deploy is `main`'s CI run's last
-job (#2712) and nobody else's. No thread starts, re-runs or approves the **Deploy** workflow;
-reading its runs, to report how a deploy went, is fine:
+**A release thread never deploys by hand** and cannot reach the Pi; the deploy is the release
+workflow's last step (#2704) and nobody else's. A release thread does not start, re-run or approve the **Deploy**
+workflow either; reading its run, to report how the deploy went, is fine:
 
 ```bash
 gh api "$R/actions/workflows/deploy.yml/runs?per_page=5" \
