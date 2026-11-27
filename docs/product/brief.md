@@ -45,7 +45,8 @@ Each physical copy a collector owns is a separate item (no quantity field — se
    history. Market data is a by-product of bidding, not a register to populate.
 7. **Integrations** — Collnect, Delcampe. A collection can also be handed to an AI assistant over
    MCP (and the same operations over `/api/v1`), through a read-only or read-and-write token scoped
-   to that one collection; it never publishes to a marketplace and never reaches a counterparty —
+   to that one collection, or — for an app that adds it as a connector, such as Claude — by signing
+   in and choosing the collection and the scope (ADR-0084); it never publishes to a marketplace and never reaches a counterparty —
    those are absent, not switched off (ADR-0050).
 
 ## Deployment

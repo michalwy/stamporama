@@ -14,7 +14,21 @@ const nextConfig = {
   // the Dockerfile's builder stage type-checks nothing else. Turning it off saved nothing
   // measurable either: `Static checks` finishes 50–190 s under `Integration tests`, which sets a
   // required run's wall clock. Reopen it only when that ceiling has moved below this job.
-  distDir: process.env.NEXT_DIST_DIR ?? ".next"
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  // The OAuth consent screen (#2715, ADR-0084) must never be drawn inside another site's frame: a
+  // page that could frame it could put its own picture over everything but the Allow button. Both
+  // headers, because the older one is still the only one some browsers read.
+  async headers() {
+    return [
+      {
+        source: "/oauth/authorize",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  }
 };
 
 export default nextConfig;

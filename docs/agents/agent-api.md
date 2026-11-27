@@ -1,7 +1,9 @@
 # The Agent API
 
 `/api/v1` and `/api/mcp`: the versioned, described surface an agentic AI client uses, the shared
-operation registry behind it, and the conventions every operation obeys. Read this before adding an
+operation registry behind it, and the conventions every operation obeys. Since #2715 `/api/mcp` is
+also what claude.ai adds as a connector, signing in through the app's own OAuth server (ADR-0084;
+§ *Authentication* below). Read this before adding an
 operation, and read [ADR-0050](../decisions/0050-versioned-agent-api.md) for why the surface exists
 at all and [ADR-0051](../decisions/0051-hand-rolled-mcp-transport.md) for why the MCP half is
 hand-written rather than built on the reference SDK.
@@ -279,6 +281,40 @@ it meant and the id would have to come back into the path. A browser that wants 
 token like any other agent.
 
 `resolveCollectionOwner` is untouched and the screen routes go on accepting both.
+
+### `/api/mcp` takes a second credential: the connector's sign-in (#2715)
+
+**claude.ai adds a remote MCP server by address alone and signs in through OAuth, so the app is its
+own OAuth 2.1 authorization server** ([ADR-0084](../decisions/0084-oauth-authorization-server-for-the-mcp-connector.md)
+— read it before touching any of this). The paragraphs above still describe `/api/v1` exactly:
+*token only* there, and `resolveAgentApiCaller` is untouched. What changed is the MCP route alone.
+
+- **`resolveMcpCaller` (`route-auth.ts`) is the MCP route's resolver.** An Assistant token, or an
+  access token (`stmpoa_…`) a connected app was issued; the prefixes keep the two lookups apart. Both
+  verify to `{ ownerId, collectionId, scope }`, so **no operation knows which arrived** and
+  `assertAgentApiScope` is still the one scope check. It also says whether a credential was *missing*
+  or *refused*, because the `401` differs: both carry `resource_metadata`, a refused one adds
+  `error="invalid_token"`.
+- **`/api/v1` does not take the OAuth token, on purpose** — it was issued for one resource. A test
+  holds it (`oauth-connector.test.ts`, *is not a credential for /api/v1*); do not "tidy" the two
+  resolvers into one.
+- **A grant is one app, one account, one collection, one scope**, chosen by the collector on
+  `/oauth/authorize`. The collection is still derived from the credential, never named by the caller.
+  A call acts as the account that allowed it, and stops if that account no longer owns the collection.
+- **The split is the track's own**: every rule in the pure `src/lib/oauth-rules.ts`
+  (`tests/unit/oauth-rules.test.ts`), the rows in `oauth-server.ts`, the request and response in
+  `oauth-http.ts` and the routes — `/.well-known/oauth-protected-resource[/api/mcp]`,
+  `/.well-known/oauth-authorization-server`, `/api/oauth/{register,token,revoke}`.
+  `tests/integration/oauth-connector.test.ts` drives the flow end to end over the route handlers.
+- **`src/app/.well-known/` is a dot-directory, and a `**` glob does not descend into one.** Both
+  `tsconfig.json` and `tsconfig.typecheck.json` name it in `include`; a new file there that is not
+  matched is not type-checked by `pnpm typecheck`.
+- **The integration suite has no session**, so the consent *page* and its server action
+  (`actions/oauth.ts`) are not driven: the test's `consent()` runs the same check and the same
+  `createAuthorizationCode` with the account id a session would have supplied. Keep both thin.
+- **The instance's address is `BETTER_AUTH_URL`**, falling back to the request's origin
+  (`oauthBaseUrl`). CI sets it, a local run does not, and the tests derive the address the same way
+  rather than writing one down.
 
 ### A token's scope, and where it is checked
 

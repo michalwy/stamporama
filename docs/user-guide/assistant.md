@@ -50,7 +50,8 @@ You can revoke a connection at any time from the same **Settings → Assistant &
 
 Every connection is a **token**, and **Settings → Assistant & API** lists them all — the ones the Assistant
 created for itself when you connected it, and any you made by hand. Revoking one cuts off whatever
-is using it, immediately.
+is using it, immediately. (An AI app that signed in as a *connector* is not a token: it is listed
+under **Connected apps** on the same screen — see [Connecting an AI assistant](agent-api.md).)
 
 Each row carries two chips, and they answer different questions. Select the row and its details,
 beside the list, say each one in a sentence — with when the token was made, when it was last used,

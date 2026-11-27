@@ -182,6 +182,8 @@ describe("the schema this rule was reasoned about", () => {
     // `issueFormatIds` (a lot-builder preset's, #2440) holds ids, and the literal `stamp` the code writes.
     // `apiReviewActions` (a sale's, #1948) is the one that is prose — but prose the code words
     // (`saleLineAddedAction`), never text typed into a field, so it has no edges to trim either.
+    // `redirectUris` (an OAuth client's, #2715) holds addresses an app registered, each refused by
+    // `isAcceptableRedirectUri` if it carries any whitespace at all.
     const found = [...schema.matchAll(/^\s+(\w+)\s+String\[\]/gm)].map((m) => m[1]).sort();
     assert.deepEqual(found, [
       "anchorMarkets",
@@ -196,6 +198,7 @@ describe("the schema this rule was reasoned about", () => {
       "itemIds",
       "photoPlanOrder",
       "photoPlanUnpublished",
+      "redirectUris",
       "setIds",
     ]);
   });

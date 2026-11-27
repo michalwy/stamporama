@@ -4,14 +4,42 @@ Stamporama can be handed to an AI assistant — Claude, or anything else that sp
 you can ask it about your collection in ordinary words. *"What have I got from the 1928 set that is
 not in an album yet?"* *"Which of my Michel numbers are missing a price?"*
 
-It connects to **one collection**, through a token you make yourself, and you decide whether that
-token may change anything or only look.
+It connects to **one collection**, and you decide whether it may change anything or only look.
+There are two ways to connect it: **signing in**, which is how an app such as Claude adds Stamporama
+as a *connector*, and a **token** you make yourself, for a client you configure by hand.
 
 This is not the [Stamporama Assistant](assistant.md), which is a Chrome extension for marketplace
 pages. They are different things that happen to use the same kind of token, and the same screen
 makes both.
 
-## What you need
+## Adding Stamporama to Claude as a connector
+
+If the app has a place to add a remote MCP server by its address — in Claude it is **Settings →
+Connectors → Add custom connector** — this is the whole of it:
+
+1. Give it your instance's address followed by `/api/mcp`, for example
+   `https://stamporama.example.com/api/mcp`. **Settings → Assistant & API**, under *Connected apps*,
+   shows the exact address.
+2. The app opens Stamporama in your browser. **Sign in** if you are not signed in already — with the
+   account you always use; nothing here makes a new one.
+3. Stamporama asks whether to connect the app, naming it and the site you will be sent back to.
+   Choose the **collection** it works on and what it **may do** — *Read only* or *Read and write* —
+   and press **Allow**. **Cancel** sends you back with nothing connected.
+
+There is no token to copy. The app keeps itself connected from then on, and acts as you, on that one
+collection. To let it work on a second collection, add the connector a second time and choose the
+other one.
+
+**Settings → Assistant & API** lists every app connected this way under *Connected apps*, with what
+it may do, when it was connected and when it was last used. **Disconnect**, in the row's `⋮` menu,
+cuts it off at once; the app can be connected again from its own side.
+
+Your instance has to be reachable from the internet at the address it was installed with — Claude
+connects from its own servers, not from your browser — so an instance that answers only on your home
+network cannot be added this way. A token, below, works wherever the client itself can reach the
+instance.
+
+## What you need for a token
 
 - Your instance reachable from wherever the assistant runs. If you run Stamporama on your own
   machine and the assistant runs there too, that is `http://localhost:3000`. If the assistant runs
@@ -72,8 +100,8 @@ in as many words rather than failing quietly, so if yours reports an unsupported
 that is what it means — the instance needs updating.
 
 **The collection is not in the address, and that is deliberate.** The token already says which
-collection it is for, so there is nothing to get wrong and nothing an assistant could point at the
-wrong one. Two tokens for two collections are simply two entries.
+collection it is for — as a connector's sign-in does — so there is nothing to get wrong and nothing
+an assistant could point at the wrong one. Two tokens for two collections are simply two entries.
 
 ## Checking that it worked
 
@@ -83,6 +111,7 @@ what it does. If the client shows nothing, it is nearly always one of three thin
 - **The address.** It ends in `/api/mcp`, with no trailing slash and no collection in it.
 - **The token.** A wrong or revoked one comes back as *unauthorized* with a sentence naming the
   screen that makes a new one. Tokens are shown once, so a half-copied one is the usual cause.
+  A connector you disconnected in Settings is refused the same way: connect it again from the app.
 - **Reachability.** If the assistant runs somewhere other than your own machine, `localhost` means
   *its* machine and not yours.
 

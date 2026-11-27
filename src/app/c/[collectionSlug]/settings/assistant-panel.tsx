@@ -10,6 +10,8 @@ import {
   type AssistantActionState,
 } from "@/app/actions/assistant";
 import type { AssistantTokenData } from "@/lib/api-tokens";
+import type { OAuthGrantData } from "@/lib/oauth-server";
+import { ConnectedAppsSection } from "./connected-apps-section";
 import {
   ASSISTANT_TOKEN_KINDS,
   ASSISTANT_TOKEN_KIND_LABELS,
@@ -135,6 +137,9 @@ interface AssistantPanelProps {
   collectionId: string;
   collectionName: string;
   initialTokens: AssistantTokenData[];
+  /** The apps signed in through the instance's OAuth screen (#2715), and the address they use. */
+  connectedApps: OAuthGrantData[];
+  mcpUrl: string | null;
 }
 
 /** What the page hands the extension. Mirrored in `extension/src/core/registration.ts`. */
@@ -154,6 +159,8 @@ export function AssistantPanel({
   collectionId,
   collectionName,
   initialTokens,
+  connectedApps,
+  mcpUrl,
 }: AssistantPanelProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -473,6 +480,20 @@ export function AssistantPanel({
             )
           }
         />
+      </section>
+
+      {/* ── Connected apps (#2715): signed in through the instance's own OAuth screen ── */}
+
+      <section style={{ marginTop: "2.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
+        <h2 style={sectionHeadingStyle}>
+          Connected apps
+          <InfoHint>
+            An app such as Claude connects by this instance&apos;s address alone: it sends you here to
+            sign in and to choose the collection and what it may do. There is no token to copy, and
+            disconnecting it here cuts it off immediately.
+          </InfoHint>
+        </h2>
+        <ConnectedAppsSection collectionId={collectionId} mcpUrl={mcpUrl} apps={connectedApps} />
       </section>
 
       {shownToken && <ShowTokenDialog token={shownToken} onClose={() => setShownToken(null)} />}

@@ -38,6 +38,9 @@ import { getHawidStrips } from "@/lib/hawid-stock";
 import { getAlbumTemplates } from "@/lib/album-templates";
 import { getCollectionTitleLanguages } from "@/lib/contacts";
 import { listAssistantTokens } from "@/lib/api-tokens";
+import { listOAuthGrants } from "@/lib/oauth-server";
+import { mcpResourceUrl } from "@/lib/oauth-rules";
+import { appBaseUrl } from "@/lib/app-url";
 import { getCollectionPhotoStorageBytes } from "@/lib/photos";
 import { getStorageCacheStatus } from "@/lib/storage-cache";
 import { getAppReleaseDate, getAppVersionLabel } from "@/lib/version";
@@ -72,6 +75,9 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
 
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect(await signInPath());
+  // The address an app is given to connect to this instance (#2715); null on an install that does
+  // not know its own address, where the panel describes it in words instead.
+  const baseUrl = appBaseUrl();
 
   const collection = await getCollectionBySlug(session.user.id, collectionSlug);
   if (!collection) notFound();
@@ -111,6 +117,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     delcampeLearnedCategories,
     facebookGroups,
     assistantTokens,
+    connectedApps,
     photoStorageBytes,
     storageCache,
     titleLanguages,
@@ -150,6 +157,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     listDelcampeLearnedCategories(session.user.id, collection.id),
     listFacebookGroups(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
+    listOAuthGrants(session.user.id, collection.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
     getStorageCacheStatus(session.user.id, collection.id),
     getCollectionTitleLanguages(session.user.id, collection.id),
@@ -226,6 +234,8 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           delcampeLearnedCategories={delcampeLearnedCategories}
           facebookGroups={facebookGroups}
           initialAssistantTokens={assistantTokens}
+          connectedApps={connectedApps}
+          mcpUrl={baseUrl ? mcpResourceUrl(baseUrl) : null}
           mailSettings={mailSettings}
           auctionReminder={auctionReminder}
           duplicateCatalogMode={collection.duplicateCatalogMode === "block" ? "block" : "warn"}

@@ -20,7 +20,10 @@
     ".next-typecheck/env.d.ts",
     ".next-typecheck/types/**/*.ts",
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    // A wildcard does not descend into a directory whose name starts with a dot, so the OAuth
+    // metadata routes (#2715) are named, as in `tsconfig.json`.
+    "src/app/.well-known/**/*.ts"
   ],
   "exclude": ["node_modules", "extension", "next-env.d.ts"]
 }

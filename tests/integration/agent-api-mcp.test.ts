@@ -15,6 +15,7 @@ import {
 } from "../../src/lib/agent-api/mcp";
 import { assertAgentApiScope, resolveAgentApiCaller } from "../../src/lib/route-auth";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
+import { mcpChallenge, oauthBaseUrl } from "../../src/lib/oauth-rules";
 
 // **#709's endpoint, driven the way a client drives it** (`agent-api.md`).
 //
@@ -171,7 +172,16 @@ describe("the remote MCP endpoint", () => {
   it("refuses a call with no token, and names the credential it wants", async () => {
     const response = await POST(mcpRequest(null, { jsonrpc: "2.0", id: 1, method: "ping" }));
     assert.equal(response.status, 401);
-    assert.equal(response.headers.get("WWW-Authenticate"), "Bearer");
+    // Since #2715 the challenge points at the OAuth metadata, so a client that knows only this
+    // address can find the sign-in (ADR-0084). No credential was sent, so no `invalid_token`.
+    assert.equal(
+      response.headers.get("WWW-Authenticate"),
+      mcpChallenge(oauthBaseUrl(process.env.BETTER_AUTH_URL, "http://localhost/api/mcp"), false)
+    );
+    assert.match(
+      response.headers.get("WWW-Authenticate") ?? "",
+      /^Bearer resource_metadata="https?:\/\/[^"]+\/\.well-known\/oauth-protected-resource\/api\/mcp"$/
+    );
     const body = (await response.json()) as { error: { code: string; message: string } };
     assert.equal(body.error.code, "unauthorized");
     assert.match(body.error.message, /Settings → Assistant/);

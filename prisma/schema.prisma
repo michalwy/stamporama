@@ -18,6 +18,8 @@ model User {
   sessions      Session[]
   accounts      Account[]
   collections   Collection[]  @relation("CollectionOwner")
+  oauthAuthorizationCodes OAuthAuthorizationCode[]
+  oauthGrants   OAuthGrant[]
   // The collection the phone opens on its next start (#2574; ADR-0072 §3, amended): the last one a
   // phone screen was opened in, kept for the account so it holds on another phone and across signing
   // in again. Only a phone screen sets it — working at the desk never does. Null when none is
@@ -230,6 +232,8 @@ model Collection {
   colnectConditionMappings ColnectConditionMapping[]
   colnectListMappings ColnectListMapping[]
   assistantTokens AssistantToken[]
+  oauthAuthorizationCodes OAuthAuthorizationCode[]
+  oauthGrants OAuthGrant[]
   assistantRegistrationCodes AssistantRegistrationCode[]
   allegroConnection AllegroConnection?
   allegroSyncState  AllegroSyncState?
@@ -8674,4 +8678,84 @@ model SidebarPin {
   @@unique([collectionId, kind, target])
   @@index([collectionId, position])
   @@map("sidebar_pin")
+}
+
+// An app that registered itself with this instance's OAuth authorization server (#2715, ADR-0084):
+// claude.ai adding Stamporama as a connector, or any other MCP client that signs in the same way.
+// Registration is open (RFC 7591) and proves nothing — a row here is a name and the addresses the
+// app may be sent back to, and it can do nothing until a signed-in collector allows it. Every client
+// is a public one: there is no secret column because there is no secret, and PKCE stands in its
+// place. `id` is the `client_id`. `authorizedAt` is the first time a collector allowed it; a
+// registration nobody ever allowed is swept a day later (`oauth-server.ts`).
+model OAuthClient {
+  id           String    @id
+  name         String
+  redirectUris String[]
+  createdAt    DateTime  @default(now())
+  authorizedAt DateTime?
+
+  codes  OAuthAuthorizationCode[]
+  grants OAuthGrant[]
+
+  @@map("oauth_client")
+}
+
+// The one-time code the collector's browser carries back to the app after the consent screen
+// (#2715). Only its SHA-256 is stored (the raw value has the prefix "stmpoc_"). It holds everything
+// the token endpoint must find unchanged: which client, which redirect URI, the PKCE challenge, and
+// what the collector allowed — the collection and the scope. A redeemed row is kept until it expires
+// with `usedAt` and the grant it produced, so a code presented twice ends that grant instead of
+// minting a second one.
+model OAuthAuthorizationCode {
+  id            String    @id @default(cuid())
+  codeHash      String    @unique
+  clientId      String
+  userId        String
+  collectionId  String
+  /** `read` or `read_write`, from `ASSISTANT_TOKEN_SCOPES`. */
+  scope         String
+  redirectUri   String
+  codeChallenge String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  grantId       String?
+  createdAt     DateTime  @default(now())
+
+  client     OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collection Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("oauth_authorization_code")
+}
+
+// What a collector allowed one app to do (#2715, ADR-0084): work on one collection, as the account
+// that allowed it, with one scope — the pair an `AssistantToken` carries, so `/api/mcp` authorises a
+// call the same way whichever credential it arrived with. The row holds the hashes of the current
+// access token ("stmpoa_", an hour) and refresh token ("stmpor_", until disconnected), and of the
+// refresh token just replaced, which is honoured for a minute and ends the grant if presented later.
+// Deleting the row is disconnecting the app, from Settings → Assistant & API or by the app itself.
+model OAuthGrant {
+  id                       String    @id @default(cuid())
+  clientId                 String
+  userId                   String
+  collectionId             String
+  /** `read` or `read_write`, from `ASSISTANT_TOKEN_SCOPES`; enforced exactly as a token's is (#707). */
+  scope                    String
+  accessTokenHash          String    @unique
+  accessTokenExpiresAt     DateTime
+  refreshTokenHash         String    @unique
+  previousRefreshTokenHash String?   @unique
+  refreshRotatedAt         DateTime?
+  createdAt                DateTime  @default(now())
+  lastUsedAt               DateTime?
+
+  client     OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collection Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@index([collectionId])
+  @@index([clientId])
+  @@index([userId])
+  @@map("oauth_grant")
 }

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { auth } from "./auth";
 import { verifyAssistantToken } from "./api-tokens";
+import { verifyOAuthAccessToken } from "./oauth-server";
 import { assertOperationScope, type ScopedOperation } from "./agent-api/scope";
 import type { AssistantTokenScope } from "./assistant-token-scope";
 
@@ -71,6 +72,49 @@ export async function resolveAgentApiCaller(request: NextRequest): Promise<Agent
     collectionId: verified.collectionId,
     scope: verified.scope,
   };
+}
+
+/** How a request to `/api/mcp` stood with its credential: accepted, absent, or sent and refused. */
+export type McpCallerResolution =
+  | { readonly kind: "caller"; readonly caller: AgentApiCaller }
+  | { readonly kind: "missing" }
+  | { readonly kind: "refused" };
+
+/**
+ * Resolve the caller of an MCP request (#2715): an Assistant token as on `/api/v1`, **or** an access
+ * token this instance's OAuth authorization server issued to a connected app (ADR-0084).
+ *
+ * Both verify to the same three facts — whose account, which collection, how far it reaches — so
+ * everything behind this line is unchanged: the collection is still derived from the credential and
+ * `assertAgentApiScope` is still the one place a scope is checked. The two are told apart by their
+ * prefixes, so neither lookup is tried with the other's credential.
+ *
+ * **`/api/v1` does not take the OAuth token, deliberately.** It was issued for one resource, the MCP
+ * endpoint, and a token honoured somewhere it was not issued for is the thing audience binding
+ * exists to prevent. `resolveAgentApiCaller` above is untouched.
+ *
+ * A credential that was sent and refused is told apart from one that was never sent, because the
+ * `401` says so: `invalid_token` is what makes a client refresh instead of giving up.
+ */
+export async function resolveMcpCaller(request: NextRequest): Promise<McpCallerResolution> {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return { kind: "missing" };
+
+  const assistant = await verifyAssistantToken(match[1]);
+  if (assistant) {
+    return {
+      kind: "caller",
+      caller: {
+        ownerId: assistant.ownerId,
+        collectionId: assistant.collectionId,
+        scope: assistant.scope,
+      },
+    };
+  }
+  const connected = await verifyOAuthAccessToken(match[1]);
+  if (connected) return { kind: "caller", caller: connected };
+  return { kind: "refused" };
 }
 
 /**
