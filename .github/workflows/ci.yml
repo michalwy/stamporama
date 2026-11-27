@@ -74,10 +74,10 @@ jobs:
   # nothing. Now only an explicit `code=false` skips them; a failure, which writes no output, runs
   # them.
   #
-  # The tag-only jobs (`Build image (…)`, `Publish container image`,
-  # `Publish extension (Chrome Web Store)`) are deliberately **not** gated on this job. A tag runs
-  # everything anyway, and a second condition on top of theirs is an easy way to make a release
-  # quietly skip its image.
+  # The tag-only job `Publish extension (Chrome Web Store)` is deliberately **not** gated on this
+  # job. A tag runs everything anyway, and a second condition on top of its own is an easy way to make
+  # a release quietly skip it. The image jobs need the four suites, so on a push to `main` they follow
+  # this job's answer: a documentation-only push builds and deploys nothing (#2712).
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -455,11 +455,15 @@ jobs:
     name: Build image (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     needs: [static-checks, unit, integration, extension]
-    # Publish only for release tags (vX.Y.Z) — never for every main commit or PRs: the tag's push, or
-    # the release workflow's dispatch on it (#2704).
+    # Publish for release tags (vX.Y.Z) — the tag's push, or the release workflow's dispatch on it
+    # (#2704) — and for every push to `main` whose four suites ran and passed (#2712): that image is
+    # what the owner's Pi runs, deployed by `deploy-main` below. Never for a pull request. A push to
+    # `main` that `Detect changes` called documentation-only skips the suites, and so this job: there
+    # is nothing new to run, and the Pi keeps the image it has.
     if: >-
-      startsWith(github.ref, 'refs/tags/v')
-      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image))
+      (startsWith(github.ref, 'refs/tags/v')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image)))
+      || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     timeout-minutes: 30
 
     permissions:
@@ -497,6 +501,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A tag's version is X.Y.Z; a `main` build's is `main-<short sha>` (#2712), which is what the UI
+      # shows and what `scripts/deploy.sh` checks the image against.
       - name: Compute image labels and version
         id: meta
         uses: docker/metadata-action@v6.2.0
@@ -504,6 +510,14 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}}
+            type=raw,value=main-{{sha}},enable={{is_default_branch}}
+
+      # The commit's own time, as a label: `scripts/deploy.sh` compares it to the running `main`
+      # image's, so a `main` run that finishes after a newer one's deploy does not put the older
+      # commit back on the Pi (#2712). A rebase merge stamps the committer time, so it follows `main`.
+      - name: Read the commit time
+        id: commit
+        run: echo "time=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image by digest
         id: build
@@ -512,7 +526,9 @@ jobs:
           context: .
           target: runner
           platforms: ${{ matrix.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.stamporama.commit-time=${{ steps.commit.outputs.time }}
           # `created` is the instant this build started, ISO-8601 UTC — the same value the OCI
           # label carries, so the date shown in the UI (#507) and the one on the image agree.
           build-args: |
@@ -542,8 +558,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-image]
     if: >-
-      startsWith(github.ref, 'refs/tags/v')
-      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image))
+      (startsWith(github.ref, 'refs/tags/v')
+      && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_image)))
+      || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     timeout-minutes: 15
 
     permissions:
@@ -571,16 +588,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # `latest` and the semver tags stay release-only: other self-hosters follow releases
+      # (`scripts/update.sh`). A `main` build is `main` and `main-<short sha>` (#2712).
       - name: Compute image tags and labels
         id: meta
         uses: docker/metadata-action@v6.2.0
         with:
           images: ${{ env.IMAGE_NAME }}
-          flavor: latest=true
+          flavor: latest=${{ startsWith(github.ref, 'refs/tags/v') }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
+            type=raw,value=main,enable={{is_default_branch}}
+            type=raw,value=main-{{sha}},enable={{is_default_branch}}
 
       - name: Create multi-arch manifest and push
         working-directory: ${{ runner.temp }}/digests
@@ -592,3 +613,35 @@ jobs:
       - name: Inspect published image
         run: |
           docker buildx imagetools inspect "${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
+
+  # Deploy `main` to the owner's Raspberry Pi (#2712): the owner decided on 2026-11-27 that the Pi
+  # follows `main` continuously instead of releases. This job runs on a GitHub-hosted runner and only
+  # **dispatches** `deploy.yml` on `main` — the Pi's job-started hook accepts exactly that, a manual-
+  # shaped run of `deploy.yml` from `main` (#2697), and an event caused by `GITHUB_TOKEN` starts no
+  # workflow except `workflow_dispatch`. It needs the published image, so it runs only after all four
+  # suites and both image jobs passed for this commit.
+  deploy-main:
+    name: Deploy main to the Pi
+    runs-on: ubuntu-latest
+    needs: [publish-image]
+    if: github.repository == 'michalwy/stamporama' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 5
+
+    permissions:
+      contents: read
+      # Dispatching `deploy.yml`.
+      actions: write
+
+    steps:
+      # `automatic=true` keeps the deploy's no-downgrade guard on: a manual run is the one way past it.
+      - name: Start the deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          R: repos/${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          VERSION="main-${SHA::7}"
+          gh api -X POST "$R/actions/workflows/deploy.yml/dispatches" -f ref=main \
+            -f "inputs[version]=$VERSION" -f "inputs[automatic]=true"
+          echo "::notice::$VERSION published; the Deploy workflow was started on main."

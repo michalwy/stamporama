@@ -7,6 +7,8 @@ the public-repository caution, the order of the steps, configuration staying on 
 Follows #2687, which made a published release a deploy. Replaces Watchtower **on the owner's
 instance only**. Extended on 2026-11-22 by #2690, which removes Watchtower for every other
 self-hoster too — see [*Other self-hosters*](#other-self-hosters-2026-11-22-2690) below.
+**Amended on 2026-11-27 by [ADR-0084](0084-main-deploys-to-the-pi.md) (#2712): the Pi follows
+`main`, a release no longer deploys, and `deploy.yml`'s only trigger is `workflow_dispatch`.**
 
 ## Context
 

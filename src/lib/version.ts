@@ -3,9 +3,13 @@ export function getAppVersion(): string {
   return version && version.length > 0 ? version : "dev";
 }
 
+/**
+ * The version as shown: `v1.4.0` for a release, and a `main` build (`main-1a2b3c4`, #2712) or `dev`
+ * as they are — a `v` in front of a commit reads as a release that does not exist.
+ */
 export function getAppVersionLabel(): string {
   const version = getAppVersion();
-  return version === "dev" ? "dev" : `v${version}`;
+  return /^\d+\.\d+\.\d+/.test(version) ? `v${version}` : version;
 }
 
 /**
