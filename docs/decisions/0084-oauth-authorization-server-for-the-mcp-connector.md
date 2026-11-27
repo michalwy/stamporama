@@ -9,6 +9,10 @@ a custom connector in claude.ai, as two of his other projects already do. It sit
 second one's reasoning. It adds **no dependency**, **three tables** and one migration that touches
 nothing existing.
 
+**Amended by #2728** (the owner, 2026-11-27): a grant reaches **several collections, or all of the
+account's including ones made later**, instead of exactly one — § 2 below is rewritten, and what it
+said before is kept in its last paragraph. One more table and one non-destructive migration.
+
 ## Context
 
 Until #2715 the only credential `/api/mcp` took was an Assistant token (`stmpa_…`) the collector
@@ -53,23 +57,55 @@ session: a browser without one is sent to `/sign-in` with the request as its ret
 and comes back. **Nothing in the flow creates an account** — it is for the accounts the instance
 has, which is what the owner's instance wants now that registration is being closed.
 
-### 2. A grant is one app, one account, one collection, one scope
+### 2. A grant is one app, one account, one scope — and the collections the collector chose
 
-The consent screen asks the two things an Assistant token's mint asks: **which collection**, and
-**read only or read and write**. The answer is an `OAuthGrant` row, and an access token verifies to
-`{ ownerId, collectionId, scope }` — the same three facts, so `resolveMcpCaller` hands the route an
-`AgentApiCaller` either way and **nothing behind that line can tell which credential arrived**. No
-operation changed; `assertAgentApiScope` is still the one place a scope is checked.
+The consent screen asks two things: **which collections**, and **read only or read and write**.
+*Which collections* is the choice GitHub gives for an app's repositories (the owner, 2026-11-27,
+#2728): **all collections**, which means every collection the account has *and any it makes later*,
+or **only selected collections**, ticked from a list. The answer is an `OAuthGrant` row —
+`allCollections`, or its `OAuthGrantCollection` rows — and an access token verifies to
+`{ ownerId, scope, allCollections, collections }`. `resolveMcpCaller` hands the route one shape for
+both credentials, an Assistant token being the case of exactly one collection; `assertAgentApiScope`
+is still the one place a scope is checked, and no operation changed.
 
 - **The collector chooses the scope, not the client.** A client that asks for `read` alone is offered
   only that; any other request leaves both on offer, widest preselected, as the token form does.
-- **A call acts as the account that allowed it, and only while it still owns the collection.** The
-  grant names both, and they are compared on every call and every refresh.
-- **Allowing the same app again for the same collection replaces its grant**, so Settings never
-  shows two rows the collector would have to tell apart. Two collections are two connections.
+  **One scope covers the whole grant** — read on one collection and write on another is two apps'
+  worth of consent and is not offered.
+- **What a grant reaches is read on every call, never trusted from the day of the consent**
+  (`reachableCollections`): the account's collections for *all*, or the chosen ones **that the
+  account still owns**. That one rule is what makes a collection created afterwards reachable, a
+  deleted or transferred one unreachable, and a change in Settings effective on the app's next call
+  with no reconnection.
+- **A call names its collection among those, and nowhere else.** Every collection tool takes an
+  optional `collection` (id, slug or name) and `list_collections` says what may be named; with one
+  reachable collection it may be left out, with several it is required and the refusal lists them.
+  The authorization is still the credential's: `resolveReachCollection` (`agent-api/mcp.ts`, pure)
+  matches only inside the grant's reach, so an id from outside it is refused exactly as an unknown
+  one is. `OPERATIONS` did not gain a parameter — `/api/v1` still means one collection per token —
+  so the argument belongs to the MCP wrapper, which removes it before the shared parser runs.
+- **A grant for selected collections that reaches none of them any more is over**: its token verifies
+  to nothing and a refresh ends it, as a grant whose one collection had gone did before. A grant for
+  *all* is good on an account with no collection yet, and its tools say there is nothing to act on.
+- **Allowing the same app again replaces its grant** — collections and scope both — so Settings never
+  shows two rows for one app. The collector widens or narrows a connection in **Settings → Assistant
+  & API → Connected apps → Change access** instead (`updateOAuthGrantAccess`). That list is the
+  **account's**, the same in every collection's Settings, because a connection is no longer one
+  collection's.
 - **`/api/v1` does not take the OAuth token.** It was issued for one resource — `resource` is checked
   at the authorization and token endpoints (RFC 8707) — and a token honoured where it was not issued
   for is what audience binding exists to prevent. `resolveAgentApiCaller` is untouched.
+
+**What this section said until #2728**, kept because the code and the tests of that day say it too:
+*a grant is one app, one account, one collection, one scope*; an access token verified to
+`{ ownerId, collectionId, scope }`, the same three facts as an Assistant token; allowing the same
+app again **for the same collection** replaced its grant, and *two collections are two connections*.
+`20261127230000_oauth_grant_collections` gave every grant of that shape one `OAuthGrantCollection`
+row for the collection it named, so each goes on reaching exactly what it reached.
+**`oauth_grant.collectionId` and `oauth_authorization_code.collectionId` are still in the database,
+nullable and no longer written** (a code minted in the two minutes before the upgrade is the one
+reader): dropping a column is a destructive migration, which needs the owner's recorded decision,
+and #2728 does not carry one. Removing them is a follow-up for the owner to ask for.
 
 ### 3. What is implemented, and to which document
 
@@ -148,7 +184,7 @@ names what would make each wrong. Both lists were re-read against this change:
 ## Consequences
 
 - **A connector is added by address.** `https://<instance>/api/mcp` in claude.ai's *Add custom
-  connector*, then sign in and choose. The instance has to be reachable from the internet at the
+  connector*, then sign in and choose. One connector serves every collection it was given (#2728). The instance has to be reachable from the internet at the
   address in `BETTER_AUTH_URL`; that was already true of any hosted client.
 - **Two credentials on one endpoint, one authorisation behind it.** The Assistant token is unchanged
   for the extension, scripts and hand-configured clients.

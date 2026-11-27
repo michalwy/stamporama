@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { signInPath } from "@/lib/sign-in-redirect";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { getCollectionBySlug } from "@/lib/collections";
+import { getCollectionBySlug, getCollectionsByOwner } from "@/lib/collections";
 import { getCollectionAreas } from "@/lib/areas";
 import { getCatalogSettingsTree } from "@/lib/catalog";
 import { getStampConditions } from "@/lib/conditions";
@@ -118,6 +118,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     facebookGroups,
     assistantTokens,
     connectedApps,
+    accountCollections,
     photoStorageBytes,
     storageCache,
     titleLanguages,
@@ -157,7 +158,9 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
     listDelcampeLearnedCategories(session.user.id, collection.id),
     listFacebookGroups(session.user.id, collection.id),
     listAssistantTokens(session.user.id, collection.id),
-    listOAuthGrants(session.user.id, collection.id),
+    // The account's connected apps and its collections (#2728): a connection reaches several.
+    listOAuthGrants(session.user.id),
+    getCollectionsByOwner(session.user.id),
     getCollectionPhotoStorageBytes(session.user.id, collection.id),
     getStorageCacheStatus(session.user.id, collection.id),
     getCollectionTitleLanguages(session.user.id, collection.id),
@@ -235,6 +238,7 @@ export default async function SettingsPage({ params, searchParams }: SettingsPag
           facebookGroups={facebookGroups}
           initialAssistantTokens={assistantTokens}
           connectedApps={connectedApps}
+          accountCollections={accountCollections.map(({ id, name }) => ({ id, name }))}
           mcpUrl={baseUrl ? mcpResourceUrl(baseUrl) : null}
           mailSettings={mailSettings}
           auctionReminder={auctionReminder}

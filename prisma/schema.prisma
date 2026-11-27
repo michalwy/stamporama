@@ -240,6 +240,7 @@ model Collection {
   assistantTokens AssistantToken[]
   oauthAuthorizationCodes OAuthAuthorizationCode[]
   oauthGrants OAuthGrant[]
+  oauthGrantCollections OAuthGrantCollection[]
   assistantRegistrationCodes AssistantRegistrationCode[]
   allegroConnection AllegroConnection?
   allegroSyncState  AllegroSyncState?
@@ -8709,43 +8710,57 @@ model OAuthClient {
 // The one-time code the collector's browser carries back to the app after the consent screen
 // (#2715). Only its SHA-256 is stored (the raw value has the prefix "stmpoc_"). It holds everything
 // the token endpoint must find unchanged: which client, which redirect URI, the PKCE challenge, and
-// what the collector allowed — the collection and the scope. A redeemed row is kept until it expires
+// what the collector allowed — the collections and the scope. A redeemed row is kept until it expires
 // with `usedAt` and the grant it produced, so a code presented twice ends that grant instead of
 // minting a second one.
+//
+// Since #2728 what was allowed is `allCollections`, or the ids in `collectionIds`. `collectionId` is
+// the column a code carried before that, read only for a code minted in the two minutes before the
+// upgrade and never written since.
 model OAuthAuthorizationCode {
-  id            String    @id @default(cuid())
-  codeHash      String    @unique
-  clientId      String
-  userId        String
-  collectionId  String
+  id             String    @id @default(cuid())
+  codeHash       String    @unique
+  clientId       String
+  userId         String
+  collectionId   String?
+  /** Every collection of the account, including ones made later (#2728). */
+  allCollections Boolean   @default(false)
+  /** The chosen collections when `allCollections` is false (#2728). Ids, never typed text. */
+  collectionIds  String[]  @default([])
   /** `read` or `read_write`, from `ASSISTANT_TOKEN_SCOPES`. */
-  scope         String
-  redirectUri   String
-  codeChallenge String
-  expiresAt     DateTime
-  usedAt        DateTime?
-  grantId       String?
-  createdAt     DateTime  @default(now())
+  scope          String
+  redirectUri    String
+  codeChallenge  String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  grantId        String?
+  createdAt      DateTime  @default(now())
 
   client     OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  collection Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
   @@map("oauth_authorization_code")
 }
 
-// What a collector allowed one app to do (#2715, ADR-0084): work on one collection, as the account
-// that allowed it, with one scope — the pair an `AssistantToken` carries, so `/api/mcp` authorises a
-// call the same way whichever credential it arrived with. The row holds the hashes of the current
-// access token ("stmpoa_", an hour) and refresh token ("stmpor_", until disconnected), and of the
-// refresh token just replaced, which is honoured for a minute and ends the grant if presented later.
-// Deleting the row is disconnecting the app, from Settings → Assistant & API or by the app itself.
+// What a collector allowed one app to do (#2715, ADR-0084): work as the account that allowed it, with
+// one scope, on the collections it was given — **every collection of the account, including ones
+// made later** (`allCollections`), **or the chosen ones** (`collections`), as an app is installed on
+// all repositories or on selected ones (#2728). The row holds the hashes of the current access token
+// ("stmpoa_", an hour) and refresh token ("stmpor_", until disconnected), and of the refresh token
+// just replaced, which is honoured for a minute and ends the grant if presented later. Deleting the
+// row is disconnecting the app, from Settings → Assistant & API or by the app itself.
+//
+// `collectionId` is the one collection a grant named before #2728. Nothing reads or writes it now —
+// the migration copied it into `collections` — and it stays only because dropping a column is a
+// decision of the owner's that issue did not record.
 model OAuthGrant {
   id                       String    @id @default(cuid())
   clientId                 String
   userId                   String
-  collectionId             String
+  collectionId             String?
+  allCollections           Boolean   @default(false)
   /** `read` or `read_write`, from `ASSISTANT_TOKEN_SCOPES`; enforced exactly as a token's is (#707). */
   scope                    String
   accessTokenHash          String    @unique
@@ -8756,14 +8771,29 @@ model OAuthGrant {
   createdAt                DateTime  @default(now())
   lastUsedAt               DateTime?
 
-  client     OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  collection Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  client      OAuthClient            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collection  Collection?            @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  collections OAuthGrantCollection[]
 
   @@index([collectionId])
   @@index([clientId])
   @@index([userId])
   @@map("oauth_grant")
+}
+
+// One collection a grant reaches when it is not for all of them (#2728). Deleting the collection
+// removes the row and leaves the grant, which then reaches one collection fewer.
+model OAuthGrantCollection {
+  grantId      String
+  collectionId String
+
+  grant      OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([grantId, collectionId])
+  @@index([collectionId])
+  @@map("oauth_grant_collection")
 }
 
 // What an administrator has set for the whole instance (#2719) — one row, id "instance", made the

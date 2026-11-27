@@ -2,20 +2,28 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   ASSUMED_MCP_PROTOCOL_VERSION,
+  COLLECTION_ARGUMENT,
   JSON_RPC,
   LATEST_LEGACY_MCP_PROTOCOL_VERSION,
   LEGACY_MCP_PROTOCOL_VERSIONS,
+  LIST_COLLECTIONS_TOOL,
+  MCP_INSTRUCTIONS,
   MCP_META,
   MCP_PROTOCOL_VERSION,
   MODERN_MCP_PROTOCOL_VERSIONS,
   SUPPORTED_MCP_PROTOCOL_VERSIONS,
+  buildCallerToolList,
   buildToolList,
   decodeMcpHeaderValue,
   handleMcpMessage,
   isModernProtocolVersion,
   isSupportedProtocolVersion,
+  listCollectionsResult,
   operationTool,
+  pinnedReach,
   readRequestId,
+  resolveReachCollection,
+  type McpReach,
   type McpRequestHeaders,
 } from "../../src/lib/agent-api/mcp";
 import { assertOperationScope } from "../../src/lib/agent-api/scope";
@@ -44,6 +52,9 @@ import type { Operation, OperationContext, ParsedParams } from "../../src/lib/ag
 // where that half is made.
 
 const CONTEXT: OperationContext = { ownerId: "owner-1", collectionId: "collection-1" };
+
+/** What an Assistant token reaches: the one collection it is pinned to (#2728). */
+const PINNED: McpReach = pinnedReach({ id: CONTEXT.collectionId, slug: "main", name: "Main" });
 
 /** A reading operation with one of every parameter shape, so the schema has something to say. */
 const READING: Operation = {
@@ -111,11 +122,13 @@ function options(overrides: {
   operations?: readonly Operation[];
   assertScope?: (operation: { name: string; writes: boolean }) => void;
   appVersion?: string;
+  reach?: McpReach;
 } = {}) {
   return {
     operations: overrides.operations ?? [READING, WRITING],
     appVersion: overrides.appVersion ?? "1.2.3",
-    context: CONTEXT,
+    ownerId: CONTEXT.ownerId,
+    reach: overrides.reach ?? PINNED,
     assertScope: overrides.assertScope ?? (() => {}),
   };
 }
@@ -179,7 +192,8 @@ describe("registry-to-tool generation", () => {
   it("flattens path, query and body into one arguments object, as MCP takes them", () => {
     const tool = operationTool(WRITING);
     const properties = tool.inputSchema.properties as Record<string, unknown>;
-    assert.deepEqual(Object.keys(properties).sort(), ["offerId", "price"]);
+    // The operation's own two, and the wrapper's `collection` after them (#2728) — never required.
+    assert.deepEqual(Object.keys(properties), ["offerId", "price", "collection"]);
     assert.deepEqual(tool.inputSchema.required, ["offerId", "price"]);
     assert.equal(tool.inputSchema.additionalProperties, false);
     assert.equal(tool.inputSchema.type, "object");
@@ -274,7 +288,7 @@ describe("the legacy MCP handshake", () => {
   it("lists every tool in one page, with no cursor to follow", async () => {
     const result = await resultOf(request("tools/list"));
     const tools = result.tools as readonly { name: string }[];
-    assert.deepEqual(tools.map((tool) => tool.name), [READING.name, WRITING.name]);
+    assert.deepEqual(tools.map((tool) => tool.name), [READING.name, WRITING.name, LIST_COLLECTIONS_TOOL]);
     assert.equal(result.nextCursor, undefined);
   });
 });
@@ -301,7 +315,11 @@ describe("what is a protocol error and what is a tool error", () => {
   it("answers an unknown tool with the names it does offer", async () => {
     const error = await errorOf(request("tools/call", { name: "find_the_cheese", arguments: {} }));
     assert.equal(error.code, JSON_RPC.invalidParams);
-    assert.deepEqual((error.data as { accepted: string[] }).accepted, [READING.name, WRITING.name]);
+    assert.deepEqual((error.data as { accepted: string[] }).accepted, [
+      READING.name,
+      WRITING.name,
+      LIST_COLLECTIONS_TOOL,
+    ]);
   });
 
   it("puts a rejected parameter in front of the agent, not in the transport", async () => {
@@ -629,7 +647,7 @@ describe("revision 2026-07-28: no handshake, every request self-describing (#122
   it("lists the same tools as a legacy client sees, with resultType and the required cache hints", async () => {
     const result = await modernResult(modern("tools/list"), headersFor("tools/list"));
     assert.equal(result.resultType, "complete");
-    assert.deepEqual(result.tools, buildToolList([READING, WRITING]));
+    assert.deepEqual(result.tools, buildCallerToolList([READING, WRITING]));
     assert.equal(result.nextCursor, undefined);
     assert.equal(result.ttlMs, 0);
     assert.equal(result.cacheScope, "private");
@@ -671,7 +689,11 @@ describe("revision 2026-07-28: no handshake, every request self-describing (#122
       200,
       JSON_RPC.invalidParams
     );
-    assert.deepEqual((error.data as { accepted: string[] }).accepted, [READING.name, WRITING.name]);
+    assert.deepEqual((error.data as { accepted: string[] }).accepted, [
+      READING.name,
+      WRITING.name,
+      LIST_COLLECTIONS_TOOL,
+    ]);
   });
 
   it("accepts a notification and answers nothing", async () => {
@@ -807,5 +829,179 @@ describe("readRequestId", () => {
     assert.equal(readRequestId({ jsonrpc: "2.0", id: "abc", method: "ping" }), "abc");
     assert.equal(readRequestId({ jsonrpc: "2.0", method: "ping" }), null);
     assert.equal(readRequestId("nonsense"), null);
+  });
+});
+
+describe("which collection a call acts on (#2728)", () => {
+  const MAIN = { id: "collection-1", slug: "main", name: "Main" };
+  const POLAND = { id: "collection-2", slug: "poland", name: "Poland 1918–1939" };
+  const TWIN_A = { id: "collection-3", slug: "duplicates", name: "Duplicates" };
+  const TWIN_B = { id: "collection-4", slug: "duplicates-2", name: "duplicates" };
+  const SEVERAL: McpReach = { all: false, collections: [MAIN, POLAND] };
+
+  /** Call the reading tool and say which collection its handler was handed. */
+  async function calledOn(reach: McpReach, args: Record<string, unknown>) {
+    let seen: OperationContext | null = null;
+    const recording: Operation = {
+      ...READING,
+      handler: async (context) => {
+        seen = context;
+        return { items: [], total: 0, nextCursor: null };
+      },
+    };
+    const result = await resultOf(
+      request("tools/call", { name: READING.name, arguments: args }),
+      options({ operations: [recording], reach })
+    );
+    return { result, context: seen as OperationContext | null };
+  }
+
+  it("gives every collection tool an optional collection argument, and an instance tool none", () => {
+    const tool = operationTool(READING);
+    const properties = tool.inputSchema.properties as Record<string, { type: string }>;
+    assert.equal(properties[COLLECTION_ARGUMENT].type, "string");
+    assert.equal((tool.inputSchema.required as string[] | undefined)?.includes(COLLECTION_ARGUMENT) ?? false, false);
+
+    const instance = operationTool({ ...READING, instance: true });
+    assert.equal((instance.inputSchema.properties as Record<string, unknown>)[COLLECTION_ARGUMENT], undefined);
+  });
+
+  it("needs no collection named when the credential reaches exactly one", async () => {
+    const { result, context } = await calledOn(PINNED, {});
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(context, CONTEXT);
+  });
+
+  it("takes the collection by id, by slug and by name without regard to case", async () => {
+    for (const value of [POLAND.id, POLAND.slug, POLAND.name, "  poland 1918–1939 "]) {
+      const { result, context } = await calledOn(SEVERAL, { collection: value });
+      assert.equal(result.isError, undefined, value);
+      assert.deepEqual(context, { ownerId: CONTEXT.ownerId, collectionId: POLAND.id }, value);
+    }
+  });
+
+  it("does not hand the collection argument to the operation's own parser", async () => {
+    // Were it left among the arguments it would be refused as an undeclared name; that it is not is
+    // what shows the wrapper took it out first.
+    const { result } = await calledOn(SEVERAL, { collection: MAIN.name, condition: "MNH" });
+    assert.equal(result.isError, undefined);
+  });
+
+  it("refuses a call that names none when several are reachable, listing the choices", async () => {
+    const { result, context } = await calledOn(SEVERAL, {});
+    assert.equal(result.isError, true);
+    assert.equal(context, null, "the handler did not run");
+    const text = toolText(result);
+    assert.match(text, /reaches 2 collections/);
+    assert.match(text, /list_collections/);
+    assert.deepEqual(JSON.parse(text.slice(text.indexOf("\n\n") + 2)).error.accepted, [MAIN.name, POLAND.name]);
+  });
+
+  it("refuses a collection the credential does not reach, whatever is sent", async () => {
+    for (const value of ["collection-9", "Somebody else's", 7]) {
+      const { result, context } = await calledOn(SEVERAL, { collection: value });
+      assert.equal(result.isError, true, String(value));
+      assert.equal(context, null);
+    }
+    // A pinned credential is not widened by naming another collection either.
+    const pinned = await calledOn(PINNED, { collection: POLAND.id });
+    assert.equal(pinned.result.isError, true);
+    assert.equal(pinned.context, null);
+  });
+
+  it("refuses a name two reachable collections share, with their ids", async () => {
+    const { result } = await calledOn({ all: true, collections: [TWIN_A, TWIN_B] }, { collection: "Duplicates" });
+    assert.equal(result.isError, true);
+    const text = toolText(result);
+    assert.deepEqual(JSON.parse(text.slice(text.indexOf("\n\n") + 2)).error.accepted, [TWIN_A.id, TWIN_B.id]);
+    // The id still settles it.
+    const byId = await calledOn({ all: true, collections: [TWIN_A, TWIN_B] }, { collection: TWIN_B.id });
+    assert.equal(byId.context?.collectionId, TWIN_B.id);
+  });
+
+  it("says so when the credential reaches no collection at all", async () => {
+    const none = await calledOn({ all: true, collections: [] }, {});
+    assert.equal(none.result.isError, true);
+    assert.match(toolText(none.result), /no collection yet/);
+    assert.throws(() => resolveReachCollection({ all: false, collections: [] }, undefined), /no longer reaches/);
+  });
+
+  it("checks the scope before the collection, as before a parameter", async () => {
+    const outcome = await resultOf(
+      request("tools/call", { name: WRITING.name, arguments: {} }),
+      options({
+        reach: SEVERAL,
+        assertScope: (operation) => assertOperationScope("read", operation),
+      })
+    );
+    assert.equal(outcome.isError, true);
+    assert.match(toolText(outcome), /read_write/);
+    assert.doesNotMatch(toolText(outcome), /reaches 2 collections/);
+  });
+
+  it("calls an instance tool without choosing a collection, and refuses one sent to it", async () => {
+    let ran = 0;
+    const instance: Operation = {
+      ...READING,
+      instance: true,
+      handler: async () => {
+        ran += 1;
+        return { items: [], total: 0, nextCursor: null };
+      },
+    };
+    const opts = options({ operations: [instance], reach: SEVERAL });
+    const plain = await resultOf(request("tools/call", { name: READING.name, arguments: {} }), opts);
+    assert.equal(plain.isError, undefined);
+    assert.equal(ran, 1);
+    const named = await resultOf(
+      request("tools/call", { name: READING.name, arguments: { collection: MAIN.id } }),
+      opts
+    );
+    assert.equal(named.isError, true);
+    assert.equal(ran, 1);
+  });
+
+  it("lists what the credential reaches through list_collections", async () => {
+    const several = await resultOf(
+      request("tools/call", { name: LIST_COLLECTIONS_TOOL, arguments: {} }),
+      options({ reach: SEVERAL })
+    );
+    assert.deepEqual(JSON.parse(toolText(several)), {
+      access: "selected",
+      total: 2,
+      collections: [
+        { id: MAIN.id, name: MAIN.name },
+        { id: POLAND.id, name: POLAND.name },
+      ],
+    });
+    assert.deepEqual(listCollectionsResult({ all: true, collections: [] }), {
+      access: "all",
+      total: 0,
+      collections: [],
+    });
+    // A read-only credential may ask: nothing is written and nothing is refused.
+    const readOnly = await resultOf(
+      request("tools/call", { name: LIST_COLLECTIONS_TOOL }),
+      options({ assertScope: (operation) => assertOperationScope("read", operation) })
+    );
+    assert.equal(readOnly.isError, undefined);
+  });
+
+  it("refuses an operation that would shadow either of the wrapper's own names", () => {
+    assert.throws(() => buildToolList([{ ...READING, name: LIST_COLLECTIONS_TOOL }]), /serves itself/);
+    const clashing: Operation = {
+      ...WRITING,
+      parameters: [
+        ...WRITING.parameters,
+        { name: COLLECTION_ARGUMENT, in: "body", type: "string", required: false, description: "A clash." },
+      ],
+    };
+    assert.throws(() => buildToolList([clashing]), /adds to every collection tool/);
+  });
+
+  it("tells the model about the choice in the instructions", () => {
+    assert.match(MCP_INSTRUCTIONS, /list_collections/);
+    assert.match(MCP_INSTRUCTIONS, /optional `collection`/);
+    assert.doesNotMatch(MCP_INSTRUCTIONS, /No tool takes a collection id/);
   });
 });

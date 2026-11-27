@@ -8,6 +8,7 @@ import {
   authorizationServerMetadata,
   checkAuthorizationRequest,
   checkClientRegistration,
+  checkCollectionAccess,
   classifyRefresh,
   clientRegistrationResponse,
   deniedRedirect,
@@ -353,5 +354,44 @@ describe("a refresh token presented again", () => {
       "replayed"
     );
     assert.equal(classifyRefresh({ matchesCurrent: false, rotatedAt: null }, rotatedAt), "replayed");
+  });
+});
+
+describe("which collections a grant reaches (#2728)", () => {
+  const owned = ["c-1", "c-2", "c-3"];
+
+  it("accepts all collections, whatever else was sent and whatever the account owns", () => {
+    assert.deepEqual(checkCollectionAccess({ all: true, collectionIds: ["not-theirs"] }, owned), {
+      ok: true,
+      access: { all: true },
+    });
+    assert.deepEqual(checkCollectionAccess({ all: true, collectionIds: undefined }, []), {
+      ok: true,
+      access: { all: true },
+    });
+  });
+
+  it("accepts a selection of the account's own collections, each once", () => {
+    assert.deepEqual(checkCollectionAccess({ all: false, collectionIds: ["c-2", "c-1", "c-2"] }, owned), {
+      ok: true,
+      access: { all: false, collectionIds: ["c-2", "c-1"] },
+    });
+  });
+
+  it("refuses a selection of nothing", () => {
+    for (const collectionIds of [[], undefined, null, "c-1"]) {
+      const checked = checkCollectionAccess({ all: false, collectionIds }, owned);
+      assert.equal(checked.ok, false);
+    }
+    // Only the literal `true` means all: a form that sent anything else chose a selection.
+    assert.equal(checkCollectionAccess({ all: "true", collectionIds: [] }, owned).ok, false);
+  });
+
+  it("refuses a selection holding anything that is not the account's own, whole", () => {
+    for (const collectionIds of [["c-1", "c-9"], ["c-9"], ["c-1", 7], [null]]) {
+      const checked = checkCollectionAccess({ all: false, collectionIds }, owned);
+      assert.ok(!checked.ok);
+      assert.match(checked.message, /your own collections/);
+    }
   });
 });

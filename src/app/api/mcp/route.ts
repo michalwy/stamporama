@@ -20,6 +20,10 @@ import { getAppVersion } from "@/lib/version";
 // credential is the same `Bearer stmpa_…` token, the collection is pinned the same way, and the
 // scope check is the same function. There is no second credential and nothing second to revoke.
 //
+// **Since #2715 a connected app's access token is accepted beside it, and since #2728 a credential
+// may reach several collections** — `resolveMcpCaller` says which, and a call names one of them with
+// the wrapper's `collection` argument (`agent-api.md` § *Which collection a call acts on*).
+//
 // **This file is the transport and nothing else.** Every protocol decision — the handshake, the
 // tool schemas, which failures are JSON-RPC errors and which are tool errors — is in the pure
 // `src/lib/agent-api/mcp.ts`, where `pnpm test:unit` can hold it. What is here is the part that
@@ -98,7 +102,10 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
       // The registry, plus the administrator's tools when this credential's account is one (#2720).
       operations: await operationsForMcpCaller(caller.ownerId),
       appVersion: getAppVersion(),
-      context: { ownerId: caller.ownerId, collectionId: caller.collectionId },
+      ownerId: caller.ownerId,
+      // What the credential reaches: an Assistant token's one collection, or a connected app's
+      // several or all (#2728). A call's `collection` argument chooses among these and no others.
+      reach: caller.reach,
       // #707's enforcement point, bound to this caller. The wrapper reuses it rather than deriving
       // a scope of its own — one place decides what a token may do, and this is not it.
       //

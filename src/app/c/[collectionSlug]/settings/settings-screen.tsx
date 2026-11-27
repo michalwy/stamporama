@@ -176,6 +176,8 @@ interface SettingsScreenProps {
   facebookGroups: FacebookGroupList;
   initialAssistantTokens: AssistantTokenData[];
   connectedApps: OAuthGrantData[];
+  /** The account's collections, for a connected app's *Change access* (#2728). */
+  accountCollections: { id: string; name: string }[];
   mcpUrl: string | null;
   /** Email (#1372): the instance's mail provider as a summary — never its key — and this
    * collection's undelivered mail. */
@@ -792,6 +794,7 @@ function SettingsEntryBody({
   facebookGroups,
   initialAssistantTokens,
   connectedApps,
+  accountCollections,
   mcpUrl,
   mailSettings,
   auctionReminder,
@@ -1086,6 +1089,7 @@ function SettingsEntryBody({
           collectionName={collectionName}
           initialTokens={initialAssistantTokens}
           connectedApps={connectedApps}
+          accountCollections={accountCollections}
           mcpUrl={mcpUrl}
         />
       );

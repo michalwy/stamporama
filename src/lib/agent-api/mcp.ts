@@ -68,7 +68,7 @@
 // specification's own split, and it stays a deviation only towards a client still on 2025-06-18.
 // ADR-0051 §5 carries both halves.
 
-import { isApiError } from "./errors";
+import { forbidden, invalidRequest, isApiError } from "./errors";
 import { listParameters } from "./list";
 import { parameterSchema, validateOperations } from "./openapi";
 import { parseParameters } from "./params";
@@ -180,9 +180,9 @@ export const MCP_SERVER_NAME = "stamporama";
  * `get_collection_vocabulary` is built on: fetch it once, hold it.
  */
 export const MCP_INSTRUCTIONS = [
-  "These tools act on exactly one stamp collection — the one this token is pinned to. No tool takes a collection id, and there is nothing to choose between.",
+  "Every tool acts on one stamp collection. This connection reaches one collection, several, or all of the account's — `list_collections` says which. Each tool takes an optional `collection`: its id or its name from that list. Leave it out when the connection reaches exactly one; when it reaches several, name it on every call. Ids and names mean something in their own collection only — never carry one into another.",
   "",
-  "Call `get_collection_vocabulary` once at the start and keep the answer. Conditions, formats, areas, locations, catalogs and platforms are per-collection and id-keyed, and every tool that takes one also accepts the name from that answer.",
+  "Call `get_collection_vocabulary` once for each collection you work in and keep the answer. Conditions, formats, areas, locations, catalogs and platforms are per-collection and id-keyed, and every tool that takes one also accepts the name from that answer.",
   "",
   "A list result states the full `total` alongside its rows, so a trimmed page is visible as one; send the `nextCursor` back as `cursor` for the rest.",
   "",
@@ -266,8 +266,14 @@ export interface McpDispatchOptions {
   /** The registry. Passed in rather than imported — that is what keeps this module pure. */
   readonly operations: readonly Operation[];
   readonly appVersion: string;
-  /** Who the call acts as, derived from the token by `resolveAgentApiCaller`. */
-  readonly context: OperationContext;
+  /** Whose account the call acts as, derived from the credential by `resolveMcpCaller`. */
+  readonly ownerId: string;
+  /**
+   * The collections the credential reaches (#2728). Which one a call acts on is the caller's to say
+   * — the `collection` argument — **only among these**: `resolveReachCollection` looks nowhere else,
+   * so the authorization is still the credential's and never the argument's.
+   */
+  readonly reach: McpReach;
   /**
    * The scope check, supplied by the route as `assertAgentApiScope` bound to the caller.
    *
@@ -277,6 +283,129 @@ export interface McpDispatchOptions {
    * would be a second thing to keep right.
    */
   readonly assertScope: (operation: ScopedOperation) => void;
+}
+
+// ── Which collection a call acts on (#2728) ──────────────────────────────────
+//
+// Until #2728 a credential reached exactly one collection and no tool took one: an Assistant token
+// is pinned (#253), and a connected app's grant named one. A grant may now be for several
+// collections or for all of the account's, so the collection is the one thing about a call the
+// credential no longer settles alone. **It is chosen among the credential's own and nowhere else** —
+// the rule `agent-api.md` § *Authentication* states is narrowed, not dropped.
+//
+// It is an argument of the *wrapper*, not a parameter of any operation: `OPERATIONS` is also the
+// contract of `/api/v1`, where a token still means one collection and an id in a call could only be
+// right or wrong. So `collection` is added to each tool here, taken out again before the shared
+// parser sees the arguments, and never reaches a handler except as `context.collectionId`.
+
+/** A collection a credential reaches. */
+export interface McpCollection {
+  readonly id: string;
+  readonly slug: string;
+  readonly name: string;
+}
+
+/** What a credential reaches: every collection of its account, or a fixed set. */
+export interface McpReach {
+  /** A grant for all collections, including ones made later. `collections` is still the list now. */
+  readonly all: boolean;
+  readonly collections: readonly McpCollection[];
+}
+
+/** The reach of a credential pinned to one collection — an Assistant token's. */
+export function pinnedReach(collection: McpCollection): McpReach {
+  return { all: false, collections: [collection] };
+}
+
+/** The name of the argument every collection tool gains, and of the tool that lists the choices. */
+export const COLLECTION_ARGUMENT = "collection";
+export const LIST_COLLECTIONS_TOOL = "list_collections";
+
+const COLLECTION_ARGUMENT_SCHEMA = {
+  type: "string",
+  description:
+    "The collection to act on: its id or name from `list_collections`. Omit it when this connection reaches exactly one collection.",
+} as const;
+
+function collectionNames(reach: McpReach): string[] {
+  return reach.collections.map((collection) => collection.name);
+}
+
+/**
+ * The collection a call acts on, or an `ApiError` an agent can correct itself from.
+ *
+ * Absent, it is the one collection the credential reaches — which is every call an Assistant token
+ * or a single-collection connection ever made, unchanged. With several reachable it must be named,
+ * and the refusal lists the names. A value is matched as an id, then as a slug, then as a name
+ * without regard to case; a name two collections share is refused with their ids, as a vocabulary
+ * name is (#708). **Nothing outside `reach` can be matched**, whatever is sent.
+ */
+export function resolveReachCollection(reach: McpReach, value: unknown): McpCollection {
+  const { collections } = reach;
+  if (collections.length === 0) {
+    throw forbidden(
+      reach.all
+        ? "This account has no collection yet, so there is nothing for this tool to act on. Ask the collector to create one in Stamporama."
+        : "This connection no longer reaches any collection. Ask the collector to give it one in Settings → Assistant & API."
+    );
+  }
+  if (value === undefined || value === null || value === "") {
+    if (collections.length === 1) return collections[0];
+    throw invalidRequest(
+      `This connection reaches ${collections.length} collections, so say which one this call is for: send "${COLLECTION_ARGUMENT}" with one of the accepted names, or an id from \`${LIST_COLLECTIONS_TOOL}\`.`,
+      collectionNames(reach)
+    );
+  }
+  if (typeof value !== "string") {
+    throw invalidRequest(
+      `"${COLLECTION_ARGUMENT}" must be a string: a collection's id or name from \`${LIST_COLLECTIONS_TOOL}\`.`,
+      collectionNames(reach)
+    );
+  }
+  const wanted = value.trim();
+  const exact =
+    collections.find((collection) => collection.id === wanted) ??
+    collections.find((collection) => collection.slug === wanted);
+  if (exact) return exact;
+  const named = collections.filter(
+    (collection) => collection.name.trim().toLowerCase() === wanted.toLowerCase()
+  );
+  if (named.length === 1) return named[0];
+  if (named.length > 1) {
+    throw invalidRequest(
+      `"${wanted}" is the name of ${named.length} collections this connection reaches, so the name is not enough. Send one of these ids as "${COLLECTION_ARGUMENT}"; \`${LIST_COLLECTIONS_TOOL}\` says which is which.`,
+      named.map((collection) => collection.id)
+    );
+  }
+  throw invalidRequest(
+    `"${wanted}" is not a collection this connection reaches. Send one of the accepted names, or an id from \`${LIST_COLLECTIONS_TOOL}\`, as "${COLLECTION_ARGUMENT}".`,
+    collectionNames(reach)
+  );
+}
+
+/**
+ * `list_collections` — the one tool that is not generated from an operation, and why.
+ *
+ * It answers a question about the **connection**: which collections this credential reaches. On
+ * `/api/v1` that question has no content — a token is one collection — so it is not an operation and
+ * has no REST path; it exists where the choice exists. Everything else in `tools/list` is still
+ * generated, and `buildToolList` still is exactly the registry.
+ */
+export const listCollectionsTool: McpTool = {
+  name: LIST_COLLECTIONS_TOOL,
+  description:
+    "Lists the stamp collections this connection reaches — what a tool's `collection` argument may name.\n\n`access` is `all` when the connection covers every collection of the account, including ones created later, and `selected` when the collector chose specific ones. Each collection has an `id` and a `name`; either can be sent as `collection`. When there is exactly one, `collection` may be left out of every call.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  annotations: { readOnlyHint: true },
+};
+
+/** What `list_collections` answers. */
+export function listCollectionsResult(reach: McpReach): Record<string, unknown> {
+  return {
+    access: reach.all ? "all" : "selected",
+    total: reach.collections.length,
+    collections: reach.collections.map(({ id, name }) => ({ id, name })),
+  };
 }
 
 /** Every parameter a tool accepts: the operation's own, plus the shared window on a list. */
@@ -304,6 +433,9 @@ export function operationTool(operation: Operation): McpTool {
   for (const spec of specs) {
     properties[spec.name] = { ...parameterSchema(spec), description: spec.description };
   }
+  // Last, so a tool reads as its own parameters first; absent from an instance tool, which acts on
+  // no collection (#2728).
+  if (!operation.instance) properties[COLLECTION_ARGUMENT] = COLLECTION_ARGUMENT_SCHEMA;
   const required = specs
     .filter((spec) => spec.required || spec.in === "path")
     .map((spec) => spec.name);
@@ -338,7 +470,24 @@ export function operationTool(operation: Operation): McpTool {
  */
 export function buildToolList(operations: readonly Operation[]): readonly McpTool[] {
   validateOperations(operations);
+  // The two names the wrapper adds of its own (#2728). An operation that took either would be
+  // shadowed without a word, so it fails here, at the first `tools/list`, as a malformed entry does.
+  for (const operation of operations) {
+    if (operation.name === LIST_COLLECTIONS_TOOL) {
+      throw new Error(`An operation is named "${LIST_COLLECTIONS_TOOL}", which the MCP wrapper serves itself.`);
+    }
+    if (!operation.instance && toolParameters(operation).some((spec) => spec.name === COLLECTION_ARGUMENT)) {
+      throw new Error(
+        `Operation "${operation.name}" declares a parameter named "${COLLECTION_ARGUMENT}", which the MCP wrapper adds to every collection tool.`
+      );
+    }
+  }
   return operations.map(operationTool);
+}
+
+/** What `tools/list` answers: the generated tools, and `list_collections` after them. */
+export function buildCallerToolList(operations: readonly Operation[]): readonly McpTool[] {
+  return [...buildToolList(operations), listCollectionsTool];
 }
 
 /** The legacy `initialize` result: what this server is and what it can do. */
@@ -444,12 +593,13 @@ export async function callOperationTool(
       'A tools/call needs a "name". Send the name of a tool from tools/list.'
     );
   }
+  const isListCollections = toolName === LIST_COLLECTIONS_TOOL;
   const operation = options.operations.find((candidate) => candidate.name === toolName);
-  if (!operation) {
+  if (!operation && !isListCollections) {
     throw jsonRpcFailure(
       JSON_RPC.invalidParams,
       `This instance has no tool named "${toolName}". Call tools/list for the tools it offers.`,
-      { accepted: options.operations.map((candidate) => candidate.name) }
+      { accepted: [...options.operations.map((candidate) => candidate.name), LIST_COLLECTIONS_TOOL] }
     );
   }
   if (rawArguments !== undefined && (typeof rawArguments !== "object" || Array.isArray(rawArguments))) {
@@ -458,17 +608,31 @@ export async function callOperationTool(
       'The "arguments" of a tools/call must be a JSON object of named values.'
     );
   }
+  if (!operation) {
+    // Reads nothing but the credential's own reach, so there is no scope to refuse it on and no
+    // parameter to parse — an argument sent to it is ignored rather than argued with.
+    return toolResult(listCollectionsResult(options.reach));
+  }
 
   try {
     options.assertScope(operation);
     const specs = toolParameters(operation);
-    const raw = splitArguments(specs, (rawArguments ?? {}) as Record<string, unknown>);
+    // The wrapper's own argument comes out before the operation's are parsed (#2728). An instance
+    // tool has none: sent to one, `collection` stays among the arguments and is refused as any
+    // undeclared name is.
+    const sent = (rawArguments ?? {}) as Record<string, unknown>;
+    const { [COLLECTION_ARGUMENT]: collection, ...own } = sent;
+    const context: OperationContext = {
+      ownerId: options.ownerId,
+      collectionId: operation.instance ? "" : resolveReachCollection(options.reach, collection).id,
+    };
+    const raw = splitArguments(specs, operation.instance ? sent : own);
     const params = parseParameters(specs, {
       path: raw.path,
       query: raw.query,
       body: operation.method === "GET" ? undefined : raw.body,
     });
-    return toolResult(await operation.handler(options.context, params));
+    return toolResult(await operation.handler(context, params));
   } catch (error) {
     if (isApiError(error)) return toolError(error.toBody(), error.message);
     throw error;
@@ -642,7 +806,7 @@ async function handleLegacyMessage(
       // Every tool, in one page. The registry is a compiled-in array of a size a person maintains,
       // so paging it would be machinery with nothing behind it — and a client that receives no
       // `nextCursor` knows it has the whole list.
-      return respond(id, { tools: buildToolList(options.operations) });
+      return respond(id, { tools: buildCallerToolList(options.operations) });
     case "tools/call":
       return respond(id, await callOperationTool(options, params.name, params.arguments));
     default:
@@ -764,7 +928,7 @@ async function handleModernMessage(
     case "tools/list":
       return respond(
         id,
-        complete(options, { tools: buildToolList(options.operations), ...MCP_CACHE_HINTS })
+        complete(options, { tools: buildCallerToolList(options.operations), ...MCP_CACHE_HINTS })
       );
     case "tools/call":
       return respond(

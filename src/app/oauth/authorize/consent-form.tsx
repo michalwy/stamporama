@@ -1,23 +1,26 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
-import { decideOAuthAuthorizationAction } from "@/app/actions/oauth";
+import { decideOAuthAuthorizationAction, type OAuthCollectionChoice } from "@/app/actions/oauth";
 import { baseBtn } from "@/app/button-style";
-import { formControl } from "@/app/control-style";
+import {
+  CollectionAccessFields,
+  isCompleteCollectionChoice,
+} from "@/app/oauth/collection-access-fields";
 import {
   ASSISTANT_TOKEN_SCOPE_LABELS,
   type AssistantTokenScope,
 } from "@/lib/assistant-token-scope";
 import type { AuthorizationParams } from "@/lib/oauth-rules";
 
-// The consent screen's one question (#2715): may this app work on one of your collections, and how
-// far. The collector chooses the collection and the scope — the app only asked — and either answer
-// sends the browser back to the app, which is on another site, so the action returns the address and
-// this component goes there.
+// The consent screen's one question (#2715): may this app work on your collections, and how far. The
+// collector chooses the collections — all of them, including ones made later, or a selection (#2728)
+// — and the scope; the app only asked. Either answer sends the browser back to the app, which is on
+// another site, so the action returns the address and this component goes there.
 
 /** What each scope lets the app do, in a line, beside its choice. */
 const SCOPE_NOTES: Record<AssistantTokenScope, string> = {
-  read: "It can look at the collection and change nothing.",
+  read: "It can look at the collections and change nothing.",
   read_write: "It can also add and change things, as you would.",
 };
 
@@ -88,7 +91,9 @@ export function ConsentForm({
   collections,
   offeredScopes,
 }: ConsentFormProps) {
-  const [collectionId, setCollectionId] = useState(collections[0]?.id ?? "");
+  // *All collections* first, as GitHub's own screen has it: it is what the collector asked to be
+  // able to say (#2728), and the narrower choice is one click away.
+  const [access, setAccess] = useState<OAuthCollectionChoice>({ all: true, collectionIds: [] });
   // The widest scope on offer first, as the token form in Settings does: an assistant that cannot
   // record anything is the unusual wish, and it is one click away.
   const [scope, setScope] = useState<AssistantTokenScope>(offeredScopes[offeredScopes.length - 1]);
@@ -102,7 +107,7 @@ export function ConsentForm({
   function answer(allow: boolean) {
     setError(null);
     startTransition(async () => {
-      const result = await decideOAuthAuthorizationAction(params, { allow, collectionId, scope });
+      const result = await decideOAuthAuthorizationAction(params, { allow, access, scope });
       if (result.status === "redirect") {
         setLeaving(true);
         window.location.assign(result.location);
@@ -112,13 +117,13 @@ export function ConsentForm({
     });
   }
 
-  const noCollection = collections.length === 0;
+  const incomplete = !isCompleteCollectionChoice(access);
 
   return (
     <ConsentCard title={`Connect ${clientName}?`}>
       <p style={{ margin: "0 0 1.25rem", fontSize: "0.9375rem", lineHeight: 1.6 }}>
         <strong style={{ overflowWrap: "anywhere" }}>{clientName}</strong> is asking to work with
-        your stamps in Stamporama. It will act as you, on the one collection you choose.
+        your stamps in Stamporama. It will act as you, on the collections you choose.
       </p>
 
       {error && (
@@ -138,68 +143,45 @@ export function ConsentForm({
         </p>
       )}
 
-      {noCollection ? (
-        <p style={{ margin: "0 0 1.25rem", fontSize: "0.9375rem", lineHeight: 1.6 }}>
-          This account has no collection yet, so there is nothing to connect.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-            <span style={labelStyle}>Collection</span>
-            <select
-              value={collectionId}
-              onChange={(event) => setCollectionId(event.target.value)}
-              disabled={busy}
-              style={{
-                ...formControl,
-                padding: "0 0.75rem",
-                border: "1px solid var(--color-border)",
-                borderRadius: "0.375rem",
-                fontSize: "0.9375rem",
-                color: "var(--color-text-primary)",
-                background: "var(--color-bg-elevated)",
-                cursor: "pointer",
-              }}
-            >
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
-            </select>
-          </label>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+        <CollectionAccessFields
+          name="collections"
+          collections={collections}
+          value={access}
+          onChange={setAccess}
+          disabled={busy}
+        />
 
-          <fieldset style={{ margin: 0, padding: 0, border: "none", minWidth: 0 }}>
-            <legend style={{ ...labelStyle, padding: 0, marginBottom: "0.5rem" }}>
-              What may it do?
-            </legend>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {offeredScopes.map((offered) => (
-                <label
-                  key={offered}
-                  style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}
-                >
-                  <input
-                    type="radio"
-                    name="scope"
-                    value={offered}
-                    checked={scope === offered}
-                    onChange={() => setScope(offered)}
-                    disabled={busy}
-                    style={{ marginTop: "0.2rem" }}
-                  />
-                  <span>
-                    <span style={{ ...labelStyle, display: "block" }}>
-                      {ASSISTANT_TOKEN_SCOPE_LABELS[offered]}
-                    </span>
-                    <span style={mutedStyle}>{SCOPE_NOTES[offered]}</span>
+        <fieldset style={{ margin: 0, padding: 0, border: "none", minWidth: 0 }}>
+          <legend style={{ ...labelStyle, padding: 0, marginBottom: "0.5rem" }}>
+            What may it do?
+          </legend>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {offeredScopes.map((offered) => (
+              <label
+                key={offered}
+                style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", cursor: "pointer" }}
+              >
+                <input
+                  type="radio"
+                  name="scope"
+                  value={offered}
+                  checked={scope === offered}
+                  onChange={() => setScope(offered)}
+                  disabled={busy}
+                  style={{ marginTop: "0.2rem" }}
+                />
+                <span>
+                  <span style={{ ...labelStyle, display: "block" }}>
+                    {ASSISTANT_TOKEN_SCOPE_LABELS[offered]}
                   </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </div>
-      )}
+                  <span style={mutedStyle}>{SCOPE_NOTES[offered]}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginTop: "1.75rem" }}>
         <button
@@ -219,13 +201,13 @@ export function ConsentForm({
         <button
           type="button"
           onClick={() => answer(true)}
-          disabled={busy || noCollection}
+          disabled={busy || incomplete}
           style={{
             ...baseBtn,
             background:
-              busy || noCollection ? "var(--color-border-strong)" : "var(--color-action-primary)",
+              busy || incomplete ? "var(--color-border-strong)" : "var(--color-action-primary)",
             color: "#fff",
-            cursor: busy || noCollection ? "not-allowed" : "pointer",
+            cursor: busy || incomplete ? "not-allowed" : "pointer",
           }}
         >
           {busy ? "Connecting…" : "Allow"}
@@ -233,8 +215,8 @@ export function ConsentForm({
       </div>
 
       <p style={{ ...mutedStyle, margin: "1.5rem 0 0", overflowWrap: "anywhere" }}>
-        Signed in as {accountEmail}. You will be sent back to {returnsTo}. Disconnect it at any time
-        in Settings → Assistant &amp; API.
+        Signed in as {accountEmail}. You will be sent back to {returnsTo}. Change what it reaches, or
+        disconnect it, at any time in Settings → Assistant &amp; API.
       </p>
     </ConsentCard>
   );
