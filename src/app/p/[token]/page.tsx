@@ -11,6 +11,7 @@ import {
   proposalSharePhotoPath,
 } from "@/lib/proposal-document-rules";
 import { ProposalPicksDocument } from "./proposal-picks";
+import { SharedPageFeedback } from "@/app/feedback/report-problem";
 
 // **A proposal's document, for its buyer with a link** (#2288): the collector's printable page's
 // contents, addressed by a secret link, for somebody with no account and no session.
@@ -87,6 +88,7 @@ export default async function ProposalSharePage({ params }: SharePageProps) {
         document={document}
         photoSrc={proposalDocumentPhotoSrcs(document, (photoId) => proposalSharePhotoPath(token, photoId, "full"))}
       />
+      <SharedPageFeedback language={document.language} />
     </main>
   );
 }

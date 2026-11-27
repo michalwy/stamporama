@@ -7,6 +7,7 @@ import { readSaleShareView, type SaleShareLineView } from "@/lib/sale-share-choi
 import { SALE_SHARE_REFUSAL_MESSAGE, type SaleShareRefusal } from "@/lib/sale-share-rules";
 import { SALE_SHARE_STYLESHEET } from "./share-styles";
 import { LineSetChoice } from "./sale-choice";
+import { SharedPageFeedback } from "@/app/feedback/report-problem";
 
 // **The buyer's copy choice** (#699; ADR-0013 §7): one question, addressed by a secret link, for
 // somebody with no account and no session.
@@ -102,6 +103,7 @@ export default async function SaleSharePage({ params }: SharePageProps) {
             ))}
           </>
         )}
+        <SharedPageFeedback language={"en"} />
       </main>
     </>
   );

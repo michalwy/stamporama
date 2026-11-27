@@ -39,3 +39,20 @@ The switch at the top opens or closes registration, at once and without a restar
 administrator has used it, the instance follows `STAMPORAMA_ALLOW_REGISTRATION` from its `.env`
 (closed by default); from the first use on, the switch decides. An instance with no account at all
 always lets the first one be created. See [Authentication](authentication.md).
+
+## Feedback reports
+
+Under the accounts is the list of reports sent with [Report a problem](feedback.md) — from inside
+the app and from pages shared with customers. It opens on the **new** ones; the chips above the list
+switch to *Triaged*, *Resolved*, *Dismissed* or *All*.
+
+Click a report to read it in full, with everything that was sent with it (the screen's address, the
+version, the browser, the window, any script errors) and who sent it — the account, or the contact a
+visitor chose to leave. There you set:
+
+- its **status** — *New*, *Triaged* (it has an issue or an answer), *Resolved* (done) or *Dismissed*;
+- the **GitHub issue** it became, as a link;
+- a **note** of your own, never shown to the sender.
+
+An agent connected to the instance as an administrator can do the same through the admin tools
+`list_feedback`, `get_feedback` and `update_feedback` ([Agent API](agent-api.md)).

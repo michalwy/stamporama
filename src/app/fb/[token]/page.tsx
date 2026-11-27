@@ -11,6 +11,7 @@ import {
   facebookPostPreviewPhotoSrcs,
 } from "@/lib/facebook-post-preview-rules";
 import { FacebookPostPreviewDocument } from "@/app/c/[collectionSlug]/offers/posts/[postNo]/preview/post-preview-document";
+import { SharedPageFeedback } from "@/app/feedback/report-problem";
 
 // **A Facebook post's preview, for a buyer with a link** (#2212): the collector's printable page's
 // contents, addressed by a secret link, for somebody with no account and no session.
@@ -82,6 +83,7 @@ export default async function FacebookPostPreviewSharePage({ params }: SharePage
         preview={preview}
         photoSrc={facebookPostPreviewPhotoSrcs(preview, (photoId) => facebookPostPreviewPhotoPath(token, photoId, "full"))}
       />
+      <SharedPageFeedback language={preview.language} />
     </main>
   );
 }

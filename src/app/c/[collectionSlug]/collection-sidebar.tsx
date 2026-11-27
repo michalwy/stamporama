@@ -18,6 +18,7 @@ import { useAnchoredPlacement } from "@/app/use-anchored-placement";
 import { useSidebarFold } from "./shared/use-sidebar-fold";
 import { isSidebarFoldShortcut } from "./sidebar-fold";
 import { railIconButtonStyle } from "./sidebar-rail-style";
+import { ReportProblem } from "@/app/feedback/report-problem";
 import {
   SECTION_ICONS,
   SECTION_LABELS,
@@ -1089,6 +1090,15 @@ export function CollectionSidebar({
             tint={null}
             active={false}
           />
+          <ReportProblem collectionSlug={collectionSlug}>
+            {(open) => (
+              <Tooltip content="Report a problem" placement="right">
+                <button type="button" aria-label="Report a problem" onClick={open} style={railIconButtonStyle(false)}>
+                  <Icon name="feedback" />
+                </button>
+              </Tooltip>
+            )}
+          </ReportProblem>
           <Tooltip content="Sign out" placement="right">
             <button
               type="button"
@@ -1252,6 +1262,33 @@ export function CollectionSidebar({
         <div style={{ padding: "0.375rem 0.75rem" }}>
           <ThemeToggle />
         </div>
+        {/* "Report a problem" (#2720): sends a remark about the app itself, with the screen's
+            address and the browser attached. */}
+        <ReportProblem collectionSlug={collectionSlug}>
+          {(open) => (
+            <button
+              type="button"
+              onClick={open}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.5rem 0.75rem",
+                borderRadius: "0.375rem",
+                fontSize: "0.875rem",
+                color: "var(--color-text-secondary)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                width: "100%",
+                textAlign: "left",
+              }}
+            >
+              <Icon name="feedback" />
+              Report a problem
+            </button>
+          )}
+        </ReportProblem>
         <button
           onClick={() => void signOut()}
           style={{

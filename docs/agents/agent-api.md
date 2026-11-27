@@ -3629,6 +3629,22 @@ screen's figures, absent rather than zero where an order has no rate into the ba
 row carries its batches and a count of its `uses`; the history is the second read, paged, because it
 grows with every sale.
 
+## The administrator's tools are a second list (#2720)
+
+**`ADMIN_OPERATIONS` (`agent-api/admin-registry.ts`) is not part of `OPERATIONS`, and that is the
+decision.** `list_feedback`, `get_feedback` and `update_feedback` are about the **instance** — the
+reports sent with *Report a problem* — while everything in `OPERATIONS` is about the one collection a
+credential is pinned to, and `OPERATIONS` is the published contract of `/api/v1` that every
+token-holder's OpenAPI document lists. So the three are offered on **`/api/mcp` only**, through
+`operationsForMcpCaller`, and only when the credential's account is an administrator
+(`user.isAdmin`, [`admin.md`](admin.md)). For anyone else they do not exist: absent from
+`tools/list`, and a `tools/call` by name answers exactly as a tool that was never there. They are
+`Operation`s like any other, so the tool schema, the parameter parsing, the list envelope and the
+scope check are the shared ones — a `read` credential is refused on `update_feedback`. Their handlers
+read `context.ownerId` and ignore `context.collectionId`; `feedback.ts` checks the administrator
+again. The counts at the top of this file are of `OPERATIONS` and do not include them.
+→ [`feedback.md`](feedback.md), [`feedback-triage.md`](feedback-triage.md)
+
 ## What is deliberately absent
 
 **Absence, not a flag.** Three boundaries in this track are enforced by there being no operation, and

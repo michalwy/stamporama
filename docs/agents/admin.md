@@ -49,3 +49,4 @@ registration switch. Read this before touching `src/lib/admin*.ts`, `src/app/adm
   them everybody's: the one `instance_settings` row, which only `admin.test.ts` writes and removes,
   and "no administrator exists", which that file arranges inside a `RepeatableRead` transaction it
   rolls back. A new test that needs an administrator creates its own account with `isAdmin: true`.
+- **The panel also lists the feedback reports** (#2720) under the accounts — `FeedbackSection`, the newest 200 with status chips, a report opening in a two-column dialog with its context and the three fields an administrator sets. The rules are in [`feedback.md`](feedback.md).

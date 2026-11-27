@@ -864,6 +864,19 @@ Two things it will never do, however you ask, and they are absent rather than sw
 
 And with a **read only** token it changes nothing at all, which is the setting to start from.
 
+## For an administrator: feedback reports
+
+When the account that connected the assistant is an [administrator](admin.md) of the instance, the
+connector also offers three tools about the instance rather than a collection — the reports sent
+with [Report a problem](feedback.md):
+
+- `list_feedback` — the reports, newest first, optionally only those in one status;
+- `get_feedback` — one report with everything sent with it;
+- `update_feedback` — set its status, the GitHub issue it became and a note (needs a credential
+  that may write).
+
+Nobody else's assistant sees these tools, and they are not part of the HTTP API below.
+
 ## For a client that speaks plain HTTP
 
 If what you have is a script rather than an MCP client, the same operations are available as an

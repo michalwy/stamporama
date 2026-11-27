@@ -29,6 +29,7 @@ import {
 import { SHARE_STYLESHEET } from "./share-styles";
 import { ShareSide, money } from "./share-side";
 import { PartnerFeedbackProvider, TradeNoteFeedback } from "./feedback-controls";
+import { SharedPageFeedback } from "@/app/feedback/report-problem";
 
 // **The partner's copy of the trade** (#640; ADR-0039 §9): a read-only page addressed by a secret
 // link, for someone with no account and no session.
@@ -209,6 +210,7 @@ export default async function TradeSharePage({ params, searchParams }: SharePage
             collectorName={view.collectorName}
           />
         </PartnerFeedbackProvider>
+        <SharedPageFeedback language={view.language} />
       </main>
     </>
   );

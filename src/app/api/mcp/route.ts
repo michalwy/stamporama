@@ -10,7 +10,7 @@ import {
   jsonRpcErrorResponse,
   readRequestId,
 } from "@/lib/agent-api/mcp";
-import { OPERATIONS } from "@/lib/agent-api/registry";
+import { operationsForMcpCaller } from "@/lib/agent-api/admin-registry";
 import { getAppVersion } from "@/lib/version";
 
 // `POST /api/mcp` (#709) — the remote MCP endpoint, served by the app itself.
@@ -95,7 +95,8 @@ export async function POST(request: NextRequest): Promise<NextResponse | Respons
       name: request.headers.get("Mcp-Name"),
     };
     const outcome = await handleMcpMessage(message, {
-      operations: OPERATIONS,
+      // The registry, plus the administrator's tools when this credential's account is one (#2720).
+      operations: await operationsForMcpCaller(caller.ownerId),
       appVersion: getAppVersion(),
       context: { ownerId: caller.ownerId, collectionId: caller.collectionId },
       // #707's enforcement point, bound to this caller. The wrapper reuses it rather than deriving

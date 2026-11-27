@@ -11,6 +11,7 @@ import {
   deleteCollectionAsAdmin,
   setRegistrationOpen,
 } from "@/lib/admin";
+import { updateFeedbackReport, type FeedbackUpdate } from "@/lib/feedback";
 
 // The administrator's panel's three actions (#2719). Each resolves the session itself and hands the
 // account's id to `src/lib/admin.ts`, which is where "is this an administrator" is decided — a
@@ -53,4 +54,18 @@ export async function deleteCollectionAsAdminAction(collectionId: string): Promi
 
 export async function deleteAccountAsAdminAction(userId: string): Promise<AdminActionResult> {
   return run((id) => deleteAccountAsAdmin(id, String(userId)));
+}
+
+/** Change a feedback report's status, issue URL and note from the panel (#2720). */
+export async function updateFeedbackReportAction(
+  reportId: string,
+  update: FeedbackUpdate
+): Promise<AdminActionResult> {
+  return run(async (id) => {
+    await updateFeedbackReport(id, String(reportId), {
+      status: typeof update.status === "string" ? update.status : undefined,
+      issueUrl: typeof update.issueUrl === "string" ? update.issueUrl : undefined,
+      adminNote: typeof update.adminNote === "string" ? update.adminNote : undefined,
+    });
+  });
 }
