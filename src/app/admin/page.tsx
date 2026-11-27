@@ -6,9 +6,14 @@ import { signInPath } from "@/lib/sign-in-redirect";
 import { getAdminOverview, isAdmin } from "@/lib/admin";
 import { ThemeToggle } from "@/components/theme-toggle";
 import SignOutButton from "../collections/sign-out-button";
+import { listFeedbackReports } from "@/lib/feedback";
 import { AdminPanel } from "./admin-panel";
+import { FeedbackSection } from "./feedback-section";
 
 export const metadata = { title: "Admin" };
+
+/** How many reports the panel shows, newest first. */
+const FEEDBACK_SHOWN = 200;
 
 // The administrator's panel (#2719): instance-level, outside any collection. Anyone who is not an
 // administrator gets a 404 rather than a refusal — the panel's existence is nobody else's business.
@@ -18,6 +23,9 @@ export default async function AdminPage() {
   if (!(await isAdmin(session.user.id))) notFound();
 
   const overview = await getAdminOverview(session.user.id);
+  // The newest reports, every status (#2720). The panel narrows them itself; an agent that wants
+  // the rest pages through `list_feedback`.
+  const feedback = await listFeedbackReports(session.user.id, { limit: FEEDBACK_SHOWN, offset: 0 });
 
   return (
     <div
@@ -64,7 +72,16 @@ export default async function AdminPage() {
               createdAt: collection.createdAt.toISOString(),
             })),
           }))}
-        />
+        >
+          <FeedbackSection
+            total={feedback.total}
+            reports={feedback.reports.map((report) => ({
+              ...report,
+              createdAt: report.createdAt.toISOString(),
+              updatedAt: report.updatedAt.toISOString(),
+            }))}
+          />
+        </AdminPanel>
       </main>
     </div>
   );

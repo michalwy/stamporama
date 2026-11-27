@@ -16,6 +16,7 @@ import {
   SpecificationDocument,
   specificationThumbs,
 } from "@/app/c/[collectionSlug]/offers/[offerId]/specification/specification-document";
+import { SharedPageFeedback } from "@/app/feedback/report-problem";
 
 // **An offer's specification, for a buyer with a link** (#1760): the printable page's contents
 // (#1758), addressed by a secret link, for somebody with no account and no session.
@@ -102,6 +103,7 @@ export default async function OfferSpecificationSharePage({ params }: SharePageP
           offerSpecificationSharePhotoPath(token, photoId)
         )}
       />
+      <SharedPageFeedback language={spec.language} />
     </main>
   );
 }

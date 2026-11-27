@@ -807,6 +807,8 @@ Stamporama uses [Better Auth](https://better-auth.com/) with the email/password 
 
 **Administrators:** `src/lib/admin-access.ts` and `admin.ts` (#2719). `user.isAdmin` marks the accounts that may open `/admin` — every account and collection, their storage (measured per collection prefix on every configured backend, `Storage.usage`), deleting either (rows in one transaction, then the bytes, `Storage.deletePrefix`), and the registration switch (`instance_settings.registrationOpen`, which overrides the environment default once set). The oldest account was made administrator by the migration; the first account of an instance without one becomes it (a Better Auth `databaseHooks.user.create.after` hook). See `docs/agents/admin.md`.
 
+**Feedback:** `src/lib/feedback-rules.ts`, `feedback.ts` and `POST /api/feedback` (#2720). *Report a problem* is offered in the collection sidebar and, discreetly, on the five pages shared with customers; a report (`feedback_report`) carries the message and flat context columns, never a share link's token (`redactRoute`). The route accepts anonymous requests from shared pages only, rate-limited per address and in total. Reports are read and triaged in `/admin` and through the admin MCP tools (`agent-api/admin-registry.ts`), administrators only. See `docs/agents/feedback.md`.
+
 **Client instance:** `src/lib/auth-client.ts` — `createAuthClient()` for use in client components. Defaults to the same origin (`/api/auth/*`); no explicit `baseURL` required.
 
 **API handler:** `src/app/api/auth/[...all]/route.ts` — catches all Better Auth API requests (`GET` + `POST`) via `toNextJsHandler(auth)`.

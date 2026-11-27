@@ -31,6 +31,7 @@ model User {
   // migration, and the first account of an instance that has no administrator gets it when created
   // (`admin.ts`). Better Auth neither reads nor writes it.
   isAdmin       Boolean      @default(false)
+  feedbackReports FeedbackReport[]
 
   @@map("user")
 }
@@ -162,6 +163,7 @@ model Collection {
   ownerId      String
   createdAt    DateTime @default(now())
 
+  feedbackReports FeedbackReport[]
   owner           User              @relation("CollectionOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   // The accounts whose phone opens here (#2574) — the owner's at most.
   phoneUsers      User[]            @relation("PhoneCollection")
@@ -8774,4 +8776,53 @@ model InstanceSettings {
   updatedAt        DateTime @updatedAt
 
   @@map("instance_settings")
+}
+
+// A report sent with "Report a problem" (#2720) — from inside a collection by its collector, or from
+// a page shared with a customer by somebody with no account. Instance-level: it is read in the
+// administrator's panel and through the admin MCP tools, never from inside a collection.
+//
+// The account and the collection are kept as plain relations that go null when either is deleted —
+// a report about a problem outlives the account that reported it. Everything from `route` down is
+// context the browser gathered and the server trimmed; each is its own text column rather than one
+// `Json`, so a list can show them and none needs parsing. `route` never carries a share link's
+// token: it is replaced by `[token]` before the row is written (`feedback-rules.ts`).
+model FeedbackReport {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  /** `app` or `shared`, from `FEEDBACK_SOURCES`. */
+  source       String
+  /** `problem`, `idea` or `question`, from `FEEDBACK_KINDS`. */
+  kind         String
+  message      String
+  /** `new`, `triaged`, `resolved` or `dismissed`, from `FEEDBACK_STATUSES`. */
+  status       String   @default("new")
+  /** The GitHub issue the report became, when it became one. */
+  issueUrl     String?
+  /** The administrator's own note; never shown to the sender. */
+  adminNote    String?
+  /** How to reach the sender, when an anonymous visitor chose to say. */
+  contact      String?
+  userId       String?
+  collectionId String?
+  route        String
+  /** Which kind of shared page it was sent from, from `SHARED_PAGE_KINDS`; null inside the app. */
+  sharedPage   String?
+  appVersion   String
+  userAgent    String?
+  viewport     String?
+  language     String?
+  timeZone     String?
+  theme        String?
+  /** The page's last few script errors, one per line. */
+  recentErrors String?
+
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@index([collectionId])
+  @@map("feedback_report")
 }
