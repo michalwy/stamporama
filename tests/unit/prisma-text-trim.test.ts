@@ -184,6 +184,8 @@ describe("the schema this rule was reasoned about", () => {
     // (`saleLineAddedAction`), never text typed into a field, so it has no edges to trim either.
     // `redirectUris` (an OAuth client's, #2715) holds addresses an app registered, each refused by
     // `isAcceptableRedirectUri` if it carries any whitespace at all.
+    // `collectionIds` (an OAuth authorization code's, #2728) holds the ids of the collections the
+    // collector ticked, each checked against the account's own before it is stored.
     const found = [...schema.matchAll(/^\s+(\w+)\s+String\[\]/gm)].map((m) => m[1]).sort();
     assert.deepEqual(found, [
       "anchorMarkets",
@@ -191,6 +193,7 @@ describe("the schema this rule was reasoned about", () => {
       "apiReviewFields",
       "apiReviewFields",
       "apiReviewFields",
+      "collectionIds",
       "conditionIds",
       "customSettings",
       "formatIds",

@@ -139,6 +139,8 @@ interface AssistantPanelProps {
   initialTokens: AssistantTokenData[];
   /** The apps signed in through the instance's OAuth screen (#2715), and the address they use. */
   connectedApps: OAuthGrantData[];
+  /** The account's collections, for a connected app's *Change access* (#2728). */
+  accountCollections: { id: string; name: string }[];
   mcpUrl: string | null;
 }
 
@@ -160,6 +162,7 @@ export function AssistantPanel({
   collectionName,
   initialTokens,
   connectedApps,
+  accountCollections,
   mcpUrl,
 }: AssistantPanelProps) {
   const router = useRouter();
@@ -489,11 +492,11 @@ export function AssistantPanel({
           Connected apps
           <InfoHint>
             An app such as Claude connects by this instance&apos;s address alone: it sends you here to
-            sign in and to choose the collection and what it may do. There is no token to copy, and
-            disconnecting it here cuts it off immediately.
+            sign in and to choose which collections it reaches — all of them or a selection — and
+            what it may do. There is no token to copy; change what it reaches or disconnect it here.
           </InfoHint>
         </h2>
-        <ConnectedAppsSection collectionId={collectionId} mcpUrl={mcpUrl} apps={connectedApps} />
+        <ConnectedAppsSection mcpUrl={mcpUrl} apps={connectedApps} collections={accountCollections} />
       </section>
 
       {shownToken && <ShowTokenDialog token={shownToken} onClose={() => setShownToken(null)} />}

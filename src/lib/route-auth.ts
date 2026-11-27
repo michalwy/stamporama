@@ -3,7 +3,8 @@ import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 import { auth } from "./auth";
 import { verifyAssistantToken } from "./api-tokens";
-import { verifyOAuthAccessToken } from "./oauth-server";
+import { findReachableCollection, verifyOAuthAccessToken } from "./oauth-server";
+import { pinnedReach, type McpReach } from "./agent-api/mcp";
 import { assertOperationScope, type ScopedOperation } from "./agent-api/scope";
 import type { AssistantTokenScope } from "./assistant-token-scope";
 
@@ -74,9 +75,21 @@ export async function resolveAgentApiCaller(request: NextRequest): Promise<Agent
   };
 }
 
+/**
+ * Who an `/api/mcp` call is acting as, how far its credential reaches, and on which collections.
+ *
+ * The one difference from `AgentApiCaller`: a connected app's grant may reach several collections,
+ * or all of the account's (#2728), so there is a `reach` where `/api/v1` has a `collectionId`.
+ */
+export interface McpCaller {
+  readonly ownerId: string;
+  readonly scope: AssistantTokenScope;
+  readonly reach: McpReach;
+}
+
 /** How a request to `/api/mcp` stood with its credential: accepted, absent, or sent and refused. */
 export type McpCallerResolution =
-  | { readonly kind: "caller"; readonly caller: AgentApiCaller }
+  | { readonly kind: "caller"; readonly caller: McpCaller }
   | { readonly kind: "missing" }
   | { readonly kind: "refused" };
 
@@ -84,10 +97,12 @@ export type McpCallerResolution =
  * Resolve the caller of an MCP request (#2715): an Assistant token as on `/api/v1`, **or** an access
  * token this instance's OAuth authorization server issued to a connected app (ADR-0084).
  *
- * Both verify to the same three facts — whose account, which collection, how far it reaches — so
- * everything behind this line is unchanged: the collection is still derived from the credential and
- * `assertAgentApiScope` is still the one place a scope is checked. The two are told apart by their
- * prefixes, so neither lookup is tried with the other's credential.
+ * Both verify to the same three facts — whose account, which collections, how far it reaches — so
+ * everything behind this line is one path: `assertAgentApiScope` is still the one place a scope is
+ * checked, and the collection a call acts on is still taken from the credential. An Assistant token
+ * reaches the one collection it is pinned to; a grant reaches what the collector chose, and where
+ * that is more than one the caller names which **among them** (`resolveReachCollection`, #2728).
+ * The two credentials are told apart by their prefixes, so neither lookup is tried with the other's.
  *
  * **`/api/v1` does not take the OAuth token, deliberately.** It was issued for one resource, the MCP
  * endpoint, and a token honoured somewhere it was not issued for is the thing audience binding
@@ -103,17 +118,28 @@ export async function resolveMcpCaller(request: NextRequest): Promise<McpCallerR
 
   const assistant = await verifyAssistantToken(match[1]);
   if (assistant) {
+    const collection = await findReachableCollection(assistant.collectionId);
+    if (!collection) return { kind: "refused" };
     return {
       kind: "caller",
       caller: {
         ownerId: assistant.ownerId,
-        collectionId: assistant.collectionId,
         scope: assistant.scope,
+        reach: pinnedReach(collection),
       },
     };
   }
   const connected = await verifyOAuthAccessToken(match[1]);
-  if (connected) return { kind: "caller", caller: connected };
+  if (connected) {
+    return {
+      kind: "caller",
+      caller: {
+        ownerId: connected.ownerId,
+        scope: connected.scope,
+        reach: { all: connected.allCollections, collections: connected.collections },
+      },
+    };
+  }
   return { kind: "refused" };
 }
 
@@ -135,6 +161,9 @@ export async function resolveMcpCaller(request: NextRequest): Promise<McpCallerR
  * The decision and the sentence are in `agent-api/scope.ts`, on the pure side, so a unit test can
  * hold them; this function is the enforcement point and nothing else.
  */
-export function assertAgentApiScope(caller: AgentApiCaller, operation: ScopedOperation): void {
+export function assertAgentApiScope(
+  caller: Pick<AgentApiCaller, "scope">,
+  operation: ScopedOperation
+): void {
   assertOperationScope(caller.scope, operation);
 }

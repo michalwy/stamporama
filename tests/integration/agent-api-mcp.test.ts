@@ -8,10 +8,12 @@ import {
   JSON_RPC,
   LATEST_LEGACY_MCP_PROTOCOL_VERSION,
   LEGACY_MCP_PROTOCOL_VERSIONS,
+  LIST_COLLECTIONS_TOOL,
   MCP_META,
   MCP_PROTOCOL_VERSION,
   SUPPORTED_MCP_PROTOCOL_VERSIONS,
   handleMcpMessage,
+  pinnedReach,
 } from "../../src/lib/agent-api/mcp";
 import { assertAgentApiScope, resolveAgentApiCaller } from "../../src/lib/route-auth";
 import { OPERATIONS } from "../../src/lib/agent-api/registry";
@@ -227,9 +229,11 @@ describe("the remote MCP endpoint", () => {
     // is what a client sees, and this file names none of it.
     const result = await resultOf(readWriteToken, { jsonrpc: "2.0", id: 2, method: "tools/list" });
     const tools = result.tools as readonly { name: string; description: string }[];
+    // … and the one tool the wrapper serves itself, which is about the connection and not an
+    // operation: what the credential reaches (#2728).
     assert.deepEqual(
       tools.map((tool) => tool.name).sort(),
-      OPERATIONS.map((operation) => operation.name).sort()
+      [...OPERATIONS.map((operation) => operation.name), LIST_COLLECTIONS_TOOL].sort()
     );
     for (const operation of OPERATIONS) {
       const tool = tools.find((candidate) => candidate.name === operation.name);
@@ -239,6 +243,36 @@ describe("the remote MCP endpoint", () => {
         "the tool description is the registry's own, written for a model"
       );
     }
+  });
+
+  it("reaches the one collection an Assistant token is pinned to, named or not, and no other (#2728)", async () => {
+    const listed = await resultOf(readWriteToken, {
+      jsonrpc: "2.0",
+      id: 30,
+      method: "tools/call",
+      params: { name: LIST_COLLECTIONS_TOOL, arguments: {} },
+    });
+    const reach = JSON.parse(toolText(listed)) as {
+      access: string;
+      collections: { id: string; name: string }[];
+    };
+    assert.equal(reach.access, "selected");
+    assert.deepEqual(reach.collections.map((collection) => collection.id), [collectionId]);
+
+    const call = (collection: string) =>
+      resultOf(readWriteToken, {
+        jsonrpc: "2.0",
+        id: 31,
+        method: "tools/call",
+        params: { name: "get_collection_vocabulary", arguments: { collection } },
+      });
+    // Its own collection may be named, by id or by name — and nothing changes when it is.
+    assert.equal((await call(collectionId)).isError, undefined);
+    assert.equal((await call(reach.collections[0].name)).isError, undefined);
+    // The same account's other collection is not reachable by naming it: the token decides.
+    const other = await call(otherCollectionId);
+    assert.equal(other.isError, true);
+    assert.match(toolText(other), /not a collection this connection reaches/);
   });
 
   it("calls a tool end to end and answers out of this collection's rows", async () => {
@@ -319,7 +353,8 @@ describe("the remote MCP endpoint", () => {
       {
         operations: [writing],
         appVersion: "test",
-        context: { ownerId: caller.ownerId, collectionId: caller.collectionId },
+        ownerId: caller.ownerId,
+        reach: pinnedReach({ id: caller.collectionId, slug: "pinned", name: "Pinned" }),
         assertScope: (operation) => assertAgentApiScope(caller, operation),
       }
     );
@@ -362,7 +397,7 @@ describe("the remote MCP endpoint", () => {
     assert.equal(response.body.error?.code, JSON_RPC.invalidParams);
     assert.deepEqual(
       (response.body.error?.data as { accepted: string[] }).accepted,
-      OPERATIONS.map((operation) => operation.name)
+      [...OPERATIONS.map((operation) => operation.name), LIST_COLLECTIONS_TOOL]
     );
   });
 
@@ -408,7 +443,7 @@ describe("the remote MCP endpoint", () => {
       const list = await POST(mcpRequest(readWriteToken, { jsonrpc: "2.0", id: 2, method: "tools/list" }, header));
       assert.equal(list.status, 200, revision);
       const listBody = (await list.json()) as JsonRpcBody;
-      assert.equal((listBody.result?.tools as unknown[]).length, OPERATIONS.length, revision);
+      assert.equal((listBody.result?.tools as unknown[]).length, OPERATIONS.length + 1, revision);
       assert.equal(listBody.result?.resultType, undefined, `${revision} sees no 2026-07-28 fields`);
 
       const call = await POST(
@@ -471,7 +506,7 @@ describe("the remote MCP endpoint", () => {
         assert.equal(listed?.resultType, "complete");
         assert.deepEqual(
           (listed?.tools as { name: string }[]).map((tool) => tool.name).sort(),
-          OPERATIONS.map((operation) => operation.name).sort()
+          [...OPERATIONS.map((operation) => operation.name), LIST_COLLECTIONS_TOOL].sort()
         );
         assert.equal(listed?.cacheScope, "private");
 

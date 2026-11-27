@@ -291,16 +291,19 @@ own OAuth 2.1 authorization server** ([ADR-0084](../decisions/0084-oauth-authori
 
 - **`resolveMcpCaller` (`route-auth.ts`) is the MCP route's resolver.** An Assistant token, or an
   access token (`stmpoa_…`) a connected app was issued; the prefixes keep the two lookups apart. Both
-  verify to `{ ownerId, collectionId, scope }`, so **no operation knows which arrived** and
-  `assertAgentApiScope` is still the one scope check. It also says whether a credential was *missing*
+  verify to `{ ownerId, scope, reach }` (#2728; `{ ownerId, collectionId, scope }` until then), so
+  **no operation knows which arrived** and `assertAgentApiScope` is still the one scope check. It also says whether a credential was *missing*
   or *refused*, because the `401` differs: both carry `resource_metadata`, a refused one adds
   `error="invalid_token"`.
 - **`/api/v1` does not take the OAuth token, on purpose** — it was issued for one resource. A test
   holds it (`oauth-connector.test.ts`, *is not a credential for /api/v1*); do not "tidy" the two
   resolvers into one.
-- **A grant is one app, one account, one collection, one scope**, chosen by the collector on
-  `/oauth/authorize`. The collection is still derived from the credential, never named by the caller.
-  A call acts as the account that allowed it, and stops if that account no longer owns the collection.
+- **A grant is one app, one account, one scope, and the collections the collector chose** on
+  `/oauth/authorize` — *all collections*, including ones made later, or a selection (#2728; exactly
+  one collection until then). A call acts as the account that allowed it, on the collections that
+  account **still owns** among those — read on every call (`reachableCollections`), which is what
+  makes a later collection reachable and *Change access* in Settings effective without reconnecting.
+  → *Which collection a call acts on*, below.
 - **The split is the track's own**: every rule in the pure `src/lib/oauth-rules.ts`
   (`tests/unit/oauth-rules.test.ts`), the rows in `oauth-server.ts`, the request and response in
   `oauth-http.ts` and the routes — `/.well-known/oauth-protected-resource[/api/mcp]`,
@@ -315,6 +318,37 @@ own OAuth 2.1 authorization server** ([ADR-0084](../decisions/0084-oauth-authori
 - **The instance's address is `BETTER_AUTH_URL`**, falling back to the request's origin
   (`oauthBaseUrl`). CI sets it, a local run does not, and the tests derive the address the same way
   rather than writing one down.
+
+### Which collection a call acts on (#2728)
+
+**The no-id rule above is narrowed on `/api/mcp`, not dropped — and `/api/v1` keeps it whole.** A
+connected app's grant may reach several collections or all of the account's, so on that one surface
+the credential no longer settles the collection alone. What it still settles is the **set**:
+
+- **`McpReach`** (`agent-api/mcp.ts`) is `{ all, collections }` — what the credential reaches now. An
+  Assistant token's is `pinnedReach(itsCollection)`; a grant's is what `verifyOAuthAccessToken` read.
+- **Every collection tool gains an optional `collection` argument**, and **`list_collections`** says
+  what it may name. `resolveReachCollection` matches the value as an id, then a slug, then a name
+  without regard to case, **inside the reach and nowhere else** — an id from outside it is refused
+  with the same sentence as a misspelt one, so the argument can choose but never authorise. Absent,
+  it is the one reachable collection; with several it is required and the refusal carries their
+  names in `accepted`; a name two share is refused with their ids, as a vocabulary name is (#708).
+- **It is the wrapper's argument, not an operation's parameter.** `OPERATIONS` is also `/api/v1`'s
+  contract, where a token is one collection. So `operationTool` adds the property, `callOperationTool`
+  takes it out before `parseParameters` sees the arguments, and a handler still reads
+  `context.collectionId` and nothing else. `buildToolList` throws for an operation that declares a
+  parameter named `collection` or is itself named `list_collections`.
+- **`list_collections` is the one tool not generated from an operation**, because it is about the
+  connection and has no REST counterpart; `buildToolList` is still exactly the registry and
+  `buildCallerToolList` appends it. A test that compares `tools/list` with `OPERATIONS` adds the one
+  name.
+- **An operation about the instance says so with `instance: true`** (the administrator's three,
+  #2720): no `collection` argument, called without choosing one, handed `collectionId: ""` — so such
+  a handler must not read it.
+- **The order is scope, then collection, then parameters**: a `read` credential on a writing tool
+  hears about its scope and nothing else.
+- **The instructions say all of this to the model** (`MCP_INSTRUCTIONS`): one collection per call,
+  `list_collections`, and that an id or a name means something in its own collection only.
 
 ### A token's scope, and where it is checked
 
@@ -3874,6 +3908,11 @@ Nothing runs in either case, so this is a choice about **who reads the refusal**
 whether it is enforced.
 
 ### One token, one parser, one scope check
+
+**Since #2715 there are two credentials here and since #2728 a call may name its collection**; the
+paragraphs below were written when there was one token and one collection, and are still exact about
+the parser and the scope check. What changed is in *Authentication* — § */api/mcp takes a second
+credential* and § *Which collection a call acts on*.
 
 **The same `Bearer stmpa_…` token as REST**, through the same `resolveAgentApiCaller`, with the same
 collection pinning. No second credential and nothing second to revoke. An unauthenticated call is

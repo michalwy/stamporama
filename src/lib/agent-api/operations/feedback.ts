@@ -91,6 +91,7 @@ export const listFeedbackOperation: Operation = {
   description:
     "Instance administrators only. List the reports people sent with “Report a problem” — from inside the app and from pages shared with customers — newest first. Pass `status` to narrow them; triage starts with `status=new`.",
   writes: false,
+  instance: true,
   parameters: [
     {
       name: "status",
@@ -126,6 +127,7 @@ export const getFeedbackOperation: Operation = {
   description:
     "Instance administrators only. Read one feedback report with everything sent with it: the whole message, the screen's address (a share link's token is already replaced by `[token]`), the app version, browser, window size, language, time zone, theme, the page's recent script errors, and the ids of the account and collection it came from.",
   writes: false,
+  instance: true,
   parameters: [
     {
       name: "feedback_id",
@@ -151,6 +153,7 @@ export const updateFeedbackOperation: Operation = {
   description:
     "Instance administrators only. Set a feedback report's status, the GitHub issue it became, and an internal note. An omitted field keeps its value; an empty string clears the issue URL or the note. After filing or finding the issue for a report, set `status` to `triaged` and `issue_url` to the issue.",
   writes: true,
+  instance: true,
   parameters: [
     {
       name: "feedback_id",

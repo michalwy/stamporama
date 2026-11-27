@@ -4,9 +4,10 @@ Stamporama can be handed to an AI assistant — Claude, or anything else that sp
 you can ask it about your collection in ordinary words. *"What have I got from the 1928 set that is
 not in an album yet?"* *"Which of my Michel numbers are missing a price?"*
 
-It connects to **one collection**, and you decide whether it may change anything or only look.
+You decide which collections it reaches and whether it may change anything or only look.
 There are two ways to connect it: **signing in**, which is how an app such as Claude adds Stamporama
-as a *connector*, and a **token** you make yourself, for a client you configure by hand.
+as a *connector* and which can cover **all your collections or a selection of them**, and a
+**token** you make yourself, for a client you configure by hand, which is for **one collection**.
 
 This is not the [Stamporama Assistant](assistant.md), which is a Chrome extension for marketplace
 pages. They are different things that happen to use the same kind of token, and the same screen
@@ -23,16 +24,35 @@ Connectors → Add custom connector** — this is the whole of it:
 2. The app opens Stamporama in your browser. **Sign in** if you are not signed in already — with the
    account you always use; nothing here makes a new one.
 3. Stamporama asks whether to connect the app, naming it and the site you will be sent back to.
-   Choose the **collection** it works on and what it **may do** — *Read only* or *Read and write* —
-   and press **Allow**. **Cancel** sends you back with nothing connected.
+   Choose **which collections** it works on:
+   - **All collections** — every collection you have, **and any you create later**, with nothing
+     more to do when you make one.
+   - **Only selected collections** — the ones you tick, and no others.
 
-There is no token to copy. The app keeps itself connected from then on, and acts as you, on that one
-collection. To let it work on a second collection, add the connector a second time and choose the
-other one.
+   Then choose what it **may do** — *Read only* or *Read and write*, for all of them alike — and
+   press **Allow**. **Cancel** sends you back with nothing connected.
 
-**Settings → Assistant & API** lists every app connected this way under *Connected apps*, with what
-it may do, when it was connected and when it was last used. **Disconnect**, in the row's `⋮` menu,
-cuts it off at once; the app can be connected again from its own side.
+There is no token to copy. The app keeps itself connected from then on, and acts as you, on the
+collections you chose. **One connector is enough for all of them**: when it reaches more than one,
+the assistant says which collection a question is about — name the collection when you ask, or it
+will ask you — and it can list the ones it reaches. When it reaches exactly one, nothing changes:
+it simply works on that one.
+
+**Settings → Assistant & API** lists every app connected to your account under *Connected apps* —
+the same list in each of your collections — with which collections it reaches, what it may do, when
+it was connected and when it was last used. In the row's `⋮` menu:
+
+- **Change access** switches it between *All collections* and *Only selected collections*, and lets
+  you tick or untick collections. It takes effect at once; the app does not have to be connected
+  again.
+- **Disconnect** cuts it off at once; the app can be connected again from its own side.
+
+Connecting the same app a second time **replaces** its earlier connection — the collections and what
+it may do are whatever you chose last. A connector you added before this choice existed goes on
+working on the one collection you gave it; use **Change access** to give it more.
+
+Deleting a collection takes it out of every connection. A connection for selected collections whose
+last collection is gone stops working until you connect the app again.
 
 Your instance has to be reachable from the internet at the address it was installed with — Claude
 connects from its own servers, not from your browser — so an instance that answers only on your home
@@ -99,9 +119,10 @@ Stamporama speaks MCP revision **2026-07-28**, and also answers to `2025-06-18`,
 in as many words rather than failing quietly, so if yours reports an unsupported protocol version,
 that is what it means — the instance needs updating.
 
-**The collection is not in the address, and that is deliberate.** The token already says which
-collection it is for — as a connector's sign-in does — so there is nothing to get wrong and nothing
-an assistant could point at the wrong one. Two tokens for two collections are simply two entries.
+**The collection is not in the address, and that is deliberate.** A token already says which
+collection it is for, so there is nothing to get wrong and nothing an assistant could point at the
+wrong one; two tokens for two collections are simply two entries. A connector you signed in with
+reaches the collections you chose for it, and can never be pointed at one outside them.
 
 ## Checking that it worked
 

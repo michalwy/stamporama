@@ -26,6 +26,7 @@ import {
   refreshOAuthTokens,
   registerOAuthClient,
   revokeOAuthGrant,
+  updateOAuthGrantAccess,
   verifyOAuthAccessToken,
 } from "../../src/lib/oauth-server";
 import { OAUTH_RATE_LIMITS } from "../../src/lib/oauth-http";
@@ -40,6 +41,10 @@ import type { AssistantTokenScope } from "../../src/lib/assistant-token-scope";
 // and the routes obey them: that a real hashed code is spent once, that the access token it bought
 // authenticates at the MCP endpoint as the account that allowed it, on the collection it chose, with
 // the scope it chose, and that deleting the grant is what cuts the app off.
+//
+// **Since #2728 a connection reaches several collections or all of them**, so `Choice` below says
+// which: `collectionId` is the old single choice, kept as shorthand for a selection of one, and
+// `access` is the consent screen's own shape. The last block of this file is that issue's.
 //
 // **What it does not establish, said rather than left to be assumed.** The consent *screen* is not
 // driven: there is no session in this suite, so `consent()` below does what the page and its server
@@ -98,6 +103,19 @@ interface TokenBody {
   error?: string;
 }
 
+/** What the collector chose on the consent screen. */
+interface Choice {
+  /** Shorthand for a selection of exactly this collection. */
+  collectionId?: string;
+  access?: { all: boolean; collectionIds: string[] };
+  scope: AssistantTokenScope;
+  as?: string;
+}
+
+interface ToolAnswer {
+  result: { isError?: boolean; content: { text: string }[] };
+}
+
 async function tokenCall(fields: Record<string, string>): Promise<{ status: number; body: TokenBody }> {
   const response = await TOKEN(form("/api/oauth/token", fields));
   return { status: response.status, body: (await response.json()) as TokenBody };
@@ -125,7 +143,7 @@ describe("the OAuth connector flow", () => {
   async function consent(
     clientId: string,
     challenge: string,
-    choice: { collectionId: string; scope: AssistantTokenScope; as?: string },
+    choice: Choice,
     now?: Date
   ): Promise<string> {
     const checked = checkAuthorizationRequest(
@@ -146,7 +164,7 @@ describe("the OAuth connector flow", () => {
       {
         clientId: checked.request.clientId,
         userId: choice.as ?? userId,
-        collectionId: choice.collectionId,
+        access: choice.access ?? { all: false, collectionIds: [choice.collectionId as string] },
         scope: choice.scope,
         redirectUri: checked.request.redirectUri,
         codeChallenge: checked.request.codeChallenge,
@@ -161,7 +179,7 @@ describe("the OAuth connector flow", () => {
 
   /** The whole connection: register, consent, exchange. */
   async function connect(
-    choice: { collectionId: string; scope: AssistantTokenScope },
+    choice: Choice,
     clientId?: string
   ): Promise<{ clientId: string; tokens: TokenBody }> {
     const id = clientId ?? (await register());
@@ -316,6 +334,8 @@ describe("the OAuth connector flow", () => {
       data: { collectionId: secondCollectionId, name: "Should Not Appear", abbreviation: "SNA", sortOrder: 0 },
     });
 
+    // The list in Settings is the account's (#2728), so what earlier cases connected is cleared.
+    await prisma.oAuthGrant.deleteMany({ where: { userId } });
     const { clientId, tokens } = await connect({ collectionId, scope: "read_write" });
     assert.equal(tokens.token_type, "Bearer");
     assert.equal(tokens.expires_in, 3600);
@@ -325,8 +345,9 @@ describe("the OAuth connector flow", () => {
 
     assert.deepEqual(await verifyOAuthAccessToken(tokens.access_token), {
       ownerId: userId,
-      collectionId,
       scope: "read_write",
+      allCollections: false,
+      collections: [{ id: collectionId, slug: `oauth-${ts}`, name: "oauth" }],
     });
 
     const list = await MCP_POST(mcp(tokens.access_token, { jsonrpc: "2.0", id: 2, method: "tools/list" }));
@@ -352,12 +373,14 @@ describe("the OAuth connector flow", () => {
     assert.deepEqual(vocabulary.conditions.map((condition) => condition.name), ["Mint Never Hinged"]);
 
     // Settings lists it, by the name the app registered under.
-    const listedApps = await listOAuthGrants(userId, collectionId);
+    const listedApps = await listOAuthGrants(userId);
     assert.equal(listedApps.length, 1);
     assert.equal(listedApps[0].clientName, "Claude");
     assert.equal(listedApps[0].scope, "read_write");
     assert.ok(listedApps[0].lastUsedAt);
-    assert.deepEqual(await listOAuthGrants(userId, secondCollectionId), []);
+    assert.equal(listedApps[0].allCollections, false);
+    assert.deepEqual(listedApps[0].collections, [{ id: collectionId, name: "oauth" }]);
+    assert.deepEqual(await listOAuthGrants(otherUserId), []);
 
     // Refreshing rotates both tokens: the old access token stops, the new one works.
     const refreshed = await tokenCall({
@@ -373,7 +396,7 @@ describe("the OAuth connector flow", () => {
     assert.equal((await MCP_POST(mcp(refreshed.body.access_token, PING))).status, 200);
 
     // Disconnected in Settings: refused at once, told its token is the reason, and unable to refresh.
-    await revokeOAuthGrant(userId, collectionId, listedApps[0].id);
+    await revokeOAuthGrant(userId, listedApps[0].id);
     const cutOff = await MCP_POST(mcp(refreshed.body.access_token, PING));
     assert.equal(cutOff.status, 401);
     assert.match(cutOff.headers.get("WWW-Authenticate") ?? "", /error="invalid_token"/);
@@ -429,17 +452,16 @@ describe("the OAuth connector flow", () => {
     const clientId = await register();
     await assert.rejects(
       consent(clientId, pkce().challenge, { collectionId: otherUsersCollectionId, scope: "read" }),
-      /access denied/
+      /your own collections/
     );
 
     // Two connections of one account, each pinned to its own collection.
     const first = await connect({ collectionId, scope: "read" });
     const second = await connect({ collectionId: secondCollectionId, scope: "read" });
-    assert.equal((await verifyOAuthAccessToken(first.tokens.access_token))?.collectionId, collectionId);
-    assert.equal(
-      (await verifyOAuthAccessToken(second.tokens.access_token))?.collectionId,
-      secondCollectionId
-    );
+    const reached = async (token: string) =>
+      (await verifyOAuthAccessToken(token))?.collections.map((collection) => collection.id);
+    assert.deepEqual(await reached(first.tokens.access_token), [collectionId]);
+    assert.deepEqual(await reached(second.tokens.access_token), [secondCollectionId]);
 
     // The collection changes hands: the grant names the account that allowed it, and that account
     // no longer owns the collection, so the token stops and cannot be refreshed.
@@ -467,14 +489,18 @@ describe("the OAuth connector flow", () => {
     assert.equal(await verifyOAuthAccessToken(tokens.access_token, later), null);
   });
 
-  it("replaces an app's earlier connection to the same collection rather than adding a second", async () => {
+  it("replaces an app's earlier connection rather than adding a second, whatever each reached", async () => {
     const first = await connect({ collectionId: secondCollectionId, scope: "read" });
-    const again = await connect({ collectionId: secondCollectionId, scope: "read_write" }, first.clientId);
+    // The same app allowed again, this time on the *other* collection: one connection, the new one
+    // (#2728 — before it, a connection per collection).
+    const again = await connect({ collectionId, scope: "read_write" }, first.clientId);
     const grants = await prisma.oAuthGrant.findMany({
-      where: { clientId: first.clientId, collectionId: secondCollectionId },
+      where: { clientId: first.clientId },
+      include: { collections: true },
     });
     assert.equal(grants.length, 1);
     assert.equal(grants[0].scope, "read_write");
+    assert.deepEqual(grants[0].collections.map((row) => row.collectionId), [collectionId]);
     assert.equal((await MCP_POST(mcp(first.tokens.access_token, PING))).status, 401);
     assert.equal((await MCP_POST(mcp(again.tokens.access_token, PING))).status, 200);
   });
@@ -636,11 +662,215 @@ describe("the OAuth connector flow", () => {
     assert.equal((await REVOKE(form("/api/oauth/revoke", {}))).status, 200);
   });
 
-  it("does not let one collector disconnect another's app", async () => {
+  it("does not let one collector disconnect another's app, or change what it reaches", async () => {
     const { tokens } = await connect({ collectionId, scope: "read" });
-    const [grant] = await listOAuthGrants(userId, collectionId);
-    await assert.rejects(revokeOAuthGrant(otherUserId, collectionId, grant.id), /access denied/);
-    await revokeOAuthGrant(otherUserId, otherUsersCollectionId, grant.id);
+    const [grant] = await listOAuthGrants(userId);
+    await revokeOAuthGrant(otherUserId, grant.id);
+    await assert.rejects(updateOAuthGrantAccess(otherUserId, grant.id, { all: true, collectionIds: [] }), /access denied/);
     assert.equal((await MCP_POST(mcp(tokens.access_token, PING))).status, 200);
+    assert.deepEqual(
+      (await verifyOAuthAccessToken(tokens.access_token))?.collections.map((collection) => collection.id),
+      [collectionId]
+    );
+  });
+
+  // ── Several collections, or all of them (#2728) ───────────────────────────
+
+  describe("a connection that reaches more than one collection", () => {
+    let callId = 100;
+
+    async function tool(token: string, name: string, args: Record<string, unknown> = {}) {
+      callId += 1;
+      const response = await MCP_POST(
+        mcp(token, { jsonrpc: "2.0", id: callId, method: "tools/call", params: { name, arguments: args } })
+      );
+      assert.equal(response.status, 200);
+      const { result } = (await response.json()) as ToolAnswer;
+      return { isError: result.isError === true, text: result.content[0].text };
+    }
+
+    async function reach(token: string) {
+      const answer = await tool(token, "list_collections");
+      assert.equal(answer.isError, false);
+      return JSON.parse(answer.text) as { access: string; total: number; collections: { id: string; name: string }[] };
+    }
+
+    async function currencyOf(token: string, collection?: string) {
+      const answer = await tool(token, "get_collection_vocabulary", collection ? { collection } : {});
+      assert.equal(answer.isError, false, answer.text);
+      return (JSON.parse(answer.text) as { baseCurrency: string }).baseCurrency;
+    }
+
+    it("reaches each selected collection by id or name, and asks which when none is named", async () => {
+      const { tokens } = await connect({
+        access: { all: false, collectionIds: [collectionId, secondCollectionId] },
+        scope: "read",
+      });
+
+      const listed = await reach(tokens.access_token);
+      assert.equal(listed.access, "selected");
+      assert.deepEqual(listed.collections, [
+        { id: collectionId, name: "oauth" },
+        { id: secondCollectionId, name: "oauth-second" },
+      ]);
+
+      // Each answers out of its own rows — the two were made with different currencies.
+      assert.equal(await currencyOf(tokens.access_token, collectionId), "PLN");
+      assert.equal(await currencyOf(tokens.access_token, "oauth-second"), "EUR");
+
+      // Named none: refused with the choices, and nothing guessed.
+      const unnamed = await tool(tokens.access_token, "get_collection_vocabulary");
+      assert.equal(unnamed.isError, true);
+      assert.match(unnamed.text, /reaches 2 collections/);
+      assert.match(unnamed.text, /"oauth"/);
+      assert.match(unnamed.text, /"oauth-second"/);
+
+      // Another account's collection is not reachable by naming it.
+      const theirs = await tool(tokens.access_token, "get_collection_vocabulary", {
+        collection: otherUsersCollectionId,
+      });
+      assert.equal(theirs.isError, true);
+      assert.match(theirs.text, /not a collection this connection reaches/);
+    });
+
+    it("refuses a selection of nothing, or one holding a collection that is not the account's", async () => {
+      const clientId = await register();
+      const refused = (access: { all: boolean; collectionIds: string[] }) =>
+        consent(clientId, pkce().challenge, { access, scope: "read" });
+      await assert.rejects(refused({ all: false, collectionIds: [] }), /at least one collection/);
+      await assert.rejects(
+        refused({ all: false, collectionIds: [collectionId, otherUsersCollectionId] }),
+        /your own collections/
+      );
+    });
+
+    it("reaches every collection of the account when allowed all, including one made afterwards", async () => {
+      const { tokens } = await connect({ access: { all: true, collectionIds: [] }, scope: "read" });
+      const before = await reach(tokens.access_token);
+      assert.equal(before.access, "all");
+      assert.deepEqual(before.collections.map((collection) => collection.id), [collectionId, secondCollectionId]);
+
+      const later = await prisma.collection.create({
+        data: { name: "oauth-later", slug: `oauth-later-${ts}`, baseCurrency: "CHF", ownerId: userId },
+      });
+      try {
+        const after = await reach(tokens.access_token);
+        assert.deepEqual(
+          after.collections.map((collection) => collection.id),
+          [collectionId, secondCollectionId, later.id]
+        );
+        assert.equal(await currencyOf(tokens.access_token, "oauth-later"), "CHF");
+        // Still never another account's.
+        assert.equal(
+          (await tool(tokens.access_token, "get_collection_vocabulary", { collection: otherUsersCollectionId }))
+            .isError,
+          true
+        );
+      } finally {
+        await prisma.collection.delete({ where: { id: later.id } });
+      }
+    });
+
+    it("lets a connection to all be made by an account with no collection yet", async () => {
+      const emptyUserId = `test-user-oauth-empty-${ts}`;
+      await prisma.user.create({
+        data: {
+          id: emptyUserId,
+          name: "No Collections",
+          email: `${emptyUserId}@example.com`,
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      try {
+        const clientId = await register();
+        const { verifier, challenge } = pkce();
+        const code = await consent(clientId, challenge, {
+          access: { all: true, collectionIds: [] },
+          scope: "read",
+          as: emptyUserId,
+        });
+        const tokens = await exchangeAuthorizationCode({ code, clientId, redirectUri: CALLBACK, codeVerifier: verifier });
+        assert.equal((await reach(tokens.accessToken)).total, 0);
+        const call = await tool(tokens.accessToken, "get_collection_vocabulary");
+        assert.equal(call.isError, true);
+        assert.match(call.text, /no collection yet/);
+      } finally {
+        await prisma.user.delete({ where: { id: emptyUserId } });
+      }
+    });
+
+    it("changes what a connected app reaches from Settings, without reconnecting", async () => {
+      await prisma.oAuthGrant.deleteMany({ where: { userId } });
+      const { tokens } = await connect({ collectionId, scope: "read" });
+      const [grant] = await listOAuthGrants(userId);
+      // One collection: nothing has to be named.
+      assert.equal(await currencyOf(tokens.access_token), "PLN");
+
+      // Moved to the other collection: the same token now answers out of that one.
+      await updateOAuthGrantAccess(userId, grant.id, { all: false, collectionIds: [secondCollectionId] });
+      assert.equal(await currencyOf(tokens.access_token), "EUR");
+      assert.deepEqual((await listOAuthGrants(userId))[0].collections, [
+        { id: secondCollectionId, name: "oauth-second" },
+      ]);
+
+      // Widened to all, and narrowed again.
+      await updateOAuthGrantAccess(userId, grant.id, { all: true, collectionIds: [] });
+      assert.equal((await reach(tokens.access_token)).access, "all");
+      const [widened] = await listOAuthGrants(userId);
+      assert.equal(widened.allCollections, true);
+      assert.deepEqual(widened.collections, []);
+      await updateOAuthGrantAccess(userId, grant.id, { all: false, collectionIds: [collectionId, secondCollectionId] });
+      assert.equal((await reach(tokens.access_token)).total, 2);
+
+      // A choice the account may not make changes nothing.
+      await assert.rejects(
+        updateOAuthGrantAccess(userId, grant.id, { all: false, collectionIds: [] }),
+        /at least one collection/
+      );
+      await assert.rejects(
+        updateOAuthGrantAccess(userId, grant.id, { all: false, collectionIds: [otherUsersCollectionId] }),
+        /your own collections/
+      );
+      assert.equal((await reach(tokens.access_token)).total, 2);
+    });
+
+    it("goes on working on what is left when one of its collections is deleted, and stops when none is", async () => {
+      const doomed = await prisma.collection.create({
+        data: { name: "oauth-doomed", slug: `oauth-doomed-${ts}`, baseCurrency: "SEK", ownerId: userId },
+      });
+      const both = await connect({
+        access: { all: false, collectionIds: [collectionId, doomed.id] },
+        scope: "read",
+      });
+      const only = await connect({ collectionId: doomed.id, scope: "read" });
+      await prisma.collection.delete({ where: { id: doomed.id } });
+
+      assert.deepEqual((await reach(both.tokens.access_token)).collections.map((c) => c.id), [collectionId]);
+      assert.equal(await currencyOf(both.tokens.access_token), "PLN");
+
+      assert.equal((await MCP_POST(mcp(only.tokens.access_token, PING))).status, 401);
+      const refresh = await tokenCall({
+        grant_type: "refresh_token",
+        refresh_token: only.tokens.refresh_token,
+        client_id: only.clientId,
+      });
+      assert.equal(refresh.body.error, "invalid_grant");
+    });
+
+    it("keeps a connection made before #2728 working on its one collection", async () => {
+      // What the migration leaves of a grant that existed: the old column still naming its
+      // collection, and one row in the join table copied from it.
+      const { tokens } = await connect({ collectionId: secondCollectionId, scope: "read_write" });
+      await prisma.oAuthGrant.updateMany({
+        where: { accessTokenHash: createHash("sha256").update(tokens.access_token).digest("hex") },
+        data: { collectionId: secondCollectionId },
+      });
+      assert.equal(await currencyOf(tokens.access_token), "EUR");
+      assert.deepEqual((await reach(tokens.access_token)).collections, [
+        { id: secondCollectionId, name: "oauth-second" },
+      ]);
+    });
   });
 });

@@ -11,7 +11,9 @@ import {
   OAUTH_UNUSED_CLIENT_TTL_MS,
   OAuthTokenError,
   classifyRefresh,
+  checkCollectionAccess,
   verifyPkce,
+  type CollectionAccess,
   type IssuedTokens,
   type KnownOAuthClient,
   type OAuthClientRegistration,
@@ -88,29 +90,51 @@ export interface AuthorizationGrantInput {
   readonly clientId: string;
   /** The signed-in account allowing the request. */
   readonly userId: string;
-  readonly collectionId: string;
+  /** Every collection of the account, or the chosen ones (#2728) — as the form sent it. */
+  readonly access: { readonly all: unknown; readonly collectionIds: unknown };
   readonly scope: AssistantTokenScope;
   readonly redirectUri: string;
   readonly codeChallenge: string;
 }
 
+/** A choice of collections the account may not make. Its message is written for the collector. */
+export class CollectionAccessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CollectionAccessError";
+  }
+}
+
+async function ownedCollectionIds(userId: string): Promise<string[]> {
+  const rows = await prisma.collection.findMany({ where: { ownerId: userId }, select: { id: true } });
+  return rows.map((row) => row.id);
+}
+
+/**
+ * Read a choice of collections against the account's own, or throw `CollectionAccessError`.
+ *
+ * Checked here, on the server, from the session the caller resolved, because the ids arrive from a
+ * form. The rule itself is `checkCollectionAccess`'s.
+ */
+async function assertCollectionAccess(
+  userId: string,
+  choice: { readonly all: unknown; readonly collectionIds: unknown }
+): Promise<CollectionAccess> {
+  const checked = checkCollectionAccess(choice, await ownedCollectionIds(userId));
+  if (!checked.ok) throw new CollectionAccessError(checked.message);
+  return checked.access;
+}
+
 /**
  * Record what the collector allowed and return the code that stands for it.
  *
- * The collection must be the allowing account's own — checked here, on the server, from the session
- * the caller resolved, because the collection id arrives from a form.
+ * A selection must be of the allowing account's own collections (`assertCollectionAccess`).
  */
 export async function createAuthorizationCode(
   input: AuthorizationGrantInput,
   now: Date = new Date()
 ): Promise<string> {
-  const collection = await prisma.collection.findUnique({
-    where: { id: input.collectionId },
-    select: { ownerId: true },
-  });
-  if (!collection || collection.ownerId !== input.userId) {
-    throw new Error("Collection not found or access denied.");
-  }
+  const access = await assertCollectionAccess(input.userId, input.access);
 
   const code = mint(OAUTH_CODE_PREFIX);
   await prisma.$transaction([
@@ -121,7 +145,8 @@ export async function createAuthorizationCode(
         codeHash: hash(code),
         clientId: input.clientId,
         userId: input.userId,
-        collectionId: input.collectionId,
+        allCollections: access.all,
+        collectionIds: access.all ? [] : [...access.collectionIds],
         scope: input.scope,
         redirectUri: input.redirectUri,
         codeChallenge: input.codeChallenge,
@@ -156,7 +181,6 @@ export async function exchangeAuthorizationCode(
 
   const row = await prisma.oAuthAuthorizationCode.findUnique({
     where: { codeHash: hash(input.code) },
-    include: { collection: { select: { ownerId: true } } },
   });
   if (!row) throw refuse();
   if (row.usedAt) {
@@ -167,8 +191,19 @@ export async function exchangeAuthorizationCode(
   if (row.clientId !== input.clientId) throw refuse();
   if (row.redirectUri !== input.redirectUri) throw refuse();
   if (!verifyPkce(input.codeVerifier, row.codeChallenge)) throw refuse();
-  // The collection changed hands, or the account lost it, between the consent and the exchange.
-  if (row.collection.ownerId !== row.userId) throw refuse();
+  // A chosen collection changed hands, or was deleted, between the consent and the exchange: the
+  // grant is made for the ones still the account's, and not at all when none is. `collectionId` is
+  // what a code minted before #2728 carried.
+  const chosen = row.collectionIds.length > 0 ? row.collectionIds : row.collectionId ? [row.collectionId] : [];
+  const collectionIds = row.allCollections
+    ? []
+    : (
+        await prisma.collection.findMany({
+          where: { id: { in: chosen }, ownerId: row.userId },
+          select: { id: true },
+        })
+      ).map((collection) => collection.id);
+  if (!row.allCollections && collectionIds.length === 0) throw refuse();
 
   // The claim. Two requests racing with the same code both pass every check above; only one of them
   // changes this row.
@@ -183,16 +218,16 @@ export async function exchangeAuthorizationCode(
   const scope = assistantTokenScopeOrRead(row.scope);
 
   const [, grant] = await prisma.$transaction([
-    // One connection per app, account and collection: allowing the same app again replaces what it
-    // had rather than leaving a second row the collector would have to tell apart in Settings.
-    prisma.oAuthGrant.deleteMany({
-      where: { clientId: row.clientId, userId: row.userId, collectionId: row.collectionId },
-    }),
+    // One connection per app and account: allowing the same app again replaces what it had —
+    // collections and scope both — rather than leaving a second row the collector would have to
+    // tell apart in Settings (#2728; before it, one per app, account and collection).
+    prisma.oAuthGrant.deleteMany({ where: { clientId: row.clientId, userId: row.userId } }),
     prisma.oAuthGrant.create({
       data: {
         clientId: row.clientId,
         userId: row.userId,
-        collectionId: row.collectionId,
+        allCollections: row.allCollections,
+        collections: { create: collectionIds.map((collectionId) => ({ collectionId })) },
         scope,
         accessTokenHash: hash(accessToken),
         accessTokenExpiresAt: accessTokenExpiry(now),
@@ -244,11 +279,12 @@ export async function refreshOAuthTokens(
 
   const grant = await prisma.oAuthGrant.findFirst({
     where: { OR: [{ refreshTokenHash: presented }, { previousRefreshTokenHash: presented }] },
-    include: { collection: { select: { ownerId: true } } },
   });
   if (!grant || grant.clientId !== input.clientId) throw refuse();
 
-  if (grant.collection.ownerId !== grant.userId) {
+  // A grant for chosen collections that reaches none of them any more — each deleted, or no longer
+  // the account's — is over, as a grant whose one collection had gone was before #2728.
+  if (!grant.allCollections && (await reachableCollections(grant)).length === 0) {
     await prisma.oAuthGrant.deleteMany({ where: { id: grant.id } });
     throw refuse();
   }
@@ -289,19 +325,51 @@ export async function refreshOAuthTokens(
 
 // ── Verification ─────────────────────────────────────────────────────────────
 
-/** What a verified access token authorises — the shape an Assistant token verifies to. */
+/** A collection a credential reaches, as far as a caller needs to know it to name it. */
+export interface ReachableCollection {
+  readonly id: string;
+  readonly slug: string;
+  readonly name: string;
+}
+
+/** What a verified access token authorises. */
 export interface VerifiedOAuthAccessToken {
   readonly ownerId: string;
-  readonly collectionId: string;
   readonly scope: AssistantTokenScope;
+  /** Whether the grant is for every collection of the account, including ones made later. */
+  readonly allCollections: boolean;
+  /** The collections it reaches at this moment, oldest first. */
+  readonly collections: readonly ReachableCollection[];
+}
+
+const REACHABLE_SELECT = { id: true, slug: true, name: true } as const;
+
+/**
+ * The collections a grant reaches now: every collection its account owns, or the chosen ones **that
+ * the account still owns**. Read on every call rather than trusted from the day the consent was
+ * given — which is also what makes a collection made afterwards reachable by a grant for all, and a
+ * change in Settings take effect on the app's next call.
+ */
+async function reachableCollections(grant: {
+  id: string;
+  userId: string;
+  allCollections: boolean;
+}): Promise<ReachableCollection[]> {
+  return prisma.collection.findMany({
+    where: grant.allCollections
+      ? { ownerId: grant.userId }
+      : { ownerId: grant.userId, oauthGrantCollections: { some: { grantId: grant.id } } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: REACHABLE_SELECT,
+  });
 }
 
 /**
  * Verify an access token presented at `/api/mcp`. `null` for anything unknown, expired or revoked.
  *
- * **A call acts as the account that allowed it**, and only while that account still owns the
- * collection: the grant names both, and the two are compared on every call rather than trusted from
- * the day the consent was given.
+ * **A call acts as the account that allowed it**, on the collections that account still owns among
+ * those it allowed. A grant for chosen collections that reaches none of them any more verifies to
+ * nothing; a grant for all collections stays good on an account that has none yet.
  */
 export async function verifyOAuthAccessToken(
   rawToken: string,
@@ -315,19 +383,26 @@ export async function verifyOAuthAccessToken(
       id: true,
       userId: true,
       scope: true,
+      allCollections: true,
       accessTokenExpiresAt: true,
-      collection: { select: { id: true, ownerId: true } },
     },
   });
   if (!grant) return null;
   if (grant.accessTokenExpiresAt.getTime() <= now.getTime()) return null;
-  if (grant.collection.ownerId !== grant.userId) return null;
+  const collections = await reachableCollections(grant);
+  if (!grant.allCollections && collections.length === 0) return null;
   await prisma.oAuthGrant.updateMany({ where: { id: grant.id }, data: { lastUsedAt: now } });
   return {
     ownerId: grant.userId,
-    collectionId: grant.collection.id,
     scope: assistantTokenScopeOrRead(grant.scope),
+    allCollections: grant.allCollections,
+    collections,
   };
+}
+
+/** The one collection an Assistant token is pinned to, in the shape a grant's are read in. */
+export async function findReachableCollection(collectionId: string): Promise<ReachableCollection | null> {
+  return prisma.collection.findUnique({ where: { id: collectionId }, select: REACHABLE_SELECT });
 }
 
 // ── Revocation ───────────────────────────────────────────────────────────────
@@ -356,52 +431,75 @@ export interface OAuthGrantData {
   id: string;
   clientName: string;
   scope: AssistantTokenScope;
+  /** Every collection of the account, including ones made later. */
+  allCollections: boolean;
+  /** The chosen collections when it is not for all — only those the account still owns. */
+  collections: { id: string; name: string }[];
   createdAt: string;
   lastUsedAt: string | null;
 }
 
-async function assertCollectionOwner(ownerId: string, collectionId: string): Promise<void> {
-  const collection = await prisma.collection.findUnique({
-    where: { id: collectionId },
-    select: { ownerId: true },
-  });
-  if (!collection || collection.ownerId !== ownerId) {
-    throw new Error("Collection not found or access denied.");
-  }
-}
-
-/** The apps connected to a collection the caller owns, newest first. */
-export async function listOAuthGrants(
-  ownerId: string,
-  collectionId: string
-): Promise<OAuthGrantData[]> {
-  await assertCollectionOwner(ownerId, collectionId);
+/**
+ * The apps connected to an account, newest first, each with what it reaches.
+ *
+ * **The account's, not one collection's** (#2728): a connection may reach several collections or all
+ * of them, so Settings → Assistant & API shows the same list in every collection, and it is where a
+ * connection that reaches *another* collection is widened to this one.
+ */
+export async function listOAuthGrants(userId: string): Promise<OAuthGrantData[]> {
   const rows = await prisma.oAuthGrant.findMany({
-    where: { collectionId },
-    orderBy: { createdAt: "desc" },
+    where: { userId },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     select: {
       id: true,
       scope: true,
+      allCollections: true,
       createdAt: true,
       lastUsedAt: true,
       client: { select: { name: true } },
+      collections: {
+        where: { collection: { ownerId: userId } },
+        orderBy: { collection: { createdAt: "asc" } },
+        select: { collection: { select: { id: true, name: true } } },
+      },
     },
   });
   return rows.map((row) => ({
     id: row.id,
     clientName: row.client.name,
     scope: assistantTokenScopeOrRead(row.scope),
+    allCollections: row.allCollections,
+    collections: row.allCollections ? [] : row.collections.map((entry) => entry.collection),
     createdAt: row.createdAt.toISOString(),
     lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
   }));
 }
 
-/** Disconnect an app from a collection the caller owns. Its tokens stop working at once. */
-export async function revokeOAuthGrant(
-  ownerId: string,
-  collectionId: string,
-  grantId: string
+/**
+ * Change which collections a connected app reaches (#2728). The app is not told and does not
+ * reconnect: what its token reaches is read on every call, so the next one sees the change.
+ *
+ * Throws `CollectionAccessError` for a choice the account may not make, and a plain error when the
+ * grant is not this account's.
+ */
+export async function updateOAuthGrantAccess(
+  userId: string,
+  grantId: string,
+  choice: { readonly all: unknown; readonly collectionIds: unknown }
 ): Promise<void> {
-  await assertCollectionOwner(ownerId, collectionId);
-  await prisma.oAuthGrant.deleteMany({ where: { id: grantId, collectionId } });
+  const grant = await prisma.oAuthGrant.findUnique({ where: { id: grantId }, select: { userId: true } });
+  if (!grant || grant.userId !== userId) throw new Error("Connected app not found or access denied.");
+  const access = await assertCollectionAccess(userId, choice);
+  await prisma.$transaction([
+    prisma.oAuthGrant.update({ where: { id: grantId }, data: { allCollections: access.all } }),
+    prisma.oAuthGrantCollection.deleteMany({ where: { grantId } }),
+    prisma.oAuthGrantCollection.createMany({
+      data: access.all ? [] : access.collectionIds.map((collectionId) => ({ grantId, collectionId })),
+    }),
+  ]);
+}
+
+/** Disconnect an app from the account. Its tokens stop working at once. */
+export async function revokeOAuthGrant(userId: string, grantId: string): Promise<void> {
+  await prisma.oAuthGrant.deleteMany({ where: { id: grantId, userId } });
 }

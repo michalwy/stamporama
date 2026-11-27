@@ -103,6 +103,12 @@ export interface Operation {
    * refuse a `read` token, and the OpenAPI document says so to the agent.
    */
   readonly writes: boolean;
+  /**
+   * Set on an operation that is about the **instance** and not about a collection — the
+   * administrator's (#2720). `/api/mcp` gives such a tool no `collection` argument and calls it
+   * without choosing one (#2728), so its handler must not read `context.collectionId`.
+   */
+  readonly instance?: true;
   readonly parameters: readonly ParameterSpec[];
   readonly result: OperationResult;
   readonly handler: (context: OperationContext, params: ParsedParams) => Promise<unknown>;

@@ -19,11 +19,12 @@ import {
 // `pnpm test:unit` can hold. `oauth-server.ts` holds the rows and nothing that decides; the routes
 // hold the request and the response.
 //
-// **What a grant is.** A signed-in collector allows one client to work on **one collection** with
-// **one scope** — the same pair an Assistant token carries (#253, #707), so the agent API behind the
-// endpoint is authorised exactly as before: the collection is derived from the credential, never
-// named by the caller, and `read` / `read_write` meets the operation's `writes` in the one place it
-// always did.
+// **What a grant is.** A signed-in collector allows one client to work as their account, with **one
+// scope** — the vocabulary an Assistant token carries (#707) — on **the collections they chose**:
+// every collection of the account, including ones made later, or a selection of them (#2728), as an
+// app is installed on all repositories or on selected ones. `read` / `read_write` meets the
+// operation's `writes` in the one place it always did; which collection a call acts on is the
+// caller's to say only among those the grant reaches (`agent-api/mcp.ts`).
 
 /** Where the protected resource lives. The only resource this server issues tokens for. */
 export const MCP_RESOURCE_PATH = "/api/mcp";
@@ -311,6 +312,46 @@ export function clientRegistrationResponse(client: {
     response_types: ["code"],
     token_endpoint_auth_method: "none",
   };
+}
+
+// ── Which collections a grant reaches (#2728) ────────────────────────────────
+
+/**
+ * What the collector allowed an app to reach: every collection of the account — the ones it has and
+ * the ones it makes later — or the chosen ones.
+ */
+export type CollectionAccess =
+  | { readonly all: true }
+  | { readonly all: false; readonly collectionIds: readonly string[] };
+
+export type CollectionAccessCheck =
+  | { readonly ok: true; readonly access: CollectionAccess }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Read the collector's choice of collections as it arrives from a form, against the collections the
+ * account owns.
+ *
+ * *All* needs nothing else and is accepted from an account with no collection yet — it is a
+ * statement about the future as much as the present. A selection must name at least one collection
+ * and only the account's own: a choice of nothing is not a connection, and an id that is not theirs
+ * is refused whole rather than dropped, because a screen that sent one is not the screen that was
+ * drawn.
+ */
+export function checkCollectionAccess(
+  choice: { readonly all: unknown; readonly collectionIds: unknown },
+  ownedCollectionIds: readonly string[]
+): CollectionAccessCheck {
+  if (choice.all === true) return { ok: true, access: { all: true } };
+  const ids = choice.collectionIds;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { ok: false, message: "Choose at least one collection, or all of them." };
+  }
+  const owned = new Set(ownedCollectionIds);
+  if (!ids.every((id): id is string => typeof id === "string" && owned.has(id))) {
+    return { ok: false, message: "Choose among your own collections." };
+  }
+  return { ok: true, access: { all: false, collectionIds: [...new Set(ids)] } };
 }
 
 // ── PKCE (RFC 7636) ──────────────────────────────────────────────────────────
