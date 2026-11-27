@@ -4,12 +4,19 @@
 registration switch. Read this before touching `src/lib/admin*.ts`, `src/app/admin/` or
 `Storage.usage` / `Storage.deletePrefix`.
 
-- **An administrator is `user.isAdmin`, and there are exactly two ways to become one.** The migration
-  (`20261127190000_admin_panel`) gave the flag to the **oldest account** of an existing instance; the
-  **first account of an instance that has no administrator** gets it when it is created
-  (`claimFirstAdmin`, one `UPDATE … WHERE NOT EXISTS`, called from Better Auth's
-  `databaseHooks.user.create.after` in `auth.ts`). The panel does not grant or revoke the flag; a
-  self-hoster who needs to move it does so in SQL. Better Auth neither reads nor writes the column.
+- **An administrator is an account whose email is listed in `ADMIN_EMAILS`** (#2729, the owner,
+  2026-11-27: "W darkroom albo project 101 wskazujemy chyba w env adres email admina" — named in the
+  configuration, as in his other projects). Comma-separated, each entry trimmed and lower-cased
+  (`parseAdminEmails` / `isAdminEmail` in `admin-rules.ts`, unit-tested); the account's email is
+  compared the same way. **Unset or empty is nobody.** Being the first or the oldest account means
+  nothing: first-account auto-admin (`claimFirstAdmin`, #2719) is gone. `emailVerified` is not
+  required — the instance never verifies an address, so every account's is `false`; emails are
+  unique, and registration is closed by default (#2713), so the listed address belongs to whoever
+  holds that account. `isAdmin()` reads the variable on every call, nothing is cached. The panel
+  does not grant or revoke administrators. **`user.isAdmin` is no longer read or written**; the
+  column stays only because dropping it would be a destructive migration. On the owner's Pi the
+  variable comes from the `prod` environment with each deploy
+  ([`platform-deployment.md`](platform-deployment.md)).
 - **Authorization is in `src/lib/`, not in the page.** Every function in `admin.ts` that reads or
   changes anything takes the acting account's id and calls `assertAdmin` first. The page answers a
   non-administrator with `notFound()` and the server actions (`actions/admin.ts`) resolve their own
@@ -45,8 +52,8 @@ registration switch. Read this before touching `src/lib/admin*.ts`, `src/app/adm
   to open it.
 - **The registration switch** is `instance_settings.registrationOpen` (one row, id `instance`): null
   until used, and then it overrides `STAMPORAMA_ALLOW_REGISTRATION` → [`platform-auth.md`](platform-auth.md).
-- **In the integration suite, two facts are instance-wide** and the shared database (#2199) makes
-  them everybody's: the one `instance_settings` row, which only `admin.test.ts` writes and removes,
-  and "no administrator exists", which that file arranges inside a `RepeatableRead` transaction it
-  rolls back. A new test that needs an administrator creates its own account with `isAdmin: true`.
+- **In the integration suite, one fact is instance-wide** and the shared database (#2199) makes it
+  everybody's: the one `instance_settings` row, which only `admin.test.ts` writes and removes.
+  Administrators are per process: a test file that needs one sets `process.env.ADMIN_EMAILS` to its
+  own account's email before it asks (each file runs in its own process).
 - **The panel also lists the feedback reports** (#2720) under the accounts — `FeedbackSection`, the newest 200 with status chips, a report opening in a two-column dialog with its context and the three fields an administrator sets. The rules are in [`feedback.md`](feedback.md).

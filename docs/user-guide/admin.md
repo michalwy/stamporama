@@ -5,9 +5,12 @@ account, what they keep, how much storage it takes, and whether new accounts can
 
 ## Who is an administrator
 
-- On an instance that already had accounts when this feature arrived, the **oldest account** is the
-  administrator.
-- On a fresh installation, the **first account created** is.
+The administrators are named by whoever runs the instance: an account is an administrator when its
+**email address is listed in `ADMIN_EMAILS`** in the instance's `.env` — several addresses separated
+by commas, in any letter case. With the variable unset, nobody is an administrator. Being the first
+or the oldest account makes no difference. A changed list takes effect when the app is restarted; on
+the owner's Raspberry Pi it is set in GitHub and arrives with the next release
+([deployment runbook](../deployment/pi-deploy.md#administrators)).
 
 An administrator sees an **Admin** link at the top of the *Your Collections* page. Nobody else can
 open `/admin` — for them the address does not exist.

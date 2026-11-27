@@ -4,7 +4,6 @@ import { prisma } from "./db";
 import { SESSION_OPTIONS } from "./session-lifetime";
 import { signUpGuard } from "./registration";
 import { isRegistrationOpen } from "./registration-server";
-import { claimFirstAdmin } from "./admin-access";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -19,15 +18,4 @@ export const auth = betterAuth({
   session: SESSION_OPTIONS,
   // New accounts only while registration is open (#2713): refused server-side, whatever the UI shows.
   hooks: { before: signUpGuard(isRegistrationOpen) },
-  // The first account of an instance that has no administrator becomes one (#2719) — the fresh
-  // installation's counterpart of the migration that gave the flag to the oldest existing account.
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (user) => {
-          await claimFirstAdmin(user.id);
-        },
-      },
-    },
-  },
 });

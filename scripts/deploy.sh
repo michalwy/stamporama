@@ -24,7 +24,8 @@
 # **The installation is the configuration.** `.env` is read, never rebuilt. The keys this script
 # writes are `TAG`, after a container came up healthy, so a later hand-run `docker compose up -d`
 # starts the same image instead of whatever `latest` is by then; and the feedback notification's
-# two (`FEEDBACK_NOTIFY_URL`, `FEEDBACK_NOTIFY_TOKEN`, #2721), when the workflow hands both over.
+# two (`FEEDBACK_NOTIFY_URL`, `FEEDBACK_NOTIFY_TOKEN`, #2721), when the workflow hands both over;
+# and the administrators' addresses (`ADMIN_EMAILS`, #2729), when the workflow hands them over.
 #
 # **The output is public.** This repository is public, and so are its Actions logs. Nothing here
 # prints `.env`, the database address, a path on the Pi or the application's own logs; a failure
@@ -45,6 +46,8 @@
 #   STAMPORAMA_HEALTH_POLL       seconds between checks       (default 5)
 #   FEEDBACK_NOTIFY_URL          the routine trigger a stored feedback report fires, and
 #   FEEDBACK_NOTIFY_TOKEN        its token (#2721): written to .env when both are set, never printed
+#   ADMIN_EMAILS                 the administrators' email addresses, comma-separated (#2729):
+#                                written to .env when set, never printed
 
 set -euo pipefail
 umask 077
@@ -247,11 +250,36 @@ write_notify_settings() {
   info "The feedback notification's settings were updated in .env."
 }
 
+# --- 1c. The administrators (#2729) -------------------------------------------------------------
+
+# Who may open /admin: the accounts whose email is in ADMIN_EMAILS. Kept in GitHub (the `prod`
+# environment's variable) like the feedback notification's address, and handled the same way: when
+# given and different from what .env holds, it is written there in step 4 and the container is
+# recreated to read it; when missing, .env is left as it is. Whitespace is dropped first (the app
+# trims each entry anyway), and the rest is held to the characters an address list has. Not
+# printed: the addresses are personal data and the log is public.
+ADMIN_LIST="${ADMIN_EMAILS:-}"
+ADMIN_LIST="${ADMIN_LIST//[[:space:]]/}"
+ADMIN_CHANGED=false
+if [ -n "$ADMIN_LIST" ]; then
+  if ! [[ "$ADMIN_LIST" =~ ^[A-Za-z0-9._%+@,-]+$ ]]; then
+    warn "ADMIN_EMAILS has characters an email address list does not have - the administrators were left as they are."
+  elif [ "$(get_env ADMIN_EMAILS)" != "$ADMIN_LIST" ]; then
+    ADMIN_CHANGED=true
+  fi
+fi
+
+write_admin_settings() {
+  $ADMIN_CHANGED || return 0
+  write_env ADMIN_EMAILS "$ADMIN_LIST"
+  info "The administrators' addresses were updated in .env."
+}
+
 # --- 2. No-downgrade guard ----------------------------------------------------------------------
 
 # "Already running" holds only while there is nothing new to hand the container: changed settings
 # need it recreated, so such a run goes on through the dump and `docker compose up -d`.
-if [ -n "$PREV_IMAGE_ID" ] && [ "$PREV_IMAGE_ID" = "$NEW_IMAGE_ID" ] && $PREV_RUNNING && ! $NOTIFY_CHANGED &&
+if [ -n "$PREV_IMAGE_ID" ] && [ "$PREV_IMAGE_ID" = "$NEW_IMAGE_ID" ] && $PREV_RUNNING && ! $NOTIFY_CHANGED && ! $ADMIN_CHANGED &&
   { [ -z "$PREV_HEALTH" ] || [ "$PREV_HEALTH" = "healthy" ]; }; then
   # Pin it in .env all the same, so the installation that Watchtower left on `latest` says what it runs.
   [ "$(get_env TAG)" = "$NEW_REF" ] || write_tag "$NEW_REF"
@@ -386,6 +414,7 @@ start() { # <TAG value> <image id> -> the app container, if it runs that image, 
 }
 
 write_notify_settings
+write_admin_settings
 info "Starting ${VERSION} (compose project ${PROJECT})"
 NEW_CONTAINER="$(start "$NEW_REF" "$NEW_IMAGE_ID")" || NEW_CONTAINER=""
 

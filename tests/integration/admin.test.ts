@@ -23,7 +23,6 @@ import {
   isAdmin,
   setRegistrationOpen,
 } from "../../src/lib/admin";
-import { claimFirstAdmin } from "../../src/lib/admin-access";
 import {
   getRegistrationSwitch,
   INSTANCE_SETTINGS_ID,
@@ -34,20 +33,24 @@ import {
 // it measures, and that deleting a collection or an account takes the rows **and** the bytes.
 //
 // The database is shared with every file running beside this one (#2199), so every assertion is
-// about this file's own accounts and collections. Two things here are instance-wide by nature — the
-// one `InstanceSettings` row and "is there an administrator at all" — and each is handled where it
-// is used.
+// about this file's own accounts and collections. The one `InstanceSettings` row is instance-wide
+// by nature and is handled where it is used. Administrators are named by `ADMIN_EMAILS` (#2729),
+// which is this process's own.
 
 const RUN = `admin-${Date.now()}`;
 
-async function createUser(suffix: string, admin = false) {
+const emailOf = (suffix: string) => `test-${RUN}-${suffix}@example.com`;
+// The administrator of this file, named the way an operator names one: by email, here in another
+// letter case and with spaces around it, beside an address no account has.
+process.env.ADMIN_EMAILS = ` nobody-${RUN}@example.com ,  ${emailOf("admin").toUpperCase()} `;
+
+async function createUser(suffix: string) {
   return prisma.user.create({
     data: {
       id: `test-user-${RUN}-${suffix}`,
       name: `Test ${suffix}`,
-      email: `test-${RUN}-${suffix}@example.com`,
-      emailVerified: true,
-      isAdmin: admin,
+      email: emailOf(suffix),
+      emailVerified: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -71,7 +74,7 @@ describe("the administrator's panel", () => {
   let collectorId: string;
 
   before(async () => {
-    adminId = (await createUser("admin", true)).id;
+    adminId = (await createUser("admin")).id;
     collectorId = (await createUser("collector")).id;
   });
 
@@ -83,10 +86,28 @@ describe("the administrator's panel", () => {
   });
 
   describe("who is an administrator", () => {
-    it("reads the flag, and an unknown account is not one", async () => {
+    it("is an account whose email is in ADMIN_EMAILS, and an unknown account is not one", async () => {
       assert.equal(await isAdmin(adminId), true);
       assert.equal(await isAdmin(collectorId), false);
       assert.equal(await isAdmin("no-such-account"), false);
+    });
+
+    it("is nobody while ADMIN_EMAILS is unset or empty, whatever the old flag says", async () => {
+      const saved = process.env.ADMIN_EMAILS;
+      // The column #2719 added is no longer read: setting it changes nothing.
+      await prisma.user.update({ where: { id: collectorId }, data: { isAdmin: true } });
+      try {
+        assert.equal(await isAdmin(collectorId), false);
+        delete process.env.ADMIN_EMAILS;
+        assert.equal(await isAdmin(adminId), false);
+        await assert.rejects(getAdminOverview(adminId), refused("forbidden"));
+        process.env.ADMIN_EMAILS = " , ";
+        assert.equal(await isAdmin(adminId), false);
+      } finally {
+        process.env.ADMIN_EMAILS = saved;
+        await prisma.user.update({ where: { id: collectorId }, data: { isAdmin: false } });
+      }
+      assert.equal(await isAdmin(adminId), true);
     });
 
     it("refuses every panel function to anyone else", async () => {
@@ -101,34 +122,9 @@ describe("the administrator's panel", () => {
       assert.ok(await prisma.user.findUnique({ where: { id: adminId } }));
     });
 
-    it("does not promote a new account while an administrator exists", async () => {
+    it("does not make a new account an administrator, first or not", async () => {
       const late = await createUser("late");
-      assert.equal(await claimFirstAdmin(late.id), false);
       assert.equal(await isAdmin(late.id), false);
-    });
-
-    it("promotes the first account of an instance that has none", async () => {
-      // "No administrator anywhere" is a fact about the whole shared database, so it is arranged
-      // inside a transaction that is rolled back, on a snapshot other files' commits cannot enter.
-      const first = await createUser("first");
-      const second = await createUser("second");
-      class Rollback extends Error {}
-      const seen: boolean[] = [];
-      await assert.rejects(
-        prisma.$transaction(
-          async (tx) => {
-            await tx.$executeRaw`UPDATE "user" SET "isAdmin" = false WHERE "isAdmin"`;
-            seen.push(await claimFirstAdmin(first.id, tx));
-            seen.push(await claimFirstAdmin(second.id, tx));
-            throw new Rollback();
-          },
-          { isolationLevel: "RepeatableRead" }
-        ),
-        Rollback
-      );
-      assert.deepEqual(seen, [true, false]);
-      assert.equal(await isAdmin(first.id), false, "rolled back");
-      assert.equal(await isAdmin(adminId), true, "rolled back");
     });
   });
 

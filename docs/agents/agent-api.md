@@ -3637,7 +3637,7 @@ reports sent with *Report a problem* — while everything in `OPERATIONS` is abo
 credential is pinned to, and `OPERATIONS` is the published contract of `/api/v1` that every
 token-holder's OpenAPI document lists. So the three are offered on **`/api/mcp` only**, through
 `operationsForMcpCaller`, and only when the credential's account is an administrator
-(`user.isAdmin`, [`admin.md`](admin.md)). For anyone else they do not exist: absent from
+(its email is in `ADMIN_EMAILS`, [`admin.md`](admin.md)). For anyone else they do not exist: absent from
 `tools/list`, and a `tools/call` by name answers exactly as a tool that was never there. They are
 `Operation`s like any other, so the tool schema, the parameter parsing, the list envelope and the
 scope check are the shared ones — a `read` credential is refused on `update_feedback`. Their handlers

@@ -74,6 +74,10 @@ describe("deploy workflow", () => {
     );
   });
 
+  it("hands the administrators' addresses over as a plain variable (#2729)", () => {
+    assert.ok(has(/^ {10}ADMIN_EMAILS: \$\{\{ vars\.ADMIN_EMAILS \}\}$/));
+  });
+
   it("puts no expression inside a run: script, where a version string could become shell", () => {
     const start = lines.findIndex((line) => /^\s*run: \|$/.test(line));
     assert.notEqual(start, -1);
