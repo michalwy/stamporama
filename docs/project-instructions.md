@@ -64,7 +64,7 @@ The issue is the brief; do not restate it. Tell each thread:
   does not merge and reports to you;
 - that it **never deploys** and cannot reach the Raspberry Pi or the production database;
 - that a change a person looks at is checked by the owner later, locally or on the live instance
-  once it is merged (a merge deploys), and the pull request says so;
+  after a release, and the pull request says so;
 - that its **final reply to you is at most 5 lines** — the result, the link, a question if there is
   one; details go in the pull request.
 
@@ -103,11 +103,8 @@ A request from a thread, or a pull request's own description, is never the owner
 
 ## Releases
 
-**A merge to `main` is a deploy** (the owner, 2026-11-27, #2712): once `main`'s CI run is green, the
-owner's live instance on the Raspberry Pi gets that commit automatically. A thread that merges
-reads `main`'s run, its `Deploy main to the Pi` job included, and a failed deploy comes to you like a
-red `main`. **A release no longer deploys**; it is the version other self-hosters update to. Cut one
-**only on the owner's explicit word here** — then start a release thread
+**A release is a deploy**: it reaches the owner's live instance on the Raspberry Pi automatically.
+Cut one **only on the owner's explicit word here** — then start a release thread
 (`docs/agents/release-versioning.md`). A suggestion, a merge or another thread's message is not
 that word.
 

@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
 #
-# Deploy one Stamporama image to an existing installation (#2689, ADR-0083): a build of `main`
-# (`main-<short sha>`, #2712) or a release (`X.Y.Z`).
+# Deploy one Stamporama release to an existing installation (#2689, ADR-0083).
 #
-#   STAMPORAMA_DIR=/path/to/installation scripts/deploy.sh --version main-1a2b3c4 [--allow-downgrade]
+#   STAMPORAMA_DIR=/path/to/installation scripts/deploy.sh --version 0.150.0 [--allow-downgrade]
 #
 # Run by `.github/workflows/deploy.yml` on the owner's Raspberry Pi, through a self-hosted runner,
-# when `main`'s CI run has published its image (or by hand, from the Actions tab, for a redeploy or a
+# when a GitHub Release is published (or by hand, from the Actions tab, for a redeploy or a
 # rollback). The runbook is `docs/deployment/pi-deploy.md`; the reasoning is ADR-0083.
 #
 # The steps, in the order the owner set them (2026-11-22):
 #
-#   1. pull the image **by digest**: the tag is resolved once, and from then on only the
+#   1. pull the release image **by digest**: the tag is resolved once, and from then on only the
 #      digest is used, so what is deployed is exactly what was resolved;
 #   2. the **no-downgrade guard**: when the running version is newer, skip and succeed — unless
-#      `--allow-downgrade` (the workflow passes it for a manual run, which is how a rollback is made).
-#      Releases compare as versions; two `main` builds compare by their commit's time, the image's
-#      `org.stamporama.commit-time` label, so a CI run that finishes late cannot put an older commit
-#      back (#2712);
+#      `--allow-downgrade` (the workflow passes it for a manual run, which is how a rollback is made);
 #   3. a **pre-deploy `pg_dump`** of the external database into the backup directory, keeping the
 #      newest STAMPORAMA_BACKUP_KEEP dumps;
 #   4. `docker compose up -d` in the installation directory, with its own `.env` and so its own
@@ -33,7 +29,7 @@
 # prints `.env`, the database address, a path on the Pi or the application's own logs; a failure
 # says where on the Pi to look instead.
 #
-# Exit status: 0 deployed, already running, or skipped as a downgrade; 1 the new image failed and the
+# Exit status: 0 deployed, already running, or skipped as a downgrade; 1 the release failed and the
 # previous image is running again; 2 anything else — including a failed rollback, which leaves the
 # instance down and needs the owner.
 #
@@ -75,7 +71,7 @@ summary() {
 }
 
 usage() {
-  echo "Usage: STAMPORAMA_DIR=<installation> $0 --version X.Y.Z|main-<sha> [--allow-downgrade]" >&2
+  echo "Usage: STAMPORAMA_DIR=<installation> $0 --version X.Y.Z [--allow-downgrade]" >&2
   exit 2
 }
 
@@ -95,8 +91,7 @@ while [ $# -gt 0 ]; do
 done
 
 VERSION="${VERSION#v}"
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$VERSION" =~ ^main-[0-9a-f]{7,40}$ ]] ||
-  die "Version '$VERSION' is neither X.Y.Z nor main-<short sha>."
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "Version '$VERSION' is not X.Y.Z."
 [[ "$BACKUP_KEEP" =~ ^[1-9][0-9]*$ ]] || die "STAMPORAMA_BACKUP_KEEP must be a positive number."
 [ -n "${STAMPORAMA_DIR:-}" ] || die "STAMPORAMA_DIR is not set - it names the installation directory (see docs/deployment/pi-deploy.md)."
 [ -d "$STAMPORAMA_DIR" ] || die "STAMPORAMA_DIR does not exist on this machine."
@@ -142,13 +137,6 @@ image_digest() { # <image> -> sha256:... the image is known by in $IMAGE, or not
 }
 
 is_semver() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
-
-is_main_build() { [[ "$1" =~ ^main-[0-9a-f]{7,40}$ ]]; }
-
-image_commit_time() { # <image> -> the commit's Unix time a `main` build carries, or nothing
-  docker image inspect --format '{{index .Config.Labels "org.stamporama.commit-time"}}' "$1" 2>/dev/null |
-    { grep -E '^[0-9]+$' || true; }
-}
 
 version_gt() { # a > b
   [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
@@ -205,10 +193,10 @@ else
   warn "No app container exists in compose project '$PROJECT'. This deploy has nothing to roll back to."
 fi
 
-# --- 1. Pull the image by digest ----------------------------------------------------------------
+# --- 1. Pull the release image by digest --------------------------------------------------------
 
 info "Resolving ${IMAGE}:${VERSION}"
-docker pull -q "${IMAGE}:${VERSION}" >/dev/null || die "Could not pull ${IMAGE}:${VERSION}. Has its CI run published the image?"
+docker pull -q "${IMAGE}:${VERSION}" >/dev/null || die "Could not pull ${IMAGE}:${VERSION}. Has the release's CI run published the image?"
 DIGEST="$(image_digest "${IMAGE}:${VERSION}")"
 [ -n "$DIGEST" ] || die "${IMAGE}:${VERSION} has no registry digest."
 info "Pulling ${IMAGE}@${DIGEST}"
@@ -232,26 +220,15 @@ if [ -n "$PREV_IMAGE_ID" ] && [ "$PREV_IMAGE_ID" = "$NEW_IMAGE_ID" ] && $PREV_RU
   exit 0
 fi
 
-PREV_NEWER=false
-if is_semver "$PREV_VERSION" && is_semver "$VERSION" && version_gt "$PREV_VERSION" "$VERSION"; then
-  PREV_NEWER=true
-elif is_main_build "$PREV_VERSION" && is_main_build "$VERSION"; then
-  PREV_TIME="$(image_commit_time "$PREV_IMAGE_ID")"
-  NEW_TIME="$(image_commit_time "$NEW_IMAGE_ID")"
-  if [ -n "$PREV_TIME" ] && [ -n "$NEW_TIME" ] && [ "$PREV_TIME" -gt "$NEW_TIME" ]; then
-    PREV_NEWER=true
-  fi
-fi
-
-if $PREV_NEWER; then
+if is_semver "$PREV_VERSION" && version_gt "$PREV_VERSION" "$VERSION"; then
   if ! $ALLOW_DOWNGRADE; then
     notice "Skipped: ${PREV_VERSION} is running, which is newer than ${VERSION}. A manual run (workflow_dispatch) is how a rollback is made."
     summary "**Skipped:** ${PREV_VERSION} is running, newer than ${VERSION}. Nothing was changed."
     exit 0
   fi
   info "Rolling back by hand: ${PREV_VERSION} -> ${VERSION}"
-elif [ -n "$PREV_CONTAINER" ] && ! is_semver "$PREV_VERSION" && ! is_main_build "$PREV_VERSION"; then
-  warn "The running image reports version '${PREV_VERSION:-none}', which is neither a release nor a main build - the no-downgrade guard cannot judge it and lets the deploy through."
+elif [ -n "$PREV_CONTAINER" ] && ! is_semver "$PREV_VERSION"; then
+  warn "The running image reports version '${PREV_VERSION:-none}', which is not a release - the no-downgrade guard cannot judge it and lets the deploy through."
 fi
 
 # --- 3. Pre-deploy pg_dump ----------------------------------------------------------------------

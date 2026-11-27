@@ -63,13 +63,7 @@ every *Done when* is met and the pull request says how (which suites ran, which 
 does nothing beyond what the issue records; every entry under *Decisions taken without the owner* is
 a reasonable reading and none is a product or domain decision (catalog standards, condition scales,
 trade flows, pricing, marketplace behaviour); a change a person looks at says the owner checks it
-later, locally or on the live instance once it is merged.
-
-**A merge is a deploy** (the owner, 2026-11-27, #2712): when `main`'s run for the merge commit is
-green, its `Deploy main to the Pi` job dispatches the **Deploy** workflow, which sends the commit to
-the owner's live instance. Reading `main`'s run includes that job and the Deploy run it starts
-(`gh api "$R/actions/workflows/deploy.yml/runs?per_page=3"`); a failed one is reported like a red
-`main`, and one that stays `queued` means the Pi's runner is offline — report it, do not wait.
+later, locally or on the live instance after a release.
 
 **If a guardrail is crossed without a recorded decision, or the pull request needs a domain decision
 the issue does not settle, do not merge.** Say so in the reply to the project conversation, which

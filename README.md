@@ -141,9 +141,7 @@ backup. A scheduled update with a pinned `TAG` changes nothing but the compose f
 
 There is no built-in auto-updater any more: Watchtower, which the `autoupdate` profile used to
 start, is unmaintained (its repository was archived in December 2025), and it was removed in #2690 —
-[ADR-0083](docs/decisions/0083-release-deploys-to-the-pi.md) records why. (Images tagged `main` and
-`main-<sha>` are builds of the development branch, which the maintainer's own instance runs; follow
-`latest` or a release.) An `.env` that still says
+[ADR-0083](docs/decisions/0083-release-deploys-to-the-pi.md) records why. An `.env` that still says
 `COMPOSE_PROFILES=autoupdate` keeps working; the next `update.sh` or installer run switches the
 profile off and removes the leftover Watchtower container.
 

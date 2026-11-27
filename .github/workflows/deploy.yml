@@ -1,37 +1,32 @@
 name: Deploy
 
-# Deploys the owner's Raspberry Pi (#2689, ADR-0083). Since 2026-11-27 the Pi follows `main`
-# (#2712): every push to `main` whose CI is green publishes `main-<short sha>` and `ci.yml`'s
-# `Deploy main to the Pi` job dispatches this workflow on `main` with that version. A release no longer
-# deploys. The runbook — the runner, the `prod` environment, the fork-approval setting, rollback and
-# restoring a dump — is `docs/deployment/pi-deploy.md`; the steps themselves are `scripts/deploy.sh`.
+# A published release deploys to the owner's Raspberry Pi (#2689, ADR-0083). The runbook — the
+# runner, the `prod` environment, the fork-approval setting, the first deploy, rollback and restoring
+# a dump — is `docs/deployment/pi-deploy.md`; the steps themselves are `scripts/deploy.sh`.
 #
 # **This is the only workflow allowed onto a self-hosted runner**, and that is enforced:
 # `scripts/check-self-hosted-runners.mjs`, run by `tests/unit/self-hosted-runners.test.ts`, fails
 # when any other workflow could reach one. The repository is public, and a job on the Pi's runner
 # executes whatever its commit says on the machine that holds the production `.env`. So the
-# trigger below is the whole of the safety argument and `tests/unit/deploy-workflow.test.ts` pins
-# it: a dispatch, by somebody with write access or by `main`'s own CI run — **never**
-# `pull_request`, `pull_request_target`, `workflow_call` or `push`, nothing a fork can start.
+# triggers below are the whole of the safety argument and `tests/unit/deploy-workflow.test.ts` pins
+# them: a release being published, or somebody with write access starting it by hand — **never**
+# `pull_request`, `pull_request_target` or `workflow_call`, nothing a fork can start.
 #
-# The owner's decisions (2026-11-22 in #2689, 2026-11-27 in #2712) are what let this file name
-# deployment credentials and triggers at all; a change to either needs the owner again
-# (`docs/agents/merge-checklist.md`).
+# The owner's decisions (2026-11-22), recorded in #2689, are what let this file name deployment
+# credentials and triggers at all; a change to either needs the owner again (`docs/agents/merge-checklist.md`).
 
 on:
-  # `main`'s CI run after its image is published (`automatic`), or a redeploy or a rollback by hand.
-  # A manual run is the one way past the no-downgrade guard.
+  # The release procedure publishes the Release only after the tag's own CI run is green and has
+  # published the image (`docs/agents/release-versioning.md`), so the image exists when this starts.
+  release:
+    types: [published]
+  # A redeploy or a rollback. A manual run is the one way past the no-downgrade guard.
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to deploy: main-<short sha> or a release X.Y.Z (an older one rolls back)"
+        description: "Release to deploy, e.g. 1.2.0 (an older one rolls back)"
         required: true
         type: string
-      automatic:
-        description: "Set by main's CI run; keeps the no-downgrade guard on. Leave it off by hand"
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -51,8 +46,8 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # Only the script. Its copy is the one at the ref this run is for: `main`, or the tag a manual
-      # run was started from (the `prod` environment limits which, see the runbook).
+      # Only the script. Its copy is the one at the ref this run is for: the release's tag, or the
+      # branch a manual run was started from (the `prod` environment limits which, see the runbook).
       - name: Check out the deploy script
         uses: actions/checkout@v7.0.1
         with:
@@ -67,8 +62,8 @@ jobs:
           STAMPORAMA_DIR: ${{ vars.STAMPORAMA_DIR }}
           STAMPORAMA_BACKUP_DIR: ${{ vars.STAMPORAMA_BACKUP_DIR }}
           STAMPORAMA_BACKUP_KEEP: ${{ vars.STAMPORAMA_BACKUP_KEEP }}
-          VERSION: ${{ inputs.version }}
-          MANUAL: ${{ !inputs.automatic }}
+          VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           # An unset variable reaches the script as an empty string; empty means "use the default".

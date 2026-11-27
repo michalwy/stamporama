@@ -6,9 +6,8 @@ import { fileURLToPath } from "node:url";
 
 // `.github/workflows/deploy.yml` is the one workflow allowed onto a self-hosted runner — the owner's
 // Raspberry Pi, in a public repository — and what keeps that safe is what can start it (#2689).
-// The owner decided its runner, environment, concurrency and repository check on 2026-11-22, and its
-// trigger — a dispatch only, from `main`'s CI run or by hand, now that the Pi follows `main` — on
-// 2026-11-27 (#2712); this pins each of them, so a change to any is a red test and not a quiet edit.
+// The owner decided its triggers, runner, environment, concurrency and repository check on
+// 2026-11-22; this pins each of them, so a change to any is a red test and not a quiet edit.
 //
 // Read as text, like `scripts/check-self-hosted-runners.mjs`: there is no YAML parser among this
 // repository's dependencies and one file does not justify adding it. Each assertion therefore
@@ -35,12 +34,13 @@ function childrenOf(key: string) {
 const has = (re: RegExp) => lines.some((line) => re.test(line));
 
 describe("deploy workflow", () => {
-  it("starts only by a dispatch — main's CI run or by hand — and on nothing else", () => {
-    assert.deepEqual(childrenOf("on"), ["workflow_dispatch"]);
+  it("starts on a published release and by hand, and on nothing else", () => {
+    assert.deepEqual(childrenOf("on"), ["release", "workflow_dispatch"]);
+    assert.ok(has(/^ {4}types: \[published\]$/), "release must be types: [published]");
   });
 
   it("never runs for a pull request, a fork or another workflow", () => {
-    for (const trigger of ["pull_request", "pull_request_target", "workflow_call", "workflow_run", "push", "schedule", "release"]) {
+    for (const trigger of ["pull_request", "pull_request_target", "workflow_call", "workflow_run", "push", "schedule"]) {
       assert.ok(!has(new RegExp(`^\\s*${trigger}:`)), `deploy.yml must not have ${trigger}`);
     }
   });
@@ -48,12 +48,6 @@ describe("deploy workflow", () => {
   it("takes the version to deploy as a required input of a manual run", () => {
     assert.ok(has(/^ {6}version:$/));
     assert.ok(has(/^ {8}required: true$/));
-  });
-
-  it("lets only a run that is not automatic past the no-downgrade guard", () => {
-    assert.ok(has(/^ {6}automatic:$/));
-    assert.ok(has(/^ {8}default: false$/));
-    assert.ok(has(/^ {10}MANUAL: \$\{\{ !inputs\.automatic \}\}$/));
   });
 
   it("runs only in michalwy/stamporama, on the Pi's runner, in the prod environment", () => {

@@ -34,7 +34,7 @@ says so in its reply. **Product first**: process work fills the gaps.
 | --- | --- |
 | **Project conversation** | The single router: backlog manager and backlog review. Talks to the owner, in Polish. |
 | **Task thread** | Holds one issue — or several small related ones from one area — end to end: implements, opens the pull request, waits for CI, runs the guardrail checklist, **merges it**, reads `main`'s run and closes the issue. → [`merge-checklist.md`](merge-checklist.md) |
-| **Release thread** | Cuts a release — not a deploy: `main` is deployed (#2712) — only on the owner's explicit word. No issue, no branch, no commit. → [`release-versioning.md`](release-versioning.md) |
+| **Release thread** | Cuts a release — and so a deploy — only on the owner's explicit word. No issue, no branch, no commit. → [`release-versioning.md`](release-versioning.md) |
 | **Local session** *(local-only)* | Started by the owner on his machine; same rules plus the local-only ones. |
 
 **There are no reviewer threads** (the owner, 2026-11-22, #2700).
@@ -46,10 +46,9 @@ says so in its reply. **Product first**: process work fills the gaps.
 - **It loads only `CLAUDE.md`, `.claude/CLAUDE.md` and `.claude/rules/`** — not `.claude/agents/`,
   commands, skills, hooks, `.claude/settings.json` or `.mcp.json`. What every thread must know is in
   `AGENTS.md` or reached from it.
-- **It cannot reach the Raspberry Pi or the production database.** A thread never deploys by hand
-  — but its merge does: `main`'s green run deploys the commit to the Pi (#2712).
+- **It cannot reach the Raspberry Pi or the production database.** A thread never deploys.
 - **It cannot show the owner a running stack.** A change a person looks at is checked by the owner
-  later, locally or on the live instance once it is merged — the pull request says so.
+  later, locally or on the live instance after a release — the pull request says so.
 - **An idle thread is reclaimed**, so a thread never starts and then waits for another task.
 - **It pushes only to the branch the platform gave it** (a `claude/…` name, in place of
   `task/<issue>-<slug>`). Name the issue in the pull request title and body.
