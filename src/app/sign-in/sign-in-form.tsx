@@ -15,9 +15,11 @@ interface SignInFormProps {
    * collections list. Already checked by the page above; this component never decides it.
    */
   readonly landing: string;
+  /** Whether the instance takes new accounts (#2713); when it does not, no sign-up link is shown. */
+  readonly registrationOpen: boolean;
 }
 
-export default function SignInForm({ signedOutNotice, landing }: SignInFormProps) {
+export default function SignInForm({ signedOutNotice, landing, registrationOpen }: SignInFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -188,22 +190,24 @@ export default function SignInForm({ signedOutNotice, landing }: SignInFormProps
           </button>
         </form>
 
-        <p
-          style={{
-            marginTop: "1.5rem",
-            textAlign: "center",
-            fontSize: "0.875rem",
-            color: "var(--color-text-muted)",
-          }}
-        >
-          {"Don't have an account? "}
-          <Link
-            href="/sign-up"
-            style={{ color: "var(--color-accent)", textDecoration: "none", fontWeight: 500 }}
+        {registrationOpen && (
+          <p
+            style={{
+              marginTop: "1.5rem",
+              textAlign: "center",
+              fontSize: "0.875rem",
+              color: "var(--color-text-muted)",
+            }}
           >
-            Sign up
-          </Link>
-        </p>
+            {"Don't have an account? "}
+            <Link
+              href="/sign-up"
+              style={{ color: "var(--color-accent)", textDecoration: "none", fontWeight: 500 }}
+            >
+              Sign up
+            </Link>
+          </p>
+        )}
       </div>
     </main>
   );

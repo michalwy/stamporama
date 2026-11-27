@@ -4,6 +4,14 @@ Stamporama uses email and password authentication. No external accounts or third
 
 ## Creating an account
 
+**Registration is closed by default.** A new instance takes exactly one sign-up — its first account —
+and after that nobody can create another one: the sign-in form shows no **Sign up** link, and
+`/sign-up` says *Registration closed*. Whoever runs the instance can open it by setting
+`STAMPORAMA_ALLOW_REGISTRATION=true` in its `.env` and restarting it. Existing accounts sign in as
+always.
+
+While registration is open:
+
 1. Open Stamporama in your browser. If you are not signed in, you will be redirected to the sign-in page.
 2. Click **Sign up** at the bottom of the sign-in form.
 3. Enter your name, email address, and a password (minimum 8 characters).

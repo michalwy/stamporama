@@ -2,6 +2,8 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { prisma } from "./db";
 import { SESSION_OPTIONS } from "./session-lifetime";
+import { signUpGuard } from "./registration";
+import { isRegistrationOpen } from "./registration-server";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -14,4 +16,6 @@ export const auth = betterAuth({
   // `expiresIn` is also the `Max-Age` of the cookie written at sign-in, so it can never exceed
   // 400 days: above that the sign-in itself throws (#1468).
   session: SESSION_OPTIONS,
+  // New accounts only while registration is open (#2713): refused server-side, whatever the UI shows.
+  hooks: { before: signUpGuard(isRegistrationOpen) },
 });

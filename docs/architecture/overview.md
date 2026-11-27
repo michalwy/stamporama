@@ -805,6 +805,8 @@ Stamporama uses [Better Auth](https://better-auth.com/) with the email/password 
 
 **Server instance:** `src/lib/auth.ts` — initializes Better Auth with the Prisma adapter (sharing the `prisma` singleton from `src/lib/db.ts`) and the email/password provider.
 
+**Registration:** `src/lib/registration.ts` and `registration-server.ts` (#2713). New accounts are refused unless `STAMPORAMA_ALLOW_REGISTRATION` is on — **off by default** — or the instance has no account yet (the first one has to be created). The rule is a Better Auth `before` hook on `/sign-up/email` that answers 403; `/sign-up` shows *Registration closed* instead of the form and the sign-in screen drops its *Sign up* link, both reading the same `isRegistrationOpen()` per request.
+
 **Client instance:** `src/lib/auth-client.ts` — `createAuthClient()` for use in client components. Defaults to the same origin (`/api/auth/*`); no explicit `baseURL` required.
 
 **API handler:** `src/app/api/auth/[...all]/route.ts` — catches all Better Auth API requests (`GET` + `POST`) via `toNextJsHandler(auth)`.
@@ -843,6 +845,7 @@ A second, **versioned** HTTP surface beside the screen API, for an agentic AI cl
 | `DATABASE_URL` | yes | PostgreSQL connection string |
 | `BETTER_AUTH_SECRET` | yes | Random secret for auth session signing (generate with `openssl rand -base64 32`) |
 | `BETTER_AUTH_URL` | yes | Public base URL of the app (e.g. `http://localhost:3000`). Also the base of the `{offerUrl}` listing-template token (#415/#416) — the only place the app writes an absolute link to itself |
+| `STAMPORAMA_ALLOW_REGISTRATION` | no | `true` lets anyone who reaches the instance create an account. Off by default: only the first account can be created (#2713) |
 | `POSTGRES_PASSWORD` | yes (db) | Password for the `stamporama` database user |
 | `TAG` | prod only | Image tag to pull (default: `latest`) |
 | `STAMPORAMA_VERSION` | build-time | Baked into the image; set by CI from the git tag |

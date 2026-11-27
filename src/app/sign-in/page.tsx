@@ -1,3 +1,4 @@
+import { isRegistrationOpen } from "@/lib/registration-server";
 import { endedSessionNotice } from "@/lib/session-end";
 import { RETURN_TO_PARAM, landingAfterSignIn } from "@/lib/sign-in-return";
 import SignInForm from "./sign-in-form";
@@ -21,6 +22,7 @@ export default async function SignInPage({
     <SignInForm
       signedOutNotice={await endedSessionNotice()}
       landing={landingAfterSignIn(typeof returnTo === "string" ? returnTo : null)}
+      registrationOpen={await isRegistrationOpen()}
     />
   );
 }
