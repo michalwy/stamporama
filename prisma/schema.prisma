@@ -26,6 +26,11 @@ model User {
   // remembered, and again once that collection is deleted.
   phoneCollectionId String?
   phoneCollection   Collection?  @relation("PhoneCollection", fields: [phoneCollectionId], references: [id], onDelete: SetNull)
+  // An administrator of the instance (#2719): may open `/admin` — every account and collection, their
+  // storage, deleting either, and the registration switch. The oldest account was given it by the
+  // migration, and the first account of an instance that has no administrator gets it when created
+  // (`admin.ts`). Better Auth neither reads nor writes it.
+  isAdmin       Boolean      @default(false)
 
   @@map("user")
 }
@@ -8758,4 +8763,15 @@ model OAuthGrant {
   @@index([clientId])
   @@index([userId])
   @@map("oauth_grant")
+}
+
+// What an administrator has set for the whole instance (#2719) — one row, id "instance", made the
+// first time something is set. `registrationOpen` is the registration switch: null until an
+// administrator has used it, and until then `STAMPORAMA_ALLOW_REGISTRATION` decides (#2713).
+model InstanceSettings {
+  id               String   @id
+  registrationOpen Boolean?
+  updatedAt        DateTime @updatedAt
+
+  @@map("instance_settings")
 }

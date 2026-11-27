@@ -12,6 +12,7 @@ import type {
   StorageAccess,
   StorageInput,
   StorageObject,
+  StorageUsage,
 } from "./types";
 
 /**
@@ -166,6 +167,21 @@ export class CachingStorage implements Storage {
   async delete(key: string): Promise<void> {
     await this.inner.delete(key);
     await this.forget(key);
+  }
+
+  /** The backend's own figure: a cached copy is a second copy of bytes already counted. */
+  async usage(prefix: string): Promise<StorageUsage> {
+    return this.inner.usage(prefix);
+  }
+
+  /** The backend's objects, then every local copy under the same prefix (#2719). */
+  async deletePrefix(prefix: string): Promise<void> {
+    await this.inner.deletePrefix(prefix);
+    const rows = await prisma.storageCacheEntry.findMany({
+      where: { backend: this.backend, key: { startsWith: `${prefix}/` } },
+      select: { backend: true, key: true, sizeBytes: true },
+    });
+    await removeEntries(rows).catch(() => {});
   }
 
   /** A move is a delete at the source, so the copy there is dropped rather than renamed. The

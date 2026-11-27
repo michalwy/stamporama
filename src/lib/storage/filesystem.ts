@@ -1,11 +1,12 @@
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
 import type {
   Storage,
   StorageInput,
   StorageObject,
+  StorageUsage,
   ResolveResult,
 } from "./types";
 
@@ -34,6 +35,16 @@ function keyToPath(key: string): string {
   const resolved = path.resolve(root, key);
   if (resolved !== root && !resolved.startsWith(root + path.sep)) {
     throw new Error(`Storage key escapes root: ${key}`);
+  }
+  return resolved;
+}
+
+/** The directory a prefix names. Never the photos root itself: an empty prefix would measure — or
+ * delete — every collection's bytes at once, and no caller means that. */
+function prefixToPath(prefix: string): string {
+  const resolved = keyToPath(prefix);
+  if (prefix.trim().length === 0 || resolved === photosRoot()) {
+    throw new Error("A storage prefix must name something under the root.");
   }
   return resolved;
 }
@@ -100,6 +111,33 @@ export class FilesystemStorage implements Storage {
     const to = keyToPath(toKey);
     await mkdir(path.dirname(to), { recursive: true });
     await copyFile(from, to);
+  }
+
+  /** Walk the directory the prefix names. A file that goes while it is being measured is skipped:
+   * the figure is a reading of a live disk, not a transaction. */
+  async usage(prefix: string): Promise<StorageUsage> {
+    const total: StorageUsage = { bytes: 0, objects: 0 };
+    const walk = async (dir: string): Promise<void> => {
+      const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        const entryPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(entryPath);
+        } else if (entry.isFile()) {
+          const info = await stat(entryPath).catch(() => null);
+          if (info) {
+            total.bytes += info.size;
+            total.objects += 1;
+          }
+        }
+      }
+    };
+    await walk(prefixToPath(prefix));
+    return total;
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    await rm(prefixToPath(prefix), { recursive: true, force: true });
   }
 
   async resolveUrl(key: string, mime: string): Promise<ResolveResult> {

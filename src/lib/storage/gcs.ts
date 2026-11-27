@@ -5,6 +5,7 @@ import type {
   Storage,
   StorageInput,
   StorageObject,
+  StorageUsage,
   ResolveResult,
 } from "./types";
 
@@ -113,6 +114,27 @@ export class GcsStorage implements Storage {
     // Object metadata, Content-Type included, is carried by the copy, which is why this takes no
     // `mime` — the destination is the source, byte for byte and header for header.
     await this.file(fromKey).copy(this.objectName(toKey));
+  }
+
+  /** The object-name prefix for everything under a key prefix, with the trailing slash that keeps
+   * `abc` from matching `abcd/…`. An empty prefix would be the whole bucket and is refused. */
+  private objectPrefix(prefix: string): string {
+    const trimmed = prefix.replace(/^\/+|\/+$/g, "");
+    if (trimmed.length === 0) throw new Error("A storage prefix must name something under the root.");
+    return `${this.objectName(trimmed)}/`;
+  }
+
+  async usage(prefix: string): Promise<StorageUsage> {
+    const [files] = await this.bucket().getFiles({ prefix: this.objectPrefix(prefix) });
+    let bytes = 0;
+    for (const file of files) bytes += Number(file.metadata.size ?? 0);
+    return { bytes, objects: files.length };
+  }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    // `force` carries on past an object that fails and reports at the end, so one refusal does not
+    // leave the rest of a deleted collection's bytes behind.
+    await this.bucket().deleteFiles({ prefix: this.objectPrefix(prefix), force: true });
   }
 
   // `mime` is part of the contract but a signed URL doesn't need it (Content-Type was set on the
