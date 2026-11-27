@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { baseBtn } from "@/app/button-style";
 import { formControl, multiLineFormControl } from "@/app/control-style";
 import { DialogActions, DialogBody, DialogShell } from "@/app/dialog-shell";
@@ -88,7 +89,10 @@ export function FeedbackDialog({
     setPending(false);
   }
 
-  return (
+  // Portalled to <body> (#2725): the sidebar that opens it is `position: sticky`, its own stacking
+  // context, so drawn in place the shell's z-index ranked it only within the sidebar and the stamp
+  // cards of the main column painted over it. Only ever drawn once opened, so `document` exists.
+  return createPortal(
     <DialogShell title={labels.entry} onClose={onClose} dismissable={!pending}>
       <form
         onSubmit={(event) => {
@@ -183,6 +187,7 @@ export function FeedbackDialog({
           error={error}
         />
       </form>
-    </DialogShell>
+    </DialogShell>,
+    document.body
   );
 }
