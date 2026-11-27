@@ -200,3 +200,15 @@ Pi calling it is the owner's check, in the runbook.
 The CI check stays: it keeps such a workflow off `main`, where every later run would use it; the
 hook is what stops it running on the Pi. Fork approval stays as well. Nothing
 about the deploy's triggers or credentials changed.
+
+## Amendment (2026-11-27, #2721): two settings arrive with a deploy
+
+Decision 4 said the script never takes configuration from GitHub and writes one key. The owner
+decided one exception in #2721: the feedback notification's settings — the variable
+`FEEDBACK_NOTIFY_URL` and the secret `FEEDBACK_NOTIFY_TOKEN` in the `prod` environment — reach
+`scripts/deploy.sh` through the Deploy step's `env:` and are written into the installation's `.env`,
+so that setting them up needs nothing done on the Pi. The rest of decision 4 stands: `.env` is still
+edited in place and never rebuilt, the two keys are written only when both are given and differ from
+what is there, and a deploy with either missing changes nothing. Neither value is printed. When
+they changed, a deploy of the version already running recreates the container instead of stopping at
+"already running". The workflow's triggers, runner, environment and repository check did not change.

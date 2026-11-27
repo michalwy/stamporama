@@ -14,6 +14,7 @@ import {
 } from "../../src/lib/feedback";
 import { ANONYMOUS_PER_ADDRESS, parseFeedbackSubmission } from "../../src/lib/feedback-rules";
 import { resetRateLimits } from "../../src/lib/rate-limit";
+import { resetFeedbackNotify } from "../../src/lib/feedback-notify";
 import { deleteAccountAsAdmin } from "../../src/lib/admin";
 import { POST as postFeedback } from "../../src/app/api/feedback/route";
 import { POST as postMcp } from "../../src/app/api/mcp/route";
@@ -379,6 +380,72 @@ describe("in-app feedback", () => {
       assert.equal(write.isError, true);
       assert.equal(write.body.code, "forbidden");
       assert.equal((await prisma.feedbackReport.findUniqueOrThrow({ where: { id: reportId } })).status, "triaged");
+    });
+  });
+
+  // #2721: storing a report fires the coordinator's routine. The trigger is `globalThis.fetch`
+  // here, replaced for the length of one test — nothing reaches the network.
+  describe("telling the coordinator", () => {
+    const realFetch = globalThis.fetch;
+    let fired: { url: string; init: RequestInit }[] = [];
+
+    function stubTrigger(answer: () => Response) {
+      fired = [];
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        fired.push({ url: String(input), init: init ?? {} });
+        return answer();
+      }) as typeof fetch;
+    }
+
+    beforeEach(() => {
+      resetFeedbackNotify();
+      process.env.FEEDBACK_NOTIFY_URL = "https://trigger.example.test/fire";
+      process.env.FEEDBACK_NOTIFY_TOKEN = "test-token";
+    });
+
+    after(() => {
+      globalThis.fetch = realFetch;
+      delete process.env.FEEDBACK_NOTIFY_URL;
+      delete process.env.FEEDBACK_NOTIFY_TOKEN;
+      resetFeedbackNotify();
+    });
+
+    const send = (label: string, extra: Record<string, unknown> = {}) =>
+      postFeedback(
+        feedbackRequest({ kind: "problem", message: `${RUN} notify ${label}`, route: "/p/tok", ...extra }, "203.0.113.90")
+      );
+
+    it("fires the trigger once for a stored report, with an empty body, and once for a burst", async () => {
+      stubTrigger(() => new Response("{}", { status: 200 }));
+      assert.equal((await send("first")).status, 200);
+      assert.equal((await send("second")).status, 200);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(fired.length, 1);
+      assert.equal(fired[0].url, "https://trigger.example.test/fire");
+      assert.equal(fired[0].init.body, "{}");
+      assert.equal((await ownReports()).filter((row) => row.message.includes("notify")).length >= 2, true);
+    });
+
+    it("stores the report and answers 200 when the trigger fails", async () => {
+      stubTrigger(() => {
+        throw new Error("the trigger is down");
+      });
+      const response = await send("trigger down");
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ok: true });
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(fired.length, 1);
+      assert.equal((await ownReports()).filter((row) => row.message.includes("trigger down")).length, 1);
+    });
+
+    it("fires nothing for a refused report, a filled hidden field, or an unconfigured instance", async () => {
+      stubTrigger(() => new Response("{}", { status: 200 }));
+      assert.equal((await send("refused", { kind: "praise" })).status, 400);
+      assert.equal((await send("honeypot", { website: "https://spam.example" })).status, 200);
+      delete process.env.FEEDBACK_NOTIFY_TOKEN;
+      assert.equal((await send("unconfigured")).status, 200);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(fired.length, 0);
     });
   });
 });

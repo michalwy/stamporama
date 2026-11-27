@@ -62,6 +62,10 @@ jobs:
           STAMPORAMA_DIR: ${{ vars.STAMPORAMA_DIR }}
           STAMPORAMA_BACKUP_DIR: ${{ vars.STAMPORAMA_BACKUP_DIR }}
           STAMPORAMA_BACKUP_KEEP: ${{ vars.STAMPORAMA_BACKUP_KEEP }}
+          # Where a stored feedback report is announced (#2721). The script writes both into the
+          # installation's .env when both are set, and prints neither.
+          FEEDBACK_NOTIFY_URL: ${{ vars.FEEDBACK_NOTIFY_URL }}
+          FEEDBACK_NOTIFY_TOKEN: ${{ secrets.FEEDBACK_NOTIFY_TOKEN }}
           VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
           MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
