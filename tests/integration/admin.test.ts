@@ -20,6 +20,7 @@ import {
   deleteCollectionAsAdmin,
   emptyCollectionTableByTable,
   getAdminOverview,
+  getAdminStorage,
   isAdmin,
   setRegistrationOpen,
 } from "../../src/lib/admin";
@@ -172,20 +173,24 @@ describe("the administrator's panel", () => {
       assert.deepEqual(await collectionStorage(two.id), { bytes: 7, objects: 1 });
       assert.deepEqual(await collectionStorage("nothing-stored-here"), { bytes: 0, objects: 0 });
 
+      // The overview is the database alone (#2731): it lists the collections, and the figures come
+      // from the separate measurement, keyed by collection and account.
       const overview = await getAdminOverview(adminId);
       const account = overview.accounts.find((entry) => entry.id === owner.id);
       assert.ok(account);
       assert.equal(account.email, owner.email);
       assert.deepEqual(
-        account.collections.map((entry) => [entry.name, entry.storage]),
-        [
-          ["One", { bytes: 6100, objects: 3 }],
-          ["Two", { bytes: 7, objects: 1 }],
-        ]
+        account.collections.map((entry) => entry.name),
+        ["One", "Two"]
       );
-      assert.deepEqual(account.storage, { bytes: 6107, objects: 4 });
-      assert.ok(overview.storage.bytes >= 6107);
       assert.ok(overview.accounts.some((entry) => entry.id === adminId && entry.isAdmin));
+
+      const storage = await getAdminStorage(adminId);
+      assert.deepEqual(storage.collections[one.id], { bytes: 6100, objects: 3 });
+      assert.deepEqual(storage.collections[two.id], { bytes: 7, objects: 1 });
+      assert.deepEqual(storage.accounts[owner.id], { bytes: 6107, objects: 4 });
+      assert.ok(storage.total.bytes >= 6107);
+      await assert.rejects(getAdminStorage(collectorId), refused("forbidden"));
     });
 
     it("refuses an empty prefix, which would be every collection at once", async () => {

@@ -114,23 +114,27 @@ export class FilesystemStorage implements Storage {
   }
 
   /** Walk the directory the prefix names. A file that goes while it is being measured is skipped:
-   * the figure is a reading of a live disk, not a transaction. */
+   * the figure is a reading of a live disk, not a transaction. A directory's entries are measured
+   * together rather than one `stat` after another (#2731) — a collection holds thousands of files,
+   * and waiting on each in turn is what made `/admin` slow. */
   async usage(prefix: string): Promise<StorageUsage> {
     const total: StorageUsage = { bytes: 0, objects: 0 };
     const walk = async (dir: string): Promise<void> => {
       const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-      for (const entry of entries) {
-        const entryPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          await walk(entryPath);
-        } else if (entry.isFile()) {
-          const info = await stat(entryPath).catch(() => null);
-          if (info) {
-            total.bytes += info.size;
-            total.objects += 1;
+      await Promise.all(
+        entries.map(async (entry) => {
+          const entryPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await walk(entryPath);
+          } else if (entry.isFile()) {
+            const info = await stat(entryPath).catch(() => null);
+            if (info) {
+              total.bytes += info.size;
+              total.objects += 1;
+            }
           }
-        }
-      }
+        })
+      );
     };
     await walk(prefixToPath(prefix));
     return total;

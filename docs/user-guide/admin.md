@@ -20,6 +20,8 @@ open `/admin` — for them the address does not exist.
 The panel lists every account with its collections. Beside each collection is the number of stored
 files and the space they take — photos, scans, album pictures, attachments — read from the storage
 itself, on every backend the instance uses. An account's figure is the sum of its collections.
+Reading every stored file takes a moment, so the list appears at once and the figures say
+*measuring…* until they arrive.
 
 An administrator sees that a collection exists and how large it is, **not what is in it**: the panel
 opens nobody's collection.

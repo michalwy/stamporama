@@ -125,7 +125,12 @@ export class GcsStorage implements Storage {
   }
 
   async usage(prefix: string): Promise<StorageUsage> {
-    const [files] = await this.bucket().getFiles({ prefix: this.objectPrefix(prefix) });
+    // Only each object's name and size (#2731): the full metadata of thousands of photos and their
+    // derivatives is most of what a listing costs, and none of it is needed here.
+    const [files] = await this.bucket().getFiles({
+      prefix: this.objectPrefix(prefix),
+      fields: "items(name,size),nextPageToken",
+    });
     let bytes = 0;
     for (const file of files) bytes += Number(file.metadata.size ?? 0);
     return { bytes, objects: files.length };

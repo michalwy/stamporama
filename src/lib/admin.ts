@@ -34,7 +34,6 @@ export interface AdminCollection {
   slug: string;
   name: string;
   createdAt: Date;
-  storage: StorageFigure;
 }
 
 export interface AdminAccount {
@@ -44,15 +43,24 @@ export interface AdminAccount {
   isAdmin: boolean;
   createdAt: Date;
   collections: AdminCollection[];
-  /** The sum of the account's collections. */
-  storage: StorageFigure;
 }
 
+/**
+ * Who has an account and which collections — from the database only, so the panel draws at once.
+ * The storage figures are measured separately (`getAdminStorage`, #2731).
+ */
 export interface AdminOverview {
   accounts: AdminAccount[];
-  /** Every collection on the instance, added up. */
-  storage: StorageFigure;
   registration: RegistrationSwitch;
+}
+
+/** What the instance's collections hold in storage, per collection, per account and in total. */
+export interface AdminStorage {
+  collections: Record<string, StorageFigure>;
+  /** The sum of each account's collections. */
+  accounts: Record<string, StorageFigure>;
+  /** Every collection on the instance, added up. */
+  total: StorageFigure;
 }
 
 /**
@@ -73,7 +81,7 @@ export async function collectionStorage(collectionId: string): Promise<StorageFi
   return sumStorage(figures);
 }
 
-/** Every account with its collections and what they hold, oldest account first. */
+/** Every account with its collections, oldest account first. Reads the database only. */
 export async function getAdminOverview(adminId: string): Promise<AdminOverview> {
   await assertAdmin(adminId);
   const users = await prisma.user.findMany({
@@ -90,28 +98,39 @@ export async function getAdminOverview(adminId: string): Promise<AdminOverview> 
     },
   });
 
-  const accounts: AdminAccount[] = [];
-  for (const user of users) {
-    const collections: AdminCollection[] = [];
-    for (const collection of user.collections) {
-      collections.push({ ...collection, storage: await collectionStorage(collection.id) });
-    }
-    accounts.push({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      isAdmin: isAdminEmail(user.email, process.env.ADMIN_EMAILS),
-      createdAt: user.createdAt,
-      collections,
-      storage: sumStorage(collections.map((collection) => collection.storage)),
-    });
-  }
-
   return {
-    accounts,
-    storage: sumStorage(accounts.map((account) => account.storage)),
+    accounts: users.map((user) => ({ ...user, isAdmin: isAdminEmail(user.email, process.env.ADMIN_EMAILS) })),
     registration: await getRegistrationSwitch(),
   };
+}
+
+/**
+ * Measure every collection's storage, all collections at once (#2731). Measuring walks every stored
+ * file, so it is the slow half of the panel: the page draws the overview first and these figures
+ * arrive after it. A collection created or deleted between the two readings is simply absent from
+ * one of them.
+ */
+export async function getAdminStorage(adminId: string): Promise<AdminStorage> {
+  await assertAdmin(adminId);
+  const users = await prisma.user.findMany({
+    select: { id: true, collections: { select: { id: true } } },
+  });
+  const figures = await Promise.all(
+    users.map(async (user) => {
+      const perCollection = await Promise.all(
+        user.collections.map(async (collection) => [collection.id, await collectionStorage(collection.id)] as const)
+      );
+      return { userId: user.id, perCollection };
+    })
+  );
+
+  const collections: Record<string, StorageFigure> = {};
+  const accounts: Record<string, StorageFigure> = {};
+  for (const { userId, perCollection } of figures) {
+    for (const [id, figure] of perCollection) collections[id] = figure;
+    accounts[userId] = sumStorage(perCollection.map(([, figure]) => figure));
+  }
+  return { collections, accounts, total: sumStorage(Object.values(accounts)) };
 }
 
 // ── Registration ────────────────────────────────────────────────────────────────────────────
