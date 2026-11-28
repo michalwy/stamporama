@@ -22,6 +22,26 @@ The triage persona is [`feedback-triage.md`](feedback-triage.md); the panel is [
   five an hour per address and sixty an hour for all anonymous senders together (`429`); and the
   message is capped at 4,000 characters, context trimmed. A hidden field a person never sees is
   answered `200` and stored nowhere. A signed-in sender has thirty an hour.
+- **Pictures ride along, from anyone who may send** (#2727; the owner, 2026-11-28): images only —
+  PNG, JPEG, WebP, read from the bytes (`sniffFeedbackAttachment`, the conversation log's reader with
+  PDF refused) — **at most 5 per report, 10 MB each**, for an anonymous visitor of a shared page as
+  for a signed-in collector. The rules are `feedback-attachment-rules.ts` (pure; the dialog checks
+  count, size and declared type as files are added, the route checks them again, the bytes are the
+  server's); the dialog takes them from a picker or **pasted anywhere in it**. The request is then
+  `multipart/form-data` — the report as JSON in `report`, the files in `file` — and a report without
+  pictures may still be plain JSON. A refused picture refuses the whole report (`400` too many,
+  `413` too large, `422` not a picture), and nothing is stored. **`/api/feedback` is out of the
+  proxy's matcher** (`src/proxy.ts`): Next buffers a body for the proxy only up to
+  `proxyClientMaxBodySize`, 10 MB by default, and hands the route the cut copy. The rows are
+  `FeedbackAttachment`, shaped like a sale's files and prepared by the same
+  `prepareConversationAttachment` (thumbnail, cleaned name), but **owned by no collection**: bytes
+  under `feedback/<uuid>/`, written before the rows and removed on a failure, not counted in any
+  collection's storage. The cascade from a report drops rows only — and nothing deletes a report
+  today; whatever starts to must delete the bytes. The panel shows them through
+  `/api/admin/feedback-attachments/<id>` (an administrator's session, `404` for anyone else);
+  `get_feedback` lists them, and **`get_feedback_attachment` answers with the picture itself**, an
+  MCP `image` block — as it came when it is at most 1568 px and 3.5 MB, otherwise a WebP fitted
+  inside 1568 px — so the triage persona can look at a screenshot.
 - **A share link's token never reaches the table.** `redactRoute` (`feedback-rules.ts`) replaces it
   with `[token]` and drops the query before anything is stored — the token is a credential, and a
   report is read by more people than the link was sent to. Which kind of page it was is `sharedPage`.
@@ -37,7 +57,8 @@ The triage persona is [`feedback-triage.md`](feedback-triage.md); the panel is [
   the panel's server action or the MCP tools. Status is `new` / `triaged` / `resolved` / `dismissed`;
   `issueUrl` must be `https://github.com/<owner>/<repo>/issues/<n>`.
 - **The admin MCP tools are a second list, `ADMIN_OPERATIONS`, not part of `OPERATIONS`**
-  (`agent-api/admin-registry.ts`): `list_feedback`, `get_feedback`, `update_feedback`. They are about
+  (`agent-api/admin-registry.ts`): `list_feedback`, `get_feedback`, `get_feedback_attachment`,
+  `update_feedback`. They are about
   the instance, not the token's collection, so they are **not on `/api/v1` and not in its OpenAPI
   document**; `/api/mcp` adds them for a credential whose account is an administrator
   (`operationsForMcpCaller`). For anyone else they do not exist — absent from `tools/list`, and a

@@ -1,13 +1,19 @@
 import { describe, it, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import sharp from "sharp";
 import { NextRequest } from "next/server";
 import { prisma } from "../../src/lib/db";
 import { createAssistantToken } from "../../src/lib/api-tokens";
 import { createCollection } from "../../src/lib/collections";
 import { AdminError } from "../../src/lib/admin-access";
 import {
+  FeedbackAttachmentError,
   countNewFeedbackReports,
   createFeedbackReport,
+  getFeedbackAttachmentForServing,
   getFeedbackReport,
   listFeedbackReports,
   updateFeedbackReport,
@@ -18,6 +24,11 @@ import { resetFeedbackNotify } from "../../src/lib/feedback-notify";
 import { deleteAccountAsAdmin } from "../../src/lib/admin";
 import { POST as postFeedback } from "../../src/app/api/feedback/route";
 import { POST as postMcp } from "../../src/app/api/mcp/route";
+import { GET as serveFeedbackAttachment } from "../../src/app/api/admin/feedback-attachments/[attachmentId]/route";
+import { getStorage } from "../../src/lib/storage";
+
+// The filesystem backend under a throwaway directory, as the photo tests do (#2727's pictures).
+process.env.STAMPORAMA_DATA_DIR = mkdtempSync(path.join(tmpdir(), "stamporama-feedback-"));
 
 // In-app feedback end to end (#2720): a report sent to the route is stored with its context and
 // without a share link's secret; only an administrator reads and updates it; and the admin MCP
@@ -66,7 +77,19 @@ function refused(code: AdminError["code"]) {
 
 interface ToolResult {
   isError?: boolean;
-  content: { type: string; text: string }[];
+  content: { type: string; text: string; data?: string; mimeType?: string }[];
+}
+
+async function picture(width: number, height: number, red = 200): Promise<Buffer> {
+  return sharp({ create: { width, height, channels: 3, background: { r: red, g: 90, b: 40 } } }).png().toBuffer();
+}
+
+/** A report sent the way the dialog sends one with pictures: the report as JSON, the files beside. */
+function multipartRequest(report: unknown, files: { name: string; bytes: Buffer; type?: string }[], address = "203.0.113.7"): NextRequest {
+  const form = new FormData();
+  form.append("report", JSON.stringify(report));
+  for (const file of files) form.append("file", new Blob([new Uint8Array(file.bytes)], { type: file.type ?? "image/png" }), file.name);
+  return new NextRequest("http://localhost/api/feedback", { method: "POST", headers: { "x-forwarded-for": address }, body: form });
 }
 
 async function mcp(token: string, method: string, params?: unknown) {
@@ -293,8 +316,118 @@ describe("in-app feedback", () => {
     });
   });
 
+  describe("pictures sent with a report (#2727)", () => {
+    let adminToken: string;
+    let collectorToken: string;
+
+    before(async () => {
+      const adminCollection = await createCollection(adminId, `Admin pictures ${RUN}`, "EUR");
+      adminToken = (await createAssistantToken(adminId, adminCollection.id, { label: "admin pictures", scope: "read", kind: "agent" })).token;
+      collectorToken = (await createAssistantToken(collectorId, collectionId, { label: "collector pictures", scope: "read_write", kind: "agent" })).token;
+    });
+
+    it("stores what an anonymous visitor attaches, and the admin tools list and hand over each picture", async () => {
+      const response = await postFeedback(
+        multipartRequest({ kind: "problem", message: `${RUN} with pictures`, route: "/s/SECRET" }, [
+          { name: "screen.png", bytes: await picture(320, 200) },
+          // What Chrome calls a pasted screenshot.
+          { name: "image.png", bytes: await picture(2400, 1200, 20) },
+        ])
+      );
+      assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+      const [report] = (await ownReports()).filter((row) => row.message.endsWith("with pictures"));
+      assert.ok(report);
+      const view = await getFeedbackReport(adminId, report.id);
+      assert.equal(view.attachments.length, 2);
+      assert.equal(view.attachments[0].fileName, "screen.png");
+      assert.equal(view.attachments[0].contentType, "image/png");
+      assert.equal(view.attachments[1].fileName, "image.png");
+
+      const rows = await prisma.feedbackAttachment.findMany({ where: { feedbackReportId: report.id } });
+      for (const row of rows) {
+        assert.match(row.storageKey, /^feedback\/[0-9a-f-]+\/original\.png$/);
+        assert.ok(row.thumbKey, "a picture has a thumbnail");
+        await getStorage(row.storageBackend).get(row.storageKey, row.contentType, "delivery");
+      }
+
+      const detail = await callTool(adminToken, "get_feedback", { feedback_id: report.id });
+      const listed = detail.body.attachments as { id: string; name: string; type: string; widthPx: number }[];
+      assert.deepEqual(listed.map((a) => [a.name, a.type, a.widthPx]), [
+        ["screen.png", "image/png", 320],
+        ["image.png", "image/png", 2400],
+      ]);
+
+      // A small one is handed over as it came; a large one reduced to fit 1568 pixels.
+      const small = await mcp(adminToken, "tools/call", { name: "get_feedback_attachment", arguments: { attachment_id: listed[0].id } });
+      const smallContent = (small.result as unknown as ToolResult).content;
+      assert.equal(smallContent[1].type, "image");
+      assert.equal(smallContent[1].mimeType, "image/png");
+      assert.equal(JSON.parse(smallContent[0].text).reduced, false);
+      assert.equal(JSON.parse(smallContent[0].text).feedbackId, report.id);
+      const large = await mcp(adminToken, "tools/call", { name: "get_feedback_attachment", arguments: { attachment_id: listed[1].id } });
+      const largeContent = (large.result as unknown as ToolResult).content;
+      assert.equal(largeContent[1].mimeType, "image/webp");
+      const meta = await sharp(Buffer.from(largeContent[1].data!, "base64")).metadata();
+      assert.equal(meta.width, 1568);
+      assert.equal(JSON.parse(largeContent[0].text).reduced, true);
+
+      const missing = await callTool(adminToken, "get_feedback_attachment", { attachment_id: "nope" });
+      assert.equal(missing.isError, true);
+      assert.equal(missing.body.code, "not_found");
+      const asCollector = await mcp(collectorToken, "tools/call", { name: "get_feedback_attachment", arguments: { attachment_id: listed[0].id } });
+      assert.match(asCollector.error?.message ?? "", /no tool named/);
+    });
+
+    it("serves a picture to an administrator only", async () => {
+      const { id } = await createFeedbackReport(
+        { userId: collectorId },
+        submission({ kind: "problem", message: `${RUN} served`, route: "/c/x" }),
+        [{ name: "a.png", bytes: await picture(100, 80) }]
+      );
+      const [attachment] = (await getFeedbackReport(adminId, id)).attachments;
+      assert.ok(await getFeedbackAttachmentForServing(adminId, attachment.id));
+      await assert.rejects(getFeedbackAttachmentForServing(collectorId, attachment.id), refused("forbidden"));
+      const signedOut = await serveFeedbackAttachment(
+        new NextRequest(`http://localhost/api/admin/feedback-attachments/${attachment.id}`),
+        { params: Promise.resolve({ attachmentId: attachment.id }) }
+      );
+      assert.equal(signedOut.status, 404, "for anyone without an administrator's session it does not exist");
+    });
+
+    it("refuses more than five, one over 10 MB, and anything that is not a picture — storing nothing", async () => {
+      const png = await picture(40, 40);
+      const before = (await ownReports()).length;
+      const tooMany = await postFeedback(
+        multipartRequest({ kind: "problem", message: `${RUN} six`, route: "/s/x" }, Array.from({ length: 6 }, (_, i) => ({ name: `${i}.png`, bytes: png })), "203.0.113.30")
+      );
+      assert.equal(tooMany.status, 400);
+      assert.match((await tooMany.json()).message, /at most 5/);
+
+      const big = Buffer.concat([png, Buffer.alloc(10 * 1024 * 1024)]);
+      const tooLarge = await postFeedback(
+        multipartRequest({ kind: "problem", message: `${RUN} big`, route: "/s/x" }, [{ name: "big.png", bytes: big }], "203.0.113.31")
+      );
+      assert.equal(tooLarge.status, 413);
+      assert.match((await tooLarge.json()).message, /10 MB/);
+
+      const pdf = await postFeedback(
+        multipartRequest({ kind: "problem", message: `${RUN} pdf`, route: "/s/x" }, [{ name: "a.png", bytes: Buffer.from("%PDF-1.7\n"), type: "image/png" }], "203.0.113.32")
+      );
+      assert.equal(pdf.status, 422);
+      assert.match((await pdf.json()).message, /Only pictures/);
+
+      assert.equal((await ownReports()).length, before, "a refused report is not stored");
+      await assert.rejects(
+        createFeedbackReport({ userId: null }, submission({ kind: "problem", message: `${RUN} gif`, route: "/s/x" }), [
+          { name: "a.gif", bytes: Buffer.from("GIF89a......") },
+        ]),
+        FeedbackAttachmentError
+      );
+    });
+  });
+
   describe("the admin MCP tools", () => {
-    const TOOLS = ["get_feedback", "list_feedback", "update_feedback"];
+    const TOOLS = ["get_feedback", "get_feedback_attachment", "list_feedback", "update_feedback"];
     let adminToken: string;
     let adminReadToken: string;
     let collectorToken: string;

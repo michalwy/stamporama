@@ -3666,7 +3666,7 @@ grows with every sale.
 ## The administrator's tools are a second list (#2720)
 
 **`ADMIN_OPERATIONS` (`agent-api/admin-registry.ts`) is not part of `OPERATIONS`, and that is the
-decision.** `list_feedback`, `get_feedback` and `update_feedback` are about the **instance** — the
+decision.** `list_feedback`, `get_feedback`, `get_feedback_attachment` (#2727) and `update_feedback` are about the **instance** — the
 reports sent with *Report a problem* — while everything in `OPERATIONS` is about the one collection a
 credential is pinned to, and `OPERATIONS` is the published contract of `/api/v1` that every
 token-holder's OpenAPI document lists. So the three are offered on **`/api/mcp` only**, through
@@ -3677,6 +3677,10 @@ token-holder's OpenAPI document lists. So the three are offered on **`/api/mcp` 
 scope check are the shared ones — a `read` credential is refused on `update_feedback`. Their handlers
 read `context.ownerId` and ignore `context.collectionId`; `feedback.ts` checks the administrator
 again. The counts at the top of this file are of `OPERATIONS` and do not include them.
+**`get_feedback_attachment` answers with a picture**, the one operation that does: its handler
+returns an `ImageAnswer` (`types.ts`) and `mcp.ts` draws it as a text block carrying the caption
+JSON followed by an MCP `image` block — a model can look at a screenshot, never at a URL it cannot
+fetch. The REST dispatcher never meets one, because the admin list is not on `/api/v1`.
 → [`feedback.md`](feedback.md), [`feedback-triage.md`](feedback-triage.md)
 
 ## What is deliberately absent

@@ -14,12 +14,25 @@ you are on, the app's version, your browser, the window size, your language and 
 theme, and the last few script errors the page ran into, if any. Nothing from your collection is
 attached.
 
+## Adding pictures
+
+A screenshot often says more than a paragraph. **Paste one** (Ctrl+V, or ⌘V on a Mac) anywhere in
+the dialog — the message field included — or choose **Add pictures** to pick files. Each picture is
+shown under the message with a button to remove it again.
+
+Up to **5 pictures** go with one report, each at most **10 MB**, and only pictures: **PNG, JPEG or
+WebP**. Anything else is refused with a sentence saying why, before or when you send. The same holds
+on a page shared with you, with or without an account.
+
+A screenshot shows whatever was on the screen. Crop or cover what you would not want the
+administrator to read before you attach it.
+
 ## From a page shared with you
 
 The pages a seller shares by link — an offer's specification, a proposal, a post's preview, a
 choice of copies, a trade — carry a small **Report a problem** link at the bottom, in the page's
 language. It needs no account. You may leave an email address if you want an answer; it is
-optional.
+optional. You may add pictures the same way as inside the app (above).
 
 The link in your address bar is private to you, so it is **not** stored with the report: only which
 kind of page it was.

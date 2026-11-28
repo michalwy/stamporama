@@ -2,6 +2,7 @@ import "server-only";
 import { isAdmin } from "../admin-access";
 import { OPERATIONS } from "./registry";
 import {
+  getFeedbackAttachmentOperation,
   getFeedbackOperation,
   listFeedbackOperation,
   updateFeedbackOperation,
@@ -21,6 +22,7 @@ import type { Operation } from "./types";
 export const ADMIN_OPERATIONS: readonly Operation[] = [
   listFeedbackOperation,
   getFeedbackOperation,
+  getFeedbackAttachmentOperation,
   updateFeedbackOperation,
 ];
 

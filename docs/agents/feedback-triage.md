@@ -15,7 +15,8 @@ The **admin MCP tools** on the instance's connector (`/api/mcp`), offered only t
 account is an administrator:
 
 - `list_feedback` — reports, newest first; `status=new` is the queue.
-- `get_feedback` — one report with everything sent with it.
+- `get_feedback` — one report with everything sent with it, `attachments` listing its pictures.
+- `get_feedback_attachment` — one picture, as an image you look at (#2727).
 - `update_feedback` — set `status`, `issue_url` and `admin_note`.
 
 And the repository's issues, through the GitHub tools (`gh api` REST in a cloud thread — GraphQL is
@@ -27,7 +28,10 @@ blocked).
    how many there are.
 2. For each report, `get_feedback` and read **the message first, the context second**. The context
    — the screen's address, the version, the browser, the window, the recent script errors — is
-   evidence for the message, not a second report.
+   evidence for the message, not a second report. **Look at every picture** in `attachments` with
+   `get_feedback_attachment`: a screenshot usually shows the screen and the state the message is
+   about. Describe what it shows in an issue; never attach or link it, since it may show a
+   collection, a name or an address.
 3. **Decide what it is.**
    - *A defect or an idea that names a behaviour.* Search the issues before writing anything
      (`backlog-manager.md` § *Before writing anything, search*). If an open issue covers it, that is
@@ -70,7 +74,8 @@ browser — and **nothing that identifies a person or opens anything**:
   eight characters;
 - no collection name or slug, and no screen address that carries one — write `/c/<collection>/offers`;
 - no share-link token. The stored `route` already has `[token]` in its place; never try to recover it;
-- no text copied out of somebody's collection unless it is the defect itself, and then the least of it.
+- no text copied out of somebody's collection unless it is the defect itself, and then the least of it;
+- no picture sent with a report, and nothing read off one that the rules above keep out.
 
 Quote the sender's own words about the *problem* freely; they are why the report exists.
 

@@ -73,7 +73,7 @@ import { listParameters } from "./list";
 import { parameterSchema, validateOperations } from "./openapi";
 import { parseParameters } from "./params";
 import type { ScopedOperation } from "./scope";
-import type { Operation, OperationContext, ParameterSpec } from "./types";
+import { ImageAnswer, type Operation, type OperationContext, type ParameterSpec } from "./types";
 
 /**
  * **The MCP revision this implementation was written against, pinned deliberately.**
@@ -562,6 +562,14 @@ function splitArguments(
 
 /** A tool result carrying the answer. Text, because the registry declares no output schema. */
 function toolResult(value: unknown): Record<string, unknown> {
+  if (value instanceof ImageAnswer) {
+    return {
+      content: [
+        { type: "text", text: JSON.stringify(value.caption) },
+        { type: "image", data: value.data, mimeType: value.mimeType },
+      ],
+    };
+  }
   return { content: [{ type: "text", text: JSON.stringify(value) }] };
 }
 
