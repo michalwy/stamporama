@@ -18,6 +18,8 @@ import {
   type FeedbackStatus,
 } from "@/lib/feedback-rules";
 import { updateFeedbackReportAction } from "@/app/actions/admin";
+import { THUMB_OBJECT_FIT } from "@/app/photo-viewer";
+import { formatAttachmentSize } from "@/lib/conversation-attachment-rules";
 
 // The reports sent with "Report a problem", in the administrator's panel (#2720): the list, narrowed
 // by status, and one report opened with everything sent with it and the three things an
@@ -45,6 +47,8 @@ export interface PanelReport {
   recentErrors: string | null;
   user: { name: string; email: string } | null;
   collection: { name: string; slug: string } | null;
+  /** The pictures sent with it (#2727), oldest first. */
+  attachments: { id: string; fileName: string; sizeBytes: number }[];
 }
 
 const card: CSSProperties = {
@@ -228,6 +232,45 @@ function Fact({ name, value }: { name: string; value: string | null }) {
   );
 }
 
+/** The pictures sent with a report (#2727): thumbnails, each opening the file as it came. */
+function Pictures({ attachments }: { attachments: PanelReport["attachments"] }) {
+  return (
+    <div style={{ marginBottom: "1rem" }}>
+      <span style={label}>Pictures ({attachments.length})</span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+        {attachments.map((attachment) => {
+          const href = `/api/admin/feedback-attachments/${encodeURIComponent(attachment.id)}`;
+          return (
+            <a
+              key={attachment.id}
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`${attachment.fileName}, ${formatAttachmentSize(attachment.sizeBytes)}`}
+              style={{
+                display: "block",
+                width: "7rem",
+                height: "5.25rem",
+                border: "1px solid var(--color-border)",
+                borderRadius: "0.375rem",
+                background: "var(--color-bg-muted)",
+                overflow: "hidden",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- served by our own route, sized here */}
+              <img
+                src={`${href}?variant=thumb`}
+                alt={attachment.fileName}
+                style={{ width: "100%", height: "100%", objectFit: THUMB_OBJECT_FIT }}
+              />
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ReportDialog({ report, onClose }: { report: PanelReport; onClose: () => void }) {
   const { toast } = useToast();
   const [status, setStatus] = useState(report.status);
@@ -269,6 +312,7 @@ function ReportDialog({ report, onClose }: { report: PanelReport; onClose: () =>
               <p style={{ margin: "0 0 1rem", fontSize: "0.9375rem", lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-word", color: "var(--color-text-primary)" }}>
                 {report.message}
               </p>
+              {report.attachments.length > 0 && <Pictures attachments={report.attachments} />}
               <span style={label}>Sent with it</span>
               <dl
                 style={{

@@ -14,6 +14,15 @@ export interface FeedbackLabels {
   contactPlaceholder: string;
   /** One line under the form saying what rides along. */
   attached: string;
+  /** The button that picks pictures (#2727). */
+  attach: string;
+  /** The one line beside it: pasting works, and the limits. */
+  attachHint: string;
+  /** A chosen picture's remove button, with its name after it. */
+  removePicture: string;
+  pictureTooMany: string;
+  pictureTooLarge: string;
+  pictureNotPicture: string;
   send: string;
   sending: string;
   cancel: string;
@@ -31,6 +40,12 @@ const LABELS: Record<string, FeedbackLabels> = {
     contact: "How to reach you (optional)",
     contactPlaceholder: "Email address",
     attached: "The page's address, your browser and window size are sent with it.",
+    attach: "Add pictures",
+    attachHint: "Or paste a screenshot. Up to 5 pictures (PNG, JPEG, WebP), 10 MB each.",
+    removePicture: "Remove",
+    pictureTooMany: "Up to 5 pictures can go with one report.",
+    pictureTooLarge: "A picture may be at most 10 MB.",
+    pictureNotPicture: "Only pictures can be attached: PNG, JPEG or WebP.",
     send: "Send",
     sending: "Sending…",
     cancel: "Cancel",
@@ -46,6 +61,12 @@ const LABELS: Record<string, FeedbackLabels> = {
     contact: "Kontakt do Ciebie (opcjonalnie)",
     contactPlaceholder: "Adres e-mail",
     attached: "Razem ze zgłoszeniem wysyłany jest adres strony, przeglądarka i rozmiar okna.",
+    attach: "Dodaj obrazy",
+    attachHint: "Albo wklej zrzut ekranu. Do 5 obrazów (PNG, JPEG, WebP), po 10 MB.",
+    removePicture: "Usuń",
+    pictureTooMany: "Do jednego zgłoszenia można dołączyć do 5 obrazów.",
+    pictureTooLarge: "Obraz może mieć najwyżej 10 MB.",
+    pictureNotPicture: "Można dołączać tylko obrazy: PNG, JPEG lub WebP.",
     send: "Wyślij",
     sending: "Wysyłanie…",
     cancel: "Anuluj",
@@ -61,6 +82,12 @@ const LABELS: Record<string, FeedbackLabels> = {
     contact: "Wie wir Sie erreichen (optional)",
     contactPlaceholder: "E-Mail-Adresse",
     attached: "Die Adresse der Seite, Ihr Browser und die Fenstergröße werden mitgesendet.",
+    attach: "Bilder hinzufügen",
+    attachHint: "Oder fügen Sie einen Screenshot ein. Bis zu 5 Bilder (PNG, JPEG, WebP), je 10 MB.",
+    removePicture: "Entfernen",
+    pictureTooMany: "Einer Meldung können bis zu 5 Bilder beigefügt werden.",
+    pictureTooLarge: "Ein Bild darf höchstens 10 MB groß sein.",
+    pictureNotPicture: "Nur Bilder können angehängt werden: PNG, JPEG oder WebP.",
     send: "Senden",
     sending: "Wird gesendet…",
     cancel: "Abbrechen",

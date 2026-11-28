@@ -49,7 +49,14 @@ export async function serveAttachment(
   }
   if (!ownerId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const attachment = await lookup();
+  return streamAttachment(request, await lookup());
+}
+
+/**
+ * The bytes half of {@link serveAttachment}, for a caller that has already decided who may read —
+ * the administrator's route for a feedback report's pictures (#2727), which belong to no collection.
+ */
+export async function streamAttachment(request: NextRequest, attachment: ServedAttachment | null): Promise<Response> {
   if (!attachment) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const thumb = request.nextUrl.searchParams.get("variant") === "thumb";

@@ -88,5 +88,11 @@ export const config = {
   //
   // The rest is Next's own static output, which no collector's session depends on and which should
   // not be made uncacheable by a `Set-Cookie` header.
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico).*)"],
+  //
+  // **`/api/feedback` is excluded because of its body** (#2727). For a request the proxy runs on,
+  // Next buffers the body for it up to `proxyClientMaxBodySize` — 10 MB by default — and hands the
+  // route only that much, so a report carrying its pictures (five of 10 MB each) arrived cut. The
+  // route needs nothing from here: it reads the session itself, and a report sent is not a visit
+  // whose lease should move.
+  matcher: ["/((?!api/auth|api/feedback|_next/static|_next/image|favicon.ico).*)"],
 };

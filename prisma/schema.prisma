@@ -8847,11 +8847,39 @@ model FeedbackReport {
   /** The page's last few script errors, one per line. */
   recentErrors String?
 
-  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  collection Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  user        User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  collection  Collection?          @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  attachments FeedbackAttachment[]
 
   @@index([status, createdAt])
   @@index([userId])
   @@index([collectionId])
   @@map("feedback_report")
+}
+
+// A picture sent with a feedback report (#2727) — a screenshot, most often pasted. Images only (PNG,
+// JPEG, WebP), at most five per report and 10 MB each (the owner, 2026-11-28). Kept as it came, read
+// from its bytes, with a thumbnail, in the shape of a sale's or a conversation entry's files — but
+// owned by no collection: a report comes from a visitor as often as from a collector, and outlives
+// both. Bytes under `feedback/<uuid>/`; the cascade from a report drops rows only, and nothing
+// deletes a report today.
+model FeedbackAttachment {
+  id               String   @id @default(cuid())
+  feedbackReportId String
+  // The file's name as it was sent, cleaned of path separators and control characters.
+  fileName         String
+  // image/jpeg | image/png | image/webp — read from the bytes.
+  contentType      String
+  sizeBytes        Int
+  storageBackend   String
+  storageKey       String
+  thumbKey         String?
+  widthPx          Int?
+  heightPx         Int?
+  createdAt        DateTime @default(now())
+
+  report FeedbackReport @relation(fields: [feedbackReportId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackReportId, createdAt])
+  @@map("feedback_attachment")
 }

@@ -53,11 +53,13 @@ switch to *Triaged*, *Resolved*, *Dismissed* or *All*.
 
 Click a report to read it in full, with everything that was sent with it (the screen's address, the
 version, the browser, the window, any script errors) and who sent it — the account, or the contact a
-visitor chose to leave. There you set:
+visitor chose to leave. **Pictures** sent with it are shown as thumbnails above those details; click
+one to open it at full size in a new tab. There you set:
 
 - its **status** — *New*, *Triaged* (it has an issue or an answer), *Resolved* (done) or *Dismissed*;
 - the **GitHub issue** it became, as a link;
 - a **note** of your own, never shown to the sender.
 
 An agent connected to the instance as an administrator can do the same through the admin tools
-`list_feedback`, `get_feedback` and `update_feedback` ([Agent API](agent-api.md)).
+`list_feedback`, `get_feedback`, `get_feedback_attachment` (one of a report's pictures, which the
+agent sees as a picture) and `update_feedback` ([Agent API](agent-api.md)).

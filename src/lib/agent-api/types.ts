@@ -113,3 +113,18 @@ export interface Operation {
   readonly result: OperationResult;
   readonly handler: (context: OperationContext, params: ParsedParams) => Promise<unknown>;
 }
+
+/**
+ * An answer that **is a picture** (#2727): what `get_feedback_attachment` hands an agent so the
+ * model can look at a screenshot rather than be told where one is. MCP draws it as a text block
+ * carrying `caption` as JSON followed by an image block (`mcp.ts`). Only the administrator's tools
+ * answer with one, and they are not on `/api/v1`, so the REST dispatcher never meets it.
+ */
+export class ImageAnswer {
+  constructor(
+    readonly caption: Readonly<Record<string, unknown>>,
+    readonly mimeType: string,
+    /** The picture's bytes, base64. */
+    readonly data: string
+  ) {}
+}

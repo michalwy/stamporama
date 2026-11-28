@@ -3,6 +3,7 @@ import { AdminError } from "../../admin-access";
 import {
   getFeedbackReport,
   listFeedbackReports,
+  readFeedbackAttachmentForAgent,
   updateFeedbackReport,
   type FeedbackReportView,
 } from "../../feedback";
@@ -10,7 +11,7 @@ import { FEEDBACK_STATUSES, feedbackExcerpt, isFeedbackStatus } from "../../feed
 import { forbidden, invalidRequest, notFound } from "../errors";
 import { listResponse, parseListWindow } from "../list";
 import { optionalString, requiredString } from "../params";
-import type { Operation, OperationContext } from "../types";
+import { ImageAnswer, type Operation, type OperationContext } from "../types";
 
 // The administrator's feedback tools (#2720): the reports sent with "Report a problem", read and
 // triaged by an agent. They are **not** in `OPERATIONS` — they are about the instance, not about the
@@ -18,14 +19,14 @@ import type { Operation, OperationContext } from "../types";
 // (`admin-registry.ts`). The functions they call check that again themselves.
 
 /** An `AdminError` as this surface speaks: a stable code and a sentence saying what to do next. */
-async function asAdmin<T>(work: () => Promise<T>): Promise<T> {
+async function asAdmin<T>(work: () => Promise<T>, notFoundHint = "Call list_feedback for the reports that exist."): Promise<T> {
   try {
     return await work();
   } catch (error) {
     if (!(error instanceof AdminError)) throw error;
     if (error.code === "forbidden") throw forbidden(error.message);
     if (error.code === "not_found") {
-      throw notFound(`${error.message} Call list_feedback for the reports that exist.`);
+      throw notFound(`${error.message} ${notFoundHint}`);
     }
     throw invalidRequest(error.message);
   }
@@ -40,6 +41,8 @@ interface AgentFeedbackRow {
   readonly source: string;
   readonly excerpt: string;
   readonly issueUrl?: string;
+  /** How many pictures were sent with it, when any were. */
+  readonly attachments?: number;
 }
 
 function toRow(report: FeedbackReportView): AgentFeedbackRow {
@@ -51,6 +54,7 @@ function toRow(report: FeedbackReportView): AgentFeedbackRow {
     source: report.source,
     excerpt: feedbackExcerpt(report.message, 200),
     ...(report.issueUrl ? { issueUrl: report.issueUrl } : {}),
+    ...(report.attachments.length > 0 ? { attachments: report.attachments.length } : {}),
   };
 }
 
@@ -81,6 +85,16 @@ function toDetail(report: FeedbackReportView) {
     route: report.route,
     appVersion: report.appVersion,
     ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== null)),
+    // The pictures sent with it (#2727), described — get_feedback_attachment hands over each one.
+    attachments: report.attachments.map((attachment) => ({
+      id: attachment.id,
+      name: attachment.fileName,
+      type: attachment.contentType,
+      bytes: attachment.sizeBytes,
+      ...(attachment.widthPx !== null && attachment.heightPx !== null
+        ? { widthPx: attachment.widthPx, heightPx: attachment.heightPx }
+        : {}),
+    })),
   };
 }
 
@@ -125,7 +139,7 @@ export const getFeedbackOperation: Operation = {
   method: "GET",
   path: "/admin/feedback/{feedback_id}",
   description:
-    "Instance administrators only. Read one feedback report with everything sent with it: the whole message, the screen's address (a share link's token is already replaced by `[token]`), the app version, browser, window size, language, time zone, theme, the page's recent script errors, and the ids of the account and collection it came from.",
+    "Instance administrators only. Read one feedback report with everything sent with it: the whole message, the screen's address (a share link's token is already replaced by `[token]`), the app version, browser, window size, language, time zone, theme, the page's recent script errors, the ids of the account and collection it came from, and the pictures sent with it (`attachments`; look at one with get_feedback_attachment).",
   writes: false,
   instance: true,
   parameters: [
@@ -144,6 +158,52 @@ export const getFeedbackOperation: Operation = {
   },
   handler: async (context: OperationContext, params) =>
     toDetail(await asAdmin(() => getFeedbackReport(context.ownerId, requiredString(params, "feedback_id")))),
+};
+
+export const getFeedbackAttachmentOperation: Operation = {
+  name: "get_feedback_attachment",
+  method: "GET",
+  path: "/admin/feedback-attachments/{attachment_id}",
+  description:
+    "Instance administrators only. Look at one picture sent with a feedback report — most often a screenshot of the screen the report is about. Answers the picture itself, after a line describing it; a large one is handed over reduced to fit 1568 pixels on its longest edge.",
+  writes: false,
+  instance: true,
+  parameters: [
+    {
+      name: "attachment_id",
+      in: "path",
+      type: "string",
+      required: true,
+      description: "The picture's id, from the `attachments` of get_feedback.",
+    },
+  ],
+  result: {
+    kind: "object",
+    description:
+      "The picture, and beside it its report's id, its name, type and size as sent, and whether what is shown was reduced. A screenshot may show personal data: describe what it shows, never copy names, addresses or other personal details from it into a public issue.",
+  },
+  handler: async (context: OperationContext, params) => {
+    const id = requiredString(params, "attachment_id");
+    const read = await asAdmin(
+      () => readFeedbackAttachmentForAgent(context.ownerId, id),
+      "Call get_feedback for the pictures a report has."
+    );
+    return new ImageAnswer(
+      {
+        id: read.attachment.id,
+        feedbackId: read.attachment.feedbackReportId,
+        name: read.attachment.fileName,
+        type: read.attachment.contentType,
+        bytes: read.attachment.sizeBytes,
+        ...(read.attachment.widthPx !== null && read.attachment.heightPx !== null
+          ? { widthPx: read.attachment.widthPx, heightPx: read.attachment.heightPx }
+          : {}),
+        reduced: read.reduced,
+      },
+      read.mimeType,
+      read.bytes.toString("base64")
+    );
+  },
 };
 
 export const updateFeedbackOperation: Operation = {

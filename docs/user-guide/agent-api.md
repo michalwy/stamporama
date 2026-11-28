@@ -888,11 +888,14 @@ And with a **read only** token it changes nothing at all, which is the setting t
 ## For an administrator: feedback reports
 
 When the account that connected the assistant is an [administrator](admin.md) of the instance, the
-connector also offers three tools about the instance rather than a collection — the reports sent
+connector also offers four tools about the instance rather than a collection — the reports sent
 with [Report a problem](feedback.md):
 
 - `list_feedback` — the reports, newest first, optionally only those in one status;
-- `get_feedback` — one report with everything sent with it;
+- `get_feedback` — one report with everything sent with it, including a list of the pictures
+  attached to it;
+- `get_feedback_attachment` — one of those pictures, handed to the assistant as an image so it can
+  look at the screenshot (a large one reduced to 1568 pixels on its longest edge);
 - `update_feedback` — set its status, the GitHub issue it became and a note (needs a credential
   that may write).
 
